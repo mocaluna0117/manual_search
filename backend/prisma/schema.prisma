@@ -1,0 +1,32 @@
+generator client {
+  provider = "prisma-client"
+  output = "../generated/prisma"
+  runtime = "nodejs"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model ManualCategory {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  manuals   Manual[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Manual {
+  id            String            @id @default(uuid())
+  title         String
+  description   String?
+  fileKey       String            @map("file_key") // S3上のファイルの場所(キー)
+  fileName      String            @map("file_name") // 元のPDFファイル名
+  mimeType      String            @map("mime_type") @default("application/pdf")
+  size          Int               // ファイルサイズ（バイト）
+  categoryId    String?
+  category      ManualCategory?   @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt 
+}
