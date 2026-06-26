@@ -24,19 +24,21 @@
 |---|---|
 | フロント | React + TypeScript + Vite + Chakra UI |
 | バックエンド | NestJS + GraphQL（コードファースト） |
-| DB | PostgreSQL 16 + pgvector |
-| PDF 保存 | オブジェクトストレージ。開発は MinIO 予定、本番は Azure Blob 等を検討 |
+| DB | PostgreSQL 16 + pgvector（本番は Amazon RDS for PostgreSQL） |
+| PDF 保存 | オブジェクトストレージ。開発は MinIO、本番は Amazon S3 |
 | RAG | Python FastAPI マイクロサービス。NestJS から呼ぶ |
-| LLM | Claude API / Anthropic |
-| 認証 | Microsoft Entra ID / OIDC SSO |
-| 開発環境 | Docker Compose |
-| 本番デプロイ | 未確定。第一候補は Azure Container Apps + Azure Database for PostgreSQL + Azure Blob Storage |
+| LLM | Amazon Bedrock（Claude）。RAG は boto3(bedrock-runtime) で呼ぶ |
+| 認証 | Amazon Cognito（Microsoft Entra ID をフェデレーションして社内 Microsoft ログイン） |
+| 開発環境 | Docker Compose（ローカル: Postgres+pgvector / MinIO） |
+| 本番デプロイ | **全て AWS**。ECS Fargate（backend+RAG / ECR にイメージ） + RDS + S3 + Bedrock + Cognito + Secrets Manager。フロントは S3+CloudFront or Amplify（未確定） |
 
 重要な決定:
 
-- PDF 本体は DB に保存しない
-- DB にはメタデータと RAG 用ベクトルのみ保存する
-- ベクトル検索は PostgreSQL + pgvector で進める
+- 本番インフラは **全て AWS** に統一（2026-06-26 決定）
+- ローカル開発は据え置き（Docker Compose + MinIO）。本番との差分は `DATABASE_URL` とストレージのエンドポイントを切り替えるだけ
+- PDF 本体は DB に保存しない（S3 へ）。DB にはメタデータと RAG 用ベクトルのみ
+- ベクトル検索は PostgreSQL + pgvector で進める（RDS でも pgvector 有効化）
+- LLM は Amazon Bedrock の Claude を使用（データが AWS リージョン内に留まり機密マニュアル向き。要モデルアクセス有効化）
 - Prisma は Prisma 7 方式で進める
 
 ## 3. 作業の進め方
