@@ -16,3 +16,36 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # S3互換のオブジェクトストレージ(ローカル開発用)。本番はAmazon S3に差し替え
+  minio:
+    image: minio/minio:latest
+    container_name: manual_search_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_PORT}:9000" # S3 API(アプリからの接続先)
+      - "${MINIO_CONSOLE_PORT}:9001" # 管理画面(ブラウザで見る用)
+    volumes:
+      - ./.volumes/minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 起動時にPDF保存用バケットを自動作成する使い捨てジョブ
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+      mc mb --ignore-existing local/${S3_BUCKET} &&
+      echo 'bucket ready: ${S3_BUCKET}'
+      "
