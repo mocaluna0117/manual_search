@@ -1,11 +1,14 @@
-import { Box, Button, Separator, Text, VStack } from '@chakra-ui/react'
+import { useQuery } from '@apollo/client/react'
+import { Box, Button, Separator, Spinner, Text, VStack } from '@chakra-ui/react'
+import { CATEGORIES_QUERY } from '../../graphql/categories'
 import { ConnectionStatus } from '../ConnectionStatus'
 
-// TODO: 後でGraphQLから取得する。今は見た目確認用のダミーデータ
+// TODO: チャット履歴も後でGraphQLから取得する
 const dummyChats = ['経費精算のやり方を教えて', 'VPNに接続できないときは']
-const dummyCategories = ['総務', '経理', '情報システム', '人事']
 
 export function Sidebar() {
+  const { data, loading } = useQuery(CATEGORIES_QUERY)
+
   return (
     <VStack
       as="nav"
@@ -50,21 +53,27 @@ export function Sidebar() {
 
         <Separator my={4} borderColor="gray.700" />
 
-        {/* カテゴリ別マニュアル */}
+        {/* カテゴリ別マニュアル（DBから取得） */}
         <Text fontSize="xs" color="gray.400" mb={2}>
           マニュアル（カテゴリ別）
         </Text>
+        {loading && <Spinner size="sm" />}
+        {data && data.manualCategories.length === 0 && (
+          <Text fontSize="sm" color="gray.500">
+            カテゴリはまだありません
+          </Text>
+        )}
         <VStack gap={1} align="stretch">
-          {dummyCategories.map((name) => (
+          {data?.manualCategories.map((category) => (
             <Button
-              key={name}
+              key={category.id}
               variant="ghost"
               size="sm"
               justifyContent="flex-start"
               color="gray.100"
               _hover={{ bg: 'gray.700' }}
             >
-              📁 {name}
+              📁 {category.name}
             </Button>
           ))}
         </VStack>
