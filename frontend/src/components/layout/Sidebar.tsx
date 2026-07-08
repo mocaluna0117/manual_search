@@ -1,14 +1,19 @@
 import { useQuery } from '@apollo/client/react'
 import { Box, Button, Separator, Spinner, Text, VStack } from '@chakra-ui/react'
 import { useState } from 'react'
-import { CATEGORIES_QUERY } from '../../graphql/categories'
+import { CATEGORIES_QUERY, type Category } from '../../graphql/categories'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 
 // TODO: チャット履歴も後でGraphQLから取得する
 const dummyChats = ['経費精算のやり方を教えて', 'VPNに接続できないときは']
 
-export function Sidebar() {
+interface SidebarProps {
+  selectedCategoryId: string | null
+  onSelectCategory: (category: Category | null) => void
+}
+
+export function Sidebar({ selectedCategoryId, onSelectCategory }: SidebarProps) {
   const { data, loading } = useQuery(CATEGORIES_QUERY)
   const [uploadOpen, setUploadOpen] = useState(false)
 
@@ -25,7 +30,12 @@ export function Sidebar() {
       // スマホでは非表示、md(768px)以上で表示
       display={{ base: 'none', md: 'flex' }}
     >
-      <Button colorPalette="blue" variant="solid" size="sm">
+      <Button
+        colorPalette="blue"
+        variant="solid"
+        size="sm"
+        onClick={() => onSelectCategory(null)}
+      >
         ＋ 新しいチャット
       </Button>
 
@@ -74,7 +84,9 @@ export function Sidebar() {
               size="sm"
               justifyContent="flex-start"
               color="gray.100"
+              bg={category.id === selectedCategoryId ? 'gray.700' : undefined}
               _hover={{ bg: 'gray.700' }}
+              onClick={() => onSelectCategory(category)}
             >
               📁 {category.name}
             </Button>

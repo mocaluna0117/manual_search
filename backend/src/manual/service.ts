@@ -21,6 +21,14 @@ export class ManualService {
     return this.prisma.manual.create({ data: input });
   }
 
+  async getDownloadUrl(id: string) {
+    const manual = await this.prisma.manual.findUnique({ where: { id } });
+    if (!manual) {
+      throw new NotFoundException('マニュアルが見つかりません');
+    }
+    return this.storage.createDownloadUrl(manual.fileKey, manual.fileName);
+  }
+
   async delete(id: string) {
     const manual = await this.prisma.manual.findUnique({ where: { id } });
     if (!manual) {

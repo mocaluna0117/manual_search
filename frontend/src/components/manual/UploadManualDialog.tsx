@@ -31,7 +31,10 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
 
   const { data: categoriesData } = useQuery(CATEGORIES_QUERY)
   const [createUploadUrl] = useMutation(CREATE_UPLOAD_URL_MUTATION)
-  const [registerManual] = useMutation(REGISTER_MANUAL_MUTATION)
+  const [registerManual] = useMutation(REGISTER_MANUAL_MUTATION, {
+    // 登録後に一覧クエリを取り直し、開いているカテゴリ一覧へ即反映する
+    refetchQueries: ['Manuals'],
+  })
 
   const handleFileChange = (selected: File | null) => {
     setFile(selected)

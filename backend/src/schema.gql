@@ -37,6 +37,7 @@ type Query {
   dbHealth: String!
   manualCategories: [ManualCategory!]!
   manuals(categoryId: ID): [Manual!]!
+  manualDownloadUrl(id: ID!): String!
 }
 
 type Mutation {

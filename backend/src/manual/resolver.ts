@@ -31,6 +31,12 @@ export class ManualResolver {
     return this.storageService.createUploadUrl(fileName);
   }
 
+  // PDFを開くための署名付きURL(15分有効)を発行
+  @Query(() => String)
+  manualDownloadUrl(@Args('id', { type: () => ID }) id: string) {
+    return this.manualService.getDownloadUrl(id);
+  }
+
   // アップロード完了後にメタデータをDBへ登録
   @Mutation(() => Manual)
   registerManual(@Args('input') input: RegisterManualInput) {

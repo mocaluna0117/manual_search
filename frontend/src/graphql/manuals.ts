@@ -66,3 +66,67 @@ export const REGISTER_MANUAL_MUTATION: TypedDocumentNode<
     }
   }
 `
+
+// --- 一覧(カテゴリ絞り込み対応) ---
+
+interface ManualsData {
+  manuals: Manual[]
+}
+
+interface ManualsVars {
+  categoryId?: string
+}
+
+export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
+  query Manuals($categoryId: ID) {
+    manuals(categoryId: $categoryId) {
+      id
+      title
+      description
+      fileName
+      size
+      categoryId
+    }
+  }
+`
+
+// --- 閲覧用URLの発行 ---
+
+interface DownloadUrlData {
+  manualDownloadUrl: string
+}
+
+interface DownloadUrlVars {
+  id: string
+}
+
+export const MANUAL_DOWNLOAD_URL_QUERY: TypedDocumentNode<
+  DownloadUrlData,
+  DownloadUrlVars
+> = gql`
+  query ManualDownloadUrl($id: ID!) {
+    manualDownloadUrl(id: $id)
+  }
+`
+
+// --- 削除 ---
+
+interface DeleteManualData {
+  deleteManual: Pick<Manual, 'id' | 'title'>
+}
+
+interface DeleteManualVars {
+  id: string
+}
+
+export const DELETE_MANUAL_MUTATION: TypedDocumentNode<
+  DeleteManualData,
+  DeleteManualVars
+> = gql`
+  mutation DeleteManual($id: ID!) {
+    deleteManual(id: $id) {
+      id
+      title
+    }
+  }
+`
