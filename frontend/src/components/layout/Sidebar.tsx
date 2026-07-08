@@ -1,13 +1,16 @@
 import { useQuery } from '@apollo/client/react'
 import { Box, Button, Separator, Spinner, Text, VStack } from '@chakra-ui/react'
+import { useState } from 'react'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
 import { ConnectionStatus } from '../ConnectionStatus'
+import { UploadManualDialog } from '../manual/UploadManualDialog'
 
 // TODO: チャット履歴も後でGraphQLから取得する
 const dummyChats = ['経費精算のやり方を教えて', 'VPNに接続できないときは']
 
 export function Sidebar() {
   const { data, loading } = useQuery(CATEGORIES_QUERY)
+  const [uploadOpen, setUploadOpen] = useState(false)
 
   return (
     <VStack
@@ -78,6 +81,19 @@ export function Sidebar() {
           ))}
         </VStack>
       </Box>
+
+      {/* マニュアル追加(後で管理者のみに制限する) */}
+      <Button
+        variant="outline"
+        size="sm"
+        color="gray.100"
+        borderColor="gray.600"
+        _hover={{ bg: 'gray.700' }}
+        onClick={() => setUploadOpen(true)}
+      >
+        📄 マニュアルを追加
+      </Button>
+      <UploadManualDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
 
       {/* 下部: 開発用の疎通ステータス */}
       <Box>
