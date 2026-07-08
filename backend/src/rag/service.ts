@@ -29,6 +29,27 @@ export class RagService {
     }
   }
 
+  /** PDFの取り込み(テキスト抽出→チャンク分割→DB保存)をPythonに依頼する */
+  async ingest(manualId: string, downloadUrl: string): Promise<number> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/ingest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manual_id: manualId, download_url: downloadUrl }),
+      });
+    } catch {
+      throw new ServiceUnavailableException('RAGサービスに接続できません');
+    }
+    if (!res.ok) {
+      throw new ServiceUnavailableException(
+        `PDFの取り込みに失敗しました (HTTP ${res.status})`,
+      );
+    }
+    const body = (await res.json()) as { chunk_count: number };
+    return body.chunk_count;
+  }
+
   async search(question: string): Promise<RagAnswer> {
     let res: Response;
     try {

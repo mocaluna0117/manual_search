@@ -4,5 +4,6 @@ import { RagService } from './service';
 
 @Module({
   providers: [RagService, RagResolver],
+  exports: [RagService],
 })
 export class RagModule {}

@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
 import { Manual, ManualUploadTarget } from './model';
@@ -47,5 +47,11 @@ export class ManualResolver {
   @Mutation(() => Manual)
   deleteManual(@Args('id', { type: () => ID }) id: string) {
     return this.manualService.delete(id);
+  }
+
+  // PDFをRAGに取り込む(チャンク化)。戻り値は作成されたチャンク数
+  @Mutation(() => Int)
+  ingestManual(@Args('id', { type: () => ID }) id: string) {
+    return this.manualService.ingest(id);
   }
 }

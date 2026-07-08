@@ -27,6 +27,21 @@ model Manual {
   size          Int               // ファイルサイズ（バイト）
   categoryId    String?
   category      ManualCategory?   @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  chunks        ManualChunk[]
   createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt 
+  updatedAt     DateTime          @updatedAt
+}
+
+// RAG用: マニュアルを検索しやすい断片に分割したもの。
+// embeddingはPrisma未対応のpgvector型なのでUnsupportedで宣言し、SQLで直接扱う
+model ManualChunk {
+  id         String                       @id @default(uuid())
+  manualId   String                       @map("manual_id")
+  manual     Manual                       @relation(fields: [manualId], references: [id], onDelete: Cascade)
+  chunkIndex Int                          @map("chunk_index")
+  content    String
+  embedding  Unsupported("vector(1024)")? // Titan Embeddings V2 = 1024次元
+  createdAt  DateTime                     @default(now()) @map("created_at")
+
+  @@unique([manualId, chunkIndex])
 }
