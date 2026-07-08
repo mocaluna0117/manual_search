@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppResolver } from './app.resolver';
 import { AppService } from './app.service';
 import { CategoryModule } from './category/module';
+import { ManualModule } from './manual/module';
 import { PrismaModule } from './prisma/module';
 
 @Module({
@@ -22,6 +23,7 @@ import { PrismaModule } from './prisma/module';
     }),
     PrismaModule,
     CategoryModule,
+    ManualModule,
   ],
   controllers: [AppController],
   providers: [AppService, AppResolver],
