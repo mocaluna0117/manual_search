@@ -32,6 +32,17 @@ type Manual {
   updatedAt: DateTime!
 }
 
+type RagCitation {
+  manualId: String!
+  title: String!
+  snippet: String!
+}
+
+type RagAnswer {
+  answer: String!
+  citations: [RagCitation!]!
+}
+
 type Query {
   health: String!
   dbHealth: String!
@@ -39,6 +50,7 @@ type Query {
   manuals(categoryId: ID): [Manual!]!
   manualDownloadUrl(id: ID!): String!
   ragHealth: String!
+  ragSearch(question: String!): RagAnswer!
 }
 
 type Mutation {
