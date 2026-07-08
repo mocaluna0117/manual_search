@@ -19,14 +19,39 @@ type ManualUploadTarget {
   fileKey: String!
 }
 
+type Manual {
+  id: ID!
+  title: String!
+  description: String
+  fileKey: String!
+  fileName: String!
+  mimeType: String!
+  size: Int!
+  categoryId: ID
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
 type Query {
   health: String!
   dbHealth: String!
   manualCategories: [ManualCategory!]!
+  manuals(categoryId: ID): [Manual!]!
 }
 
 type Mutation {
   createManualCategory(name: String!): ManualCategory!
   deleteManualCategory(id: ID!): ManualCategory!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!
+  registerManual(input: RegisterManualInput!): Manual!
+  deleteManual(id: ID!): Manual!
+}
+
+input RegisterManualInput {
+  title: String!
+  description: String
+  fileKey: String!
+  fileName: String!
+  size: Int!
+  categoryId: ID
 }

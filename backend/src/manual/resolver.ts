@@ -1,11 +1,25 @@
 import { BadRequestException } from '@nestjs/common';
-import { Args, Mutation, Resolver } from '@nestjs/graphql';
+import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { StorageService } from '../storage/service';
-import { ManualUploadTarget } from './model';
+import { RegisterManualInput } from './input';
+import { Manual, ManualUploadTarget } from './model';
+import { ManualService } from './service';
 
-@Resolver()
+@Resolver(() => Manual)
 export class ManualResolver {
-  constructor(private readonly storageService: StorageService) {}
+  constructor(
+    private readonly manualService: ManualService,
+    private readonly storageService: StorageService,
+  ) {}
+
+  // 一覧。categoryIdを渡すと絞り込み(サイドバーのカテゴリクリック用)
+  @Query(() => [Manual])
+  manuals(
+    @Args('categoryId', { type: () => ID, nullable: true })
+    categoryId?: string,
+  ) {
+    return this.manualService.findAll(categoryId);
+  }
 
   @Mutation(() => ManualUploadTarget)
   createManualUploadUrl(
@@ -15,5 +29,17 @@ export class ManualResolver {
       throw new BadRequestException('PDFファイルのみアップロードできます');
     }
     return this.storageService.createUploadUrl(fileName);
+  }
+
+  // アップロード完了後にメタデータをDBへ登録
+  @Mutation(() => Manual)
+  registerManual(@Args('input') input: RegisterManualInput) {
+    return this.manualService.register(input);
+  }
+
+  // DBの行とストレージの実ファイルを両方削除
+  @Mutation(() => Manual)
+  deleteManual(@Args('id', { type: () => ID }) id: string) {
+    return this.manualService.delete(id);
   }
 }

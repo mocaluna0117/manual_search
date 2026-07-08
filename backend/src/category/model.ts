@@ -5,14 +5,14 @@ import { Field, ID, ObjectType } from '@nestjs/graphql';
 @ObjectType()
 export class ManualCategory {
   @Field(() => ID)
-  id: string;
+  id!: string;
 
   @Field()
-  name: string;
+  name!: string;
 
   @Field()
-  createdAt: Date;
+  createdAt!: Date;
 
   @Field()
-  updatedAt: Date;
+  updatedAt!: Date;
 }
