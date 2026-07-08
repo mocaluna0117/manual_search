@@ -38,6 +38,7 @@ type Query {
   manualCategories: [ManualCategory!]!
   manuals(categoryId: ID): [Manual!]!
   manualDownloadUrl(id: ID!): String!
+  ragHealth: String!
 }
 
 type Mutation {
