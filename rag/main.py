@@ -10,6 +10,7 @@ from pypdf import PdfReader
 
 from chunking import split_text
 from embedding import create_embedder, to_vector_literal
+from llm import Context, create_answer_generator
 
 load_dotenv()  # rag/.env を読み込む
 
@@ -17,6 +18,7 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 
 app = FastAPI(title="Manual Search RAG Service")
 embedder = create_embedder()
+answer_generator = create_answer_generator()
 
 
 class SearchRequest(BaseModel):
@@ -136,8 +138,19 @@ def search(req: SearchRequest) -> SearchResponse:
         Citation(manual_id=manual_id, title=title, snippet=content[:150])
         for manual_id, title, content, _distance in rows
     ]
-    return SearchResponse(
-        answer=f"「{req.question}」に関連しそうなマニュアルが{len(citations)}件見つかりました。"
-        "詳しくは以下をご覧ください。(AIによる回答文の生成は次のステップで実装します)",
-        citations=citations,
-    )
+
+    # 3) 取得した抜粋を根拠として、Claudeに回答文を書かせる。
+    #    生成に失敗しても検索結果(引用)だけは返す(全滅させない)
+    contexts = [
+        Context(title=title, content=content)
+        for _manual_id, title, content, _distance in rows
+    ]
+    try:
+        answer = answer_generator.generate(req.question, contexts)
+    except Exception as e:
+        answer = (
+            f"関連しそうなマニュアルが{len(citations)}件見つかりましたが、"
+            f"回答文の生成に失敗しました({e})。以下の抜粋をご確認ください。"
+        )
+
+    return SearchResponse(answer=answer, citations=citations)
