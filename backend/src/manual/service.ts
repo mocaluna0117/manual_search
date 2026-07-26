@@ -106,8 +106,9 @@ export class ManualService {
         data: { ingestStatus: IngestStatus.PROCESSING, ingestError: null },
       });
 
-      // Pythonが読めるように署名付きURLを発行して渡す(バケットの認証情報は渡さない)
-      const downloadUrl = await this.storage.createDownloadUrl(
+      // Pythonが読めるように署名付きURLを発行して渡す(バケットの認証情報は渡さない)。
+      // ragコンテナから到達できる内部ネットワーク向けのURLを使う
+      const downloadUrl = await this.storage.createInternalDownloadUrl(
         manual.fileKey,
         manual.fileName,
       );

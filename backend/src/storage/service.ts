@@ -63,6 +63,19 @@ export class StorageService {
 
   /** 閲覧用の署名付きURLを発行する(15分有効)。ブラウザのタブでPDFが開く */
   async createDownloadUrl(fileKey: string, fileName: string) {
+    return this.signDownload(this.presignS3, fileKey, fileName);
+  }
+
+  /**
+   * サービス間連携用(RAG取り込みなど)の署名付きURL。
+   * コンテナ環境ではブラウザ用(localhost)と内部ネットワーク用(minio:9000)で
+   * 到達できるアドレスが違うため、内部用クライアントで署名する
+   */
+  async createInternalDownloadUrl(fileKey: string, fileName: string) {
+    return this.signDownload(this.s3, fileKey, fileName);
+  }
+
+  private signDownload(client: S3Client, fileKey: string, fileName: string) {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: fileKey,
@@ -70,7 +83,7 @@ export class StorageService {
       ResponseContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
       ResponseContentType: 'application/pdf',
     });
-    return getSignedUrl(this.presignS3, command, { expiresIn: 900 });
+    return getSignedUrl(client, command, { expiresIn: 900 });
   }
 
   async deleteObject(fileKey: string) {
