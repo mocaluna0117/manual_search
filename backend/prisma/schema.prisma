@@ -44,15 +44,32 @@ model Manual {
   updatedAt     DateTime          @updatedAt
 }
 
+enum UserRole {
+  ADMIN // マニュアル管理などの管理操作が可能(権限制御は今後実装)
+  MEMBER
+}
+
+// 利用者。Cognitoで認証された人を、初回アクセス時にアプリ側にも自動登録する
+model User {
+  id            String         @id @default(uuid())
+  cognitoSub    String         @unique @map("cognito_sub") // Cognito側の不変ID
+  email         String?
+  role          UserRole       @default(MEMBER)
+  conversations Conversation[]
+  createdAt     DateTime       @default(now())
+}
+
 enum MessageRole {
   USER // 利用者の質問
   ASSISTANT // AIの回答
 }
 
-// 会話スレッド(サイドバー履歴の1行)。認証導入後にuserIdを追加して所有者を紐付ける
+// 会話スレッド(サイドバー履歴の1行)。所有者にだけ見える
 model Conversation {
   id        String    @id @default(uuid())
   title     String // 最初の質問から自動生成
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

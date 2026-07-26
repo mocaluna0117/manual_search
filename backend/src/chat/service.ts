@@ -12,16 +12,19 @@ export class ChatService {
     private readonly rag: RagService,
   ) {}
 
-  conversations() {
+  conversations(userId: string) {
     return this.prisma.conversation.findMany({
+      where: { userId }, // 自分の会話だけ
       orderBy: { updatedAt: 'desc' },
       take: 50,
     });
   }
 
-  async conversation(id: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
+  async conversation(id: string, userId: string) {
+    // idの一致だけでなく「所有者が自分か」も同時にチェックする。
+    // 他人の会話は「無い」と同じ扱いにして、存在自体も漏らさない
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { id, userId },
     });
     if (!conversation) {
       throw new NotFoundException('会話が見つかりません');
@@ -38,12 +41,17 @@ export class ChatService {
   }
 
   /** 質問を受けて、会話の作成→質問の保存→RAG検索→回答の保存までを行う */
-  async ask(question: string, conversationId?: string | null): Promise<AskResult> {
+  async ask(
+    question: string,
+    userId: string,
+    conversationId?: string | null,
+  ): Promise<AskResult> {
     // 1) 会話を用意(初回の質問なら新規作成し、タイトルは質問から自動生成)
+    //    既存会話の場合は所有者チェックも兼ねる
     const conversation = conversationId
-      ? await this.conversation(conversationId)
+      ? await this.conversation(conversationId, userId)
       : await this.prisma.conversation.create({
-          data: { title: this.makeTitle(question) },
+          data: { title: this.makeTitle(question), userId },
         });
 
     // 2) 質問を保存
@@ -89,8 +97,8 @@ export class ChatService {
     };
   }
 
-  async deleteConversation(id: string) {
-    const conversation = await this.conversation(id);
+  async deleteConversation(id: string, userId: string) {
+    const conversation = await this.conversation(id, userId); // 所有者チェック
     // メッセージはonDelete: Cascadeで一緒に消える
     await this.prisma.conversation.delete({ where: { id } });
     return conversation;

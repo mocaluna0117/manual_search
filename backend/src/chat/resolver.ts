@@ -7,26 +7,37 @@ import {
   ResolveField,
   Resolver,
 } from '@nestjs/graphql';
+import type { AuthUser } from '../auth/current-user';
+import { CurrentUser } from '../auth/current-user';
+import { UserService } from '../user/service';
 import { AskResult, ChatMessage, Conversation } from './model';
 import { ChatService } from './service';
 
 @Resolver(() => Conversation)
 export class ChatResolver {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly userService: UserService,
+  ) {}
 
-  // サイドバーの履歴一覧(新しい順)
+  // サイドバーの履歴一覧(自分の会話のみ・新しい順)
   @Query(() => [Conversation])
-  conversations() {
-    return this.chatService.conversations();
+  async conversations(@CurrentUser() authUser: AuthUser) {
+    const user = await this.userService.ensure(authUser);
+    return this.chatService.conversations(user.id);
   }
 
   @Query(() => Conversation)
-  conversation(@Args('id', { type: () => ID }) id: string) {
-    return this.chatService.conversation(id);
+  async conversation(
+    @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() authUser: AuthUser,
+  ) {
+    const user = await this.userService.ensure(authUser);
+    return this.chatService.conversation(id, user.id);
   }
 
   // Conversationのmessagesフィールドが「実際に要求されたときだけ」実行される。
-  // 一覧表示ではmessagesを取らないので、無駄なクエリが走らない(遅延取得)
+  // 親のConversationは上のQuery経由でしか取れず、そこで所有者チェック済み
   @ResolveField(() => [ChatMessage])
   messages(@Parent() conversation: Conversation) {
     return this.chatService.messages(conversation.id);
@@ -34,16 +45,22 @@ export class ChatResolver {
 
   // 質問を投げる。conversationId省略で新規会話が始まる
   @Mutation(() => AskResult)
-  askQuestion(
+  async askQuestion(
     @Args('question') question: string,
+    @CurrentUser() authUser: AuthUser,
     @Args('conversationId', { type: () => ID, nullable: true })
     conversationId?: string,
   ) {
-    return this.chatService.ask(question, conversationId);
+    const user = await this.userService.ensure(authUser);
+    return this.chatService.ask(question, user.id, conversationId);
   }
 
   @Mutation(() => Conversation)
-  deleteConversation(@Args('id', { type: () => ID }) id: string) {
-    return this.chatService.deleteConversation(id);
+  async deleteConversation(
+    @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() authUser: AuthUser,
+  ) {
+    const user = await this.userService.ensure(authUser);
+    return this.chatService.deleteConversation(id, user.id);
   }
 }
