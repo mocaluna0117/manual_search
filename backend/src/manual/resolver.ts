@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Roles, UserRole } from '../auth/roles';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
 import { Manual, ManualSearchResult, ManualUploadTarget } from './model';
@@ -21,6 +22,7 @@ export class ManualResolver {
     return this.manualService.findAll(categoryId);
   }
 
+  @Roles(UserRole.ADMIN)
   @Mutation(() => ManualUploadTarget)
   createManualUploadUrl(
     @Args('fileName') fileName: string,
@@ -44,18 +46,21 @@ export class ManualResolver {
   }
 
   // アップロード完了後にメタデータをDBへ登録
+  @Roles(UserRole.ADMIN)
   @Mutation(() => Manual)
   registerManual(@Args('input') input: RegisterManualInput) {
     return this.manualService.register(input);
   }
 
   // DBの行とストレージの実ファイルを両方削除
+  @Roles(UserRole.ADMIN)
   @Mutation(() => Manual)
   deleteManual(@Args('id', { type: () => ID }) id: string) {
     return this.manualService.delete(id);
   }
 
   // PDFをRAGに取り込む(チャンク化)。戻り値は作成されたチャンク数
+  @Roles(UserRole.ADMIN)
   @Mutation(() => Int)
   ingestManual(@Args('id', { type: () => ID }) id: string) {
     return this.manualService.ingest(id);

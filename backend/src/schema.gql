@@ -2,6 +2,18 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type UserProfile {
+  id: ID!
+  email: String
+  role: UserRole!
+}
+
+"""ADMIN=マニュアル管理可 / MEMBER=閲覧・検索のみ"""
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
 type ManualCategory {
   id: ID!
   name: String!
@@ -89,6 +101,7 @@ type ManualSearchResult {
 type Query {
   health: String!
   dbHealth: String!
+  me: UserProfile!
   manualCategories: [ManualCategory!]!
   conversations: [Conversation!]!
   conversation(id: ID!): Conversation!

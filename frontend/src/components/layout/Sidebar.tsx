@@ -18,6 +18,7 @@ import {
   CONVERSATIONS_QUERY,
   DELETE_CONVERSATION_MUTATION,
 } from '../../graphql/chat'
+import { ME_QUERY } from '../../graphql/me'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 
@@ -39,6 +40,8 @@ export function Sidebar({
   const auth = useAuth()
   const { data, loading } = useQuery(CATEGORIES_QUERY)
   const { data: chatData, loading: loadingChats } = useQuery(CONVERSATIONS_QUERY)
+  const { data: meData } = useQuery(ME_QUERY)
+  const isAdmin = meData?.me.role === 'ADMIN'
   const [uploadOpen, setUploadOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
@@ -179,18 +182,25 @@ export function Sidebar({
         </VStack>
       </Box>
 
-      {/* マニュアル追加(後で管理者のみに制限する) */}
-      <Button
-        variant="outline"
-        size="sm"
-        color="gray.100"
-        borderColor="gray.600"
-        _hover={{ bg: 'gray.700' }}
-        onClick={() => setUploadOpen(true)}
-      >
-        📄 マニュアルを追加
-      </Button>
-      <UploadManualDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
+      {/* マニュアル追加(管理者のみ。本命の防御はバックエンドの@Roles) */}
+      {isAdmin && (
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            color="gray.100"
+            borderColor="gray.600"
+            _hover={{ bg: 'gray.700' }}
+            onClick={() => setUploadOpen(true)}
+          >
+            📄 マニュアルを追加
+          </Button>
+          <UploadManualDialog
+            open={uploadOpen}
+            onClose={() => setUploadOpen(false)}
+          />
+        </>
+      )}
 
       {/* 下部: ログインユーザーと疎通ステータス */}
       <Box>

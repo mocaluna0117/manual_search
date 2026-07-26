@@ -1,4 +1,5 @@
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Roles, UserRole } from '../auth/roles';
 import { ManualCategory } from './model';
 import { CategoryService } from './service';
 
@@ -12,11 +13,13 @@ export class CategoryResolver {
     return this.categoryService.findAll();
   }
 
+  @Roles(UserRole.ADMIN)
   @Mutation(() => ManualCategory)
   createManualCategory(@Args('name') name: string) {
     return this.categoryService.create(name);
   }
 
+  @Roles(UserRole.ADMIN)
   @Mutation(() => ManualCategory)
   deleteManualCategory(@Args('id', { type: () => ID }) id: string) {
     return this.categoryService.delete(id);

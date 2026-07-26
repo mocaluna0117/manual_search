@@ -18,6 +18,7 @@ import {
   MANUALS_QUERY,
   type IngestStatus,
 } from '../../graphql/manuals'
+import { ME_QUERY } from '../../graphql/me'
 
 import { formatSize } from '../../lib/format'
 
@@ -57,6 +58,8 @@ export function CategoryManualList({
   const { data, loading, startPolling, stopPolling } = useQuery(MANUALS_QUERY, {
     variables: { categoryId },
   })
+  const { data: meData } = useQuery(ME_QUERY)
+  const isAdmin = meData?.me.role === 'ADMIN'
 
   // 取り込み中のものがある間だけ、3秒ごとに一覧を取り直して進行状況を反映する
   const hasInFlight = data?.manuals.some(
@@ -135,7 +138,7 @@ export function CategoryManualList({
                   </HStack>
                 </Box>
                 <HStack gap={2} flexShrink={0}>
-                  {manual.ingestStatus === 'FAILED' && (
+                  {isAdmin && manual.ingestStatus === 'FAILED' && (
                     <Button
                       size="sm"
                       colorPalette="orange"
@@ -153,14 +156,16 @@ export function CategoryManualList({
                   >
                     開く
                   </Button>
-                  <Button
-                    size="sm"
-                    colorPalette="red"
-                    variant="ghost"
-                    onClick={() => handleDelete(manual.id, manual.title)}
-                  >
-                    削除
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      colorPalette="red"
+                      variant="ghost"
+                      onClick={() => handleDelete(manual.id, manual.title)}
+                    >
+                      削除
+                    </Button>
+                  )}
                 </HStack>
               </HStack>
             </Card.Body>
