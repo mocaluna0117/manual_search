@@ -17,6 +17,14 @@ model ManualCategory {
   updatedAt DateTime  @updatedAt
 }
 
+// PDF取り込み(テキスト抽出→チャンク化→ベクトル化)の進行状況
+enum IngestStatus {
+  PENDING // 登録直後。取り込み待ち
+  PROCESSING // 取り込み中
+  COMPLETED // 取り込み完了。AI検索の対象になる
+  FAILED // 失敗。ingestManualで再試行できる
+}
+
 model Manual {
   id            String            @id @default(uuid())
   title         String
@@ -28,6 +36,10 @@ model Manual {
   categoryId    String?
   category      ManualCategory?   @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   chunks        ManualChunk[]
+  ingestStatus  IngestStatus      @default(PENDING) @map("ingest_status")
+  ingestError   String?           @map("ingest_error") // 失敗理由(FAILEDのとき)
+  chunkCount    Int?              @map("chunk_count") // 作成されたチャンク数
+  ingestedAt    DateTime?         @map("ingested_at")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 }

@@ -27,6 +27,8 @@ export const CREATE_UPLOAD_URL_MUTATION: TypedDocumentNode<
 
 // --- アップロード完了後のDB登録 ---
 
+export type IngestStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+
 export interface Manual {
   id: string
   title: string
@@ -34,6 +36,9 @@ export interface Manual {
   fileName: string
   size: number
   categoryId: string | null
+  ingestStatus: IngestStatus
+  ingestError: string | null
+  chunkCount: number | null
 }
 
 interface RegisterManualData {
@@ -86,7 +91,29 @@ export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
       fileName
       size
       categoryId
+      ingestStatus
+      ingestError
+      chunkCount
     }
+  }
+`
+
+// --- 取り込みの再試行(FAILEDになったとき用) ---
+
+interface IngestManualData {
+  ingestManual: number
+}
+
+interface IngestManualVars {
+  id: string
+}
+
+export const INGEST_MANUAL_MUTATION: TypedDocumentNode<
+  IngestManualData,
+  IngestManualVars
+> = gql`
+  mutation IngestManual($id: ID!) {
+    ingestManual(id: $id)
   }
 `
 

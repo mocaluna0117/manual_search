@@ -1,4 +1,13 @@
-import { Field, ID, Int, ObjectType } from '@nestjs/graphql';
+import { Field, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { IngestStatus } from '../../generated/prisma/client';
+
+// Prismaのenumを、GraphQLスキーマでも使えるように登録する
+registerEnumType(IngestStatus, {
+  name: 'IngestStatus',
+  description: 'PDF取り込みの進行状況',
+});
+
+export { IngestStatus };
 
 // アップロード先の情報。フロントはuploadUrlへPDFをPUTし、
 // 完了後にfileKeyを添えてregisterManualを呼ぶ
@@ -36,6 +45,15 @@ export class Manual {
 
   @Field(() => ID, { nullable: true })
   categoryId!: string | null;
+
+  @Field(() => IngestStatus)
+  ingestStatus!: IngestStatus;
+
+  @Field(() => String, { nullable: true })
+  ingestError!: string | null;
+
+  @Field(() => Int, { nullable: true })
+  chunkCount!: number | null;
 
   @Field()
   createdAt!: Date;

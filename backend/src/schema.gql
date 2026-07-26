@@ -39,8 +39,19 @@ type Manual {
   mimeType: String!
   size: Int!
   categoryId: ID
+  ingestStatus: IngestStatus!
+  ingestError: String
+  chunkCount: Int
   createdAt: DateTime!
   updatedAt: DateTime!
+}
+
+"""PDF取り込みの進行状況"""
+enum IngestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 type Query {
