@@ -49,3 +49,78 @@ services:
       mc mb --ignore-existing local/${S3_BUCKET} &&
       echo 'bucket ready: ${S3_BUCKET}'
       "
+
+  # ============================================================
+  # ここから下は「本番同等のコンテナ構成」(ECS Fargateに載せる形)。
+  # 普段の開発では起動しない。使うとき: docker compose --profile app up -d --build
+  # ============================================================
+
+  # DBマイグレーションを流してから終了する使い捨てジョブ
+  migrate:
+    build:
+      context: ./backend
+      target: build # ビルドステージにはprisma CLIが入っている
+    profiles: ["app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+    command: npx prisma migrate deploy
+
+  backend:
+    build: ./backend
+    profiles: ["app"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      FRONTEND_ORIGIN: http://localhost:8080
+      RAG_SERVICE_URL: http://rag:8000
+      # コンテナ内からは minio:9000 / ブラウザからは localhost:59000 と見え方が違う
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:${MINIO_PORT}
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_FORCE_PATH_STYLE: "true"
+      COGNITO_REGION: ${AWS_REGION}
+      COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+
+  rag:
+    build: ./rag
+    profiles: ["app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      EMBEDDING_PROVIDER: bedrock
+      ANSWER_PROVIDER: bedrock
+      AWS_REGION: ${AWS_REGION}
+      BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
+      BEDROCK_CHAT_MODEL_ID: jp.anthropic.claude-haiku-4-5-20251001-v1:0
+    volumes:
+      # ローカル実行用のAWS認証情報(読み取り専用)。本番ECSではタスクロールを使うので不要
+      - ~/.aws:/root/.aws:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_GRAPHQL_URL: http://localhost:3000/graphql
+        VITE_COGNITO_AUTHORITY: https://cognito-idp.${AWS_REGION}.amazonaws.com/${COGNITO_USER_POOL_ID}
+        VITE_COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+        VITE_COGNITO_DOMAIN: ${COGNITO_DOMAIN}
+    profiles: ["app"]
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend

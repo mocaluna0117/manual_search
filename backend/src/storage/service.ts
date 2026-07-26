@@ -11,20 +11,34 @@ import { randomUUID } from 'node:crypto';
 @Injectable()
 export class StorageService {
   private readonly s3: S3Client;
+  private readonly presignS3: S3Client;
   private readonly bucket: string;
 
   constructor() {
     this.bucket = process.env.S3_BUCKET ?? 'manuals';
-    this.s3 = new S3Client({
+
+    const baseConfig = {
       region: process.env.S3_REGION ?? 'us-east-1',
-      // MinIOのときだけ指定する。本番のAmazon S3では未設定(undefined)でよい
-      endpoint: process.env.S3_ENDPOINT,
       // MinIOはパス形式(host/bucket/key)のURLを使う。S3は仮想ホスト形式が既定
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
       credentials: {
         accessKeyId: process.env.S3_ACCESS_KEY ?? '',
         secretAccessKey: process.env.S3_SECRET_KEY ?? '',
       },
+    };
+
+    // サーバー内部からの操作用(削除など)。MinIOのときだけendpointを指定
+    this.s3 = new S3Client({
+      ...baseConfig,
+      endpoint: process.env.S3_ENDPOINT,
+    });
+
+    // 署名付きURL生成用。コンテナ環境では「ブラウザから見えるアドレス」が
+    // 内部アドレス(minio:9000)と違うため、S3_PUBLIC_ENDPOINTで上書きできる。
+    // 本番のAmazon S3では両方とも未設定でよい(同じURLになる)
+    this.presignS3 = new S3Client({
+      ...baseConfig,
+      endpoint: process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT,
     });
   }
 
@@ -42,7 +56,7 @@ export class StorageService {
       Key: fileKey,
       ContentType: 'application/pdf',
     });
-    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 900 });
+    const uploadUrl = await getSignedUrl(this.presignS3, command, { expiresIn: 900 });
 
     return { uploadUrl, fileKey };
   }
@@ -56,7 +70,7 @@ export class StorageService {
       ResponseContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
       ResponseContentType: 'application/pdf',
     });
-    return getSignedUrl(this.s3, command, { expiresIn: 900 });
+    return getSignedUrl(this.presignS3, command, { expiresIn: 900 });
   }
 
   async deleteObject(fileKey: string) {
