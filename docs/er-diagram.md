@@ -2,8 +2,8 @@
 
 現在のスキーマ（実装済み）と、今後追加予定のエンティティを含めた全体のデータモデル。
 
-- ✅ 実装済み: `ManualCategory`, `Manual`
-- 🔲 計画中: `ManualChunk`（RAG時）, `User`（認証時）, `Conversation` / `Message`（チャット時）, `Citation`（RAG時）
+- ✅ 実装済み: `ManualCategory`, `Manual`, `ManualChunk`
+- 🔲 計画中: `User`（認証時）, `Conversation` / `Message`（チャット時）, `Citation`（RAG時）
 
 ## ER図（Mermaid）
 
@@ -41,7 +41,7 @@ erDiagram
         string manualId FK
         int chunkIndex "何番目の断片か"
         string content "抽出テキスト"
-        vector embedding "pgvector / 計画"
+        vector embedding "pgvector 1024次元"
         datetime createdAt
     }
     User {
@@ -79,7 +79,7 @@ erDiagram
 |---|---|---|
 | ManualCategory | ✅実装済み | マニュアルのカテゴリ（サイドバーの分類） |
 | Manual | ✅実装済み | マニュアル1件。PDF本体はS3、ここにはメタ情報のみ |
-| ManualChunk | 🔲計画(RAG時) | マニュアルを検索しやすい断片に分割＋埋め込みベクトル。RAGの心臓部 |
+| ManualChunk | ✅実装済み | マニュアルを検索しやすい断片に分割＋埋め込みベクトル。RAGの心臓部 |
 | User | 🔲計画(認証時) | 利用者。Cognitoの`sub`と紐付け。chat履歴やアップロード者の管理用 |
 | Conversation | 🔲計画(チャット時) | 1つの会話スレッド（サイドバーの履歴1行） |
 | Message | 🔲計画(チャット時) | 会話内の各発言（ユーザー質問 / AI回答） |
@@ -96,4 +96,5 @@ erDiagram
 
 - `Citation` が、このアプリの目的「最適なマニュアルを提示」を実現する要。AI回答に「根拠マニュアルへのリンク」を付けられる。
 - 認証は Cognito だが、アプリ側にも `User` テーブルを持ち `cognitoSub` で紐付ける（chat履歴の所有者管理などDB側で必要なため）。
-- `embedding`(vector) は pgvector 型。Prismaが直接サポートしないため、追加時は `Unsupported` 型＋生SQL を使う。RAGのStepで対応する。
+- `embedding`(vector) は pgvector 型。Prismaが直接サポートしないため `Unsupported("vector(1024)")` で宣言し、読み書きは Python 側の生SQL（`<=>` コサイン距離演算子）で行う。
+- チャンクは 800字 / 重複200字 で分割。マニュアル削除時は `onDelete: Cascade` でチャンクも自動削除される。

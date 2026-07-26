@@ -3,3 +3,4 @@ uvicorn[standard]
 pypdf
 psycopg[binary]
 python-dotenv
+boto3

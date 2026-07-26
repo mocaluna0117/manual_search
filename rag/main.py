@@ -9,12 +9,14 @@ from pydantic import BaseModel
 from pypdf import PdfReader
 
 from chunking import split_text
+from embedding import create_embedder, to_vector_literal
 
 load_dotenv()  # rag/.env を読み込む
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
 app = FastAPI(title="Manual Search RAG Service")
+embedder = create_embedder()
 
 
 class SearchRequest(BaseModel):
@@ -73,18 +75,21 @@ def ingest(req: IngestRequest) -> IngestResponse:
     full_text = "\n".join(pages)
     chunks = split_text(full_text)
 
-    # 3) チャンクをDBへ保存(再取り込みに備え、同じマニュアルの既存チャンクは入れ替え)
+    # 3) 各チャンクをベクトル化
+    embeddings = embedder.embed_texts(chunks)
+
+    # 4) チャンクをDBへ保存(再取り込みに備え、同じマニュアルの既存チャンクは入れ替え)
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 'DELETE FROM "ManualChunk" WHERE manual_id = %s',
                 (req.manual_id,),
             )
-            for i, chunk in enumerate(chunks):
+            for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
                 cur.execute(
-                    'INSERT INTO "ManualChunk" (id, manual_id, chunk_index, content) '
-                    "VALUES (gen_random_uuid(), %s, %s, %s)",
-                    (req.manual_id, i, chunk),
+                    'INSERT INTO "ManualChunk" (id, manual_id, chunk_index, content, embedding) '
+                    "VALUES (gen_random_uuid(), %s, %s, %s, %s::vector)",
+                    (req.manual_id, i, chunk, to_vector_literal(emb)),
                 )
 
     return IngestResponse(
@@ -96,9 +101,43 @@ def ingest(req: IngestRequest) -> IngestResponse:
 
 @app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest) -> SearchResponse:
-    # TODO: ここを「pgvectorで類似チャンク検索 → Bedrock(Claude)で回答生成」に置き換える
+    """質問に近いチャンクをベクトル検索で探す。
+
+    <=> はpgvectorのコサイン距離演算子。小さいほど「近い(似ている)」。
+    回答文の生成(Claude)は次ステップで実装し、今は関連マニュアルの提示まで。
+    """
+    # 1) 質問文を、チャンクと同じ方法でベクトル化
+    query_vec = to_vector_literal(embedder.embed_texts([req.question])[0])
+
+    # 2) コサイン距離が近い順にチャンクを取得(マニュアル情報もJOINで添える)
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT mc.manual_id, m.title, mc.content,
+                       (mc.embedding <=> %s::vector) AS distance
+                FROM "ManualChunk" mc
+                JOIN "Manual" m ON m.id = mc.manual_id
+                WHERE mc.embedding IS NOT NULL
+                ORDER BY distance
+                LIMIT 5
+                """,
+                (query_vec,),
+            )
+            rows = cur.fetchall()
+
+    if not rows:
+        return SearchResponse(
+            answer="まだ検索できるマニュアルがありません。マニュアルをアップロードして取り込んでください。",
+            citations=[],
+        )
+
+    citations = [
+        Citation(manual_id=manual_id, title=title, snippet=content[:150])
+        for manual_id, title, content, _distance in rows
+    ]
     return SearchResponse(
-        answer=f"(スタブ回答) 「{req.question}」への回答はまだ実装されていません。"
-        "RAGパイプライン実装後、ここに本物の回答と根拠マニュアルが返ります。",
-        citations=[],
+        answer=f"「{req.question}」に関連しそうなマニュアルが{len(citations)}件見つかりました。"
+        "詳しくは以下をご覧ください。(AIによる回答文の生成は次のステップで実装します)",
+        citations=citations,
     )
