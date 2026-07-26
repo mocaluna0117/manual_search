@@ -45,6 +45,7 @@ export class ChatService {
     question: string,
     userId: string,
     conversationId?: string | null,
+    image?: { base64: string; format: string },
   ): Promise<AskResult> {
     // 1) 会話を用意(初回の質問なら新規作成し、タイトルは質問から自動生成)
     //    既存会話の場合は所有者チェックも兼ねる
@@ -54,12 +55,12 @@ export class ChatService {
           data: { title: this.makeTitle(question), userId },
         });
 
-    // 2) 質問を保存
+    // 2) 質問を保存(画像そのものは保存しない。添付があったことだけ履歴に残す)
     await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: MessageRole.USER,
-        content: question,
+        content: image ? `${question}\n(📷 画像を添付)` : question,
       },
     });
 
@@ -68,7 +69,7 @@ export class ChatService {
     let answer: string;
     let citations: RagCitation[] = [];
     try {
-      const result = await this.rag.search(question);
+      const result = await this.rag.search(question, image);
       answer = result.answer;
       citations = result.citations;
     } catch (e) {

@@ -115,7 +115,7 @@ type Query {
 type Mutation {
   createManualCategory(name: String!): ManualCategory!
   deleteManualCategory(id: ID!): ManualCategory!
-  askQuestion(question: String!, conversationId: ID): AskResult!
+  askQuestion(question: String!, conversationId: ID, imageBase64: String, imageFormat: String): AskResult!
   deleteConversation(id: ID!): Conversation!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!
   registerManual(input: RegisterManualInput!): Manual!

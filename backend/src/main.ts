@@ -1,8 +1,11 @@
 import { NestFactory } from '@nestjs/core';
+import { json } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // 画像添付(base64)を受けるためJSONボディ上限を引き上げ(既定は100KB)
+  app.use(json({ limit: '8mb' }));
   app.enableCors({
     origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
   });

@@ -7,7 +7,7 @@
 import io
 import os
 
-import pypdfium2 as pdfium
+import pypdfium2 as pdfium  # type: ignore[import-untyped]
 
 # 1ドキュメントあたりの書き起こし上限ページ数(コスト暴走の安全弁。
 # 100ページのスキャンPDFを投げられても際限なくClaudeを呼ばないため)
@@ -17,6 +17,13 @@ TRANSCRIBE_PROMPT = (
     "これは社内マニュアルの1ページです。画像に含まれるすべてのテキストを、"
     "内容の順序が伝わる形で書き起こしてください。図や表がある場合は、"
     "その内容を簡潔な文章で説明してください。書き起こし結果だけを出力してください。"
+)
+
+DESCRIBE_PROMPT = (
+    "この画像は社内マニュアル検索への質問に添付されたものです。"
+    "画像に写っている内容(画面名、エラーメッセージ、システム名、操作対象など)を、"
+    "マニュアル検索のキーワードとして使える形で簡潔に抜き出してください。"
+    "説明文だけを出力してください。"
 )
 
 
@@ -43,6 +50,9 @@ class NullTranscriber:
     def transcribe(self, image_bytes: bytes) -> str:
         return ""
 
+    def describe(self, image_bytes: bytes, image_format: str = "jpeg") -> str:
+        return ""
+
 
 class BedrockTranscriber:
     """Claudeの画像認識でページ画像をテキスト化する"""
@@ -50,24 +60,38 @@ class BedrockTranscriber:
     enabled = True
 
     def __init__(self, model_id: str, region: str):
-        import boto3
+        import boto3  # type: ignore[import-untyped]
 
         self.client = boto3.client("bedrock-runtime", region_name=region)
         self.model_id = model_id
 
     def transcribe(self, image_bytes: bytes) -> str:
+        return self._ask_about_image(image_bytes, "jpeg", TRANSCRIBE_PROMPT, 2048)
+
+    def describe(self, image_bytes: bytes, image_format: str = "jpeg") -> str:
+        """チャット添付画像を、ベクトル検索に使えるキーワード文に変換する"""
+        return self._ask_about_image(image_bytes, image_format, DESCRIBE_PROMPT, 512)
+
+    def _ask_about_image(
+        self, image_bytes: bytes, image_format: str, prompt: str, max_tokens: int
+    ) -> str:
         res = self.client.converse(
             modelId=self.model_id,
             messages=[
                 {
                     "role": "user",
                     "content": [
-                        {"image": {"format": "jpeg", "source": {"bytes": image_bytes}}},
-                        {"text": TRANSCRIBE_PROMPT},
+                        {
+                            "image": {
+                                "format": image_format,
+                                "source": {"bytes": image_bytes},
+                            }
+                        },
+                        {"text": prompt},
                     ],
                 }
             ],
-            inferenceConfig={"maxTokens": 2048, "temperature": 0},
+            inferenceConfig={"maxTokens": max_tokens, "temperature": 0},
         )
         return res["output"]["message"]["content"][0]["text"]
 

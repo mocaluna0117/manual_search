@@ -28,13 +28,23 @@ class Context:
 
 
 class AnswerGenerator(Protocol):
-    def generate(self, question: str, contexts: list[Context]) -> str: ...
+    def generate(
+        self,
+        question: str,
+        contexts: list[Context],
+        image: tuple[bytes, str] | None = None,
+    ) -> str: ...
 
 
 class StubAnswerGenerator:
     """開発用: LLMを呼ばずに定型文を返す"""
 
-    def generate(self, question: str, contexts: list[Context]) -> str:
+    def generate(
+        self,
+        question: str,
+        contexts: list[Context],
+        image: tuple[bytes, str] | None = None,
+    ) -> str:
         return (
             f"「{question}」に関連しそうなマニュアルが{len(contexts)}件見つかりました。"
             "詳しくは以下をご覧ください。(回答文の生成はANSWER_PROVIDER=bedrockで有効になります)"
@@ -45,21 +55,36 @@ class BedrockAnswerGenerator:
     """本番用: Claude(Bedrock Converse API)で回答を生成する"""
 
     def __init__(self, model_id: str, region: str):
-        import boto3
+        import boto3  # type: ignore[import-untyped]
 
         self.client = boto3.client("bedrock-runtime", region_name=region)
         self.model_id = model_id
 
-    def generate(self, question: str, contexts: list[Context]) -> str:
+    def generate(
+        self,
+        question: str,
+        contexts: list[Context],
+        image: tuple[bytes, str] | None = None,
+    ) -> str:
         excerpts = "\n\n".join(
             f"【{c.title}】\n{c.content}" for c in contexts
         )
         user_message = f"# マニュアル抜粋\n{excerpts}\n\n# 質問\n{question}"
 
+        # 質問に画像が添付されていたら、Claudeに画像も一緒に見せる
+        content: list[dict] = []
+        if image is not None:
+            image_bytes, image_format = image
+            content.append(
+                {"image": {"format": image_format, "source": {"bytes": image_bytes}}}
+            )
+            user_message += "\n(質問には上の画像が添付されています。画像の内容も踏まえて回答してください)"
+        content.append({"text": user_message})
+
         res = self.client.converse(
             modelId=self.model_id,
             system=[{"text": SYSTEM_PROMPT}],
-            messages=[{"role": "user", "content": [{"text": user_message}]}],
+            messages=[{"role": "user", "content": content}],
             inferenceConfig={
                 "maxTokens": 1024,
                 "temperature": 0.2,  # 事実ベースの回答なので低め(創造性を抑える)

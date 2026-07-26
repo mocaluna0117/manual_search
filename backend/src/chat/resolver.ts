@@ -43,16 +43,23 @@ export class ChatResolver {
     return this.chatService.messages(conversation.id);
   }
 
-  // 質問を投げる。conversationId省略で新規会話が始まる
+  // 質問を投げる。conversationId省略で新規会話が始まる。画像添付は任意
   @Mutation(() => AskResult)
   async askQuestion(
     @Args('question') question: string,
     @CurrentUser() authUser: AuthUser,
     @Args('conversationId', { type: () => ID, nullable: true })
     conversationId?: string,
+    @Args('imageBase64', { type: () => String, nullable: true })
+    imageBase64?: string,
+    @Args('imageFormat', { type: () => String, nullable: true })
+    imageFormat?: string,
   ) {
     const user = await this.userService.ensure(authUser);
-    return this.chatService.ask(question, user.id, conversationId);
+    const image = imageBase64
+      ? { base64: imageBase64, format: imageFormat ?? 'jpeg' }
+      : undefined;
+    return this.chatService.ask(question, user.id, conversationId, image);
   }
 
   @Mutation(() => Conversation)

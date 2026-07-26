@@ -1,3 +1,4 @@
+import base64
 import os
 import urllib.request
 from io import BytesIO
@@ -26,8 +27,13 @@ transcriber = create_transcriber()
 MIN_TEXT_CHARS_PER_PAGE = 20
 
 
+ALLOWED_IMAGE_FORMATS = {"png", "jpeg", "webp", "gif"}
+
+
 class SearchRequest(BaseModel):
     question: str
+    image_base64: str | None = None  # 質問に添付された画像(任意)
+    image_format: str | None = None  # png / jpeg / webp / gif
 
 
 class Citation(BaseModel):
@@ -127,13 +133,29 @@ def ingest(req: IngestRequest) -> IngestResponse:
 
 @app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest) -> SearchResponse:
-    """質問に近いチャンクをベクトル検索で探す。
+    """質問(+添付画像)に近いチャンクをベクトル検索し、Claudeが回答を生成する。
 
     <=> はpgvectorのコサイン距離演算子。小さいほど「近い(似ている)」。
-    回答文の生成(Claude)は次ステップで実装し、今は関連マニュアルの提示まで。
     """
-    # 1) 質問文を、チャンクと同じ方法でベクトル化
-    query_vec = to_vector_literal(embedder.embed_texts([req.question])[0])
+    # 0) 添付画像があればデコードし、検索に使える説明文をClaudeに作らせる。
+    #    「この画面どうすれば？」のような質問文だけでは検索できないため
+    image: tuple[bytes, str] | None = None
+    retrieval_query = req.question
+    if req.image_base64:
+        image_format = (req.image_format or "jpeg").lower()
+        if image_format not in ALLOWED_IMAGE_FORMATS:
+            raise HTTPException(status_code=400, detail=f"未対応の画像形式です: {image_format}")
+        try:
+            image_bytes = base64.b64decode(req.image_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="画像データを読み取れません")
+        image = (image_bytes, image_format)
+        description = transcriber.describe(image_bytes, image_format)
+        if description:
+            retrieval_query = f"{req.question}\n{description}"
+
+    # 1) 質問文(+画像の説明)を、チャンクと同じ方法でベクトル化
+    query_vec = to_vector_literal(embedder.embed_texts([retrieval_query])[0])
 
     # 2) コサイン距離が近い順にチャンクを取得(マニュアル情報もJOINで添える)
     with psycopg.connect(DATABASE_URL) as conn:
@@ -170,7 +192,7 @@ def search(req: SearchRequest) -> SearchResponse:
         for _manual_id, title, content, _distance in rows
     ]
     try:
-        answer = answer_generator.generate(req.question, contexts)
+        answer = answer_generator.generate(req.question, contexts, image=image)
     except Exception as e:
         answer = (
             f"関連しそうなマニュアルが{len(citations)}件見つかりましたが、"

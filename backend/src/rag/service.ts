@@ -50,13 +50,20 @@ export class RagService {
     return body.chunk_count;
   }
 
-  async search(question: string): Promise<RagAnswer> {
+  async search(
+    question: string,
+    image?: { base64: string; format: string },
+  ): Promise<RagAnswer> {
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({
+          question,
+          image_base64: image?.base64,
+          image_format: image?.format,
+        }),
       });
     } catch {
       throw new ServiceUnavailableException('RAGサービスに接続できません');

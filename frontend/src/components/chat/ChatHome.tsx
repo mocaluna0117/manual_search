@@ -4,6 +4,8 @@ import {
   Button,
   Heading,
   HStack,
+  IconButton,
+  Image,
   Input,
   Spinner,
   Text,
@@ -23,6 +25,30 @@ interface ChatHomeProps {
   onConversationCreated: (id: string) => void
 }
 
+// 表示用: サーバーのメッセージ + 送信時だけ持つ画像プレビューURL
+type LocalMessage = ChatMessage & { imageUrl?: string }
+
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024 // 4MB
+const ALLOWED_IMAGE_TYPES: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpeg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+}
+
+/** File → base64文字列(data:プレフィックスを除いた本体) */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      resolve(result.split(',', 2)[1] ?? '')
+    }
+    reader.onerror = () => reject(new Error('画像を読み込めませんでした'))
+    reader.readAsDataURL(file)
+  })
+}
+
 /** AI検索のチャット画面。質問前は中央に検索欄、質問後はスレッド表示 */
 export function ChatHome({
   conversationId,
@@ -30,7 +56,9 @@ export function ChatHome({
 }: ChatHomeProps) {
   const [input, setInput] = useState('')
   // サーバーに保存済みのメッセージ + 送信中の楽観的な表示をまとめて持つ
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<LocalMessage[]>([])
+  const [attachedImage, setAttachedImage] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // 既存の会話を開いた場合は履歴をDBから読み込む
@@ -58,19 +86,46 @@ export function ChatHome({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
+  const handleAttach = (file: File | null) => {
+    if (!file) return
+    if (!(file.type in ALLOWED_IMAGE_TYPES)) {
+      window.alert('PNG / JPEG / WebP / GIF の画像を選択してください')
+      return
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      window.alert('画像は4MB以下にしてください')
+      return
+    }
+    setAttachedImage(file)
+  }
+
   const handleSubmit = async () => {
     const question = input.trim()
     if (!question || loading) return
+    const image = attachedImage
     setInput('')
+    setAttachedImage(null)
+
     // まず自分の発言を即表示(楽観的更新)。IDは仮でよい
     setMessages((prev) => [
       ...prev,
-      { id: `local-${Date.now()}`, role: 'USER', content: question, citations: [] },
+      {
+        id: `local-${Date.now()}`,
+        role: 'USER',
+        content: question,
+        citations: [],
+        imageUrl: image ? URL.createObjectURL(image) : undefined,
+      },
     ])
 
     try {
       const { data } = await ask({
-        variables: { question, conversationId: conversationId ?? undefined },
+        variables: {
+          question,
+          conversationId: conversationId ?? undefined,
+          imageBase64: image ? await fileToBase64(image) : undefined,
+          imageFormat: image ? ALLOWED_IMAGE_TYPES[image.type] : undefined,
+        },
       })
       if (!data) return
       setMessages((prev) => [...prev, data.askQuestion.message])
@@ -92,26 +147,76 @@ export function ChatHome({
   }
 
   const searchInput = (
-    <HStack w="100%" maxW="640px" gap={2}>
-      <Input
-        size="lg"
-        placeholder="例: 経費精算のやり方を教えて"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          // 日本語変換の確定Enterでは送信しない
-          if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSubmit()
-        }}
-      />
-      <Button
-        size="lg"
-        colorPalette="blue"
-        onClick={handleSubmit}
-        loading={loading}
-      >
-        検索
-      </Button>
-    </HStack>
+    <VStack w="100%" maxW="640px" gap={2} align="stretch">
+      {/* 添付中の画像プレビュー */}
+      {attachedImage && (
+        <HStack
+          alignSelf="flex-start"
+          gap={2}
+          p={1}
+          borderWidth="1px"
+          borderRadius="md"
+        >
+          <Image
+            src={URL.createObjectURL(attachedImage)}
+            alt="添付画像"
+            h="48px"
+            borderRadius="sm"
+          />
+          <Text fontSize="xs" color="gray.500">
+            {attachedImage.name}
+          </Text>
+          <IconButton
+            aria-label="添付を取り消す"
+            size="xs"
+            variant="ghost"
+            onClick={() => setAttachedImage(null)}
+          >
+            ✕
+          </IconButton>
+        </HStack>
+      )}
+
+      <HStack gap={2}>
+        {/* 画像添付(スクリーンショットを添えて質問できる) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            handleAttach(e.target.files?.[0] ?? null)
+            e.target.value = '' // 同じファイルを選び直せるように
+          }}
+        />
+        <IconButton
+          aria-label="画像を添付"
+          size="lg"
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          📷
+        </IconButton>
+        <Input
+          size="lg"
+          placeholder="例: 経費精算のやり方を教えて"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // 日本語変換の確定Enterでは送信しない
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSubmit()
+          }}
+        />
+        <Button
+          size="lg"
+          colorPalette="blue"
+          onClick={handleSubmit}
+          loading={loading}
+        >
+          検索
+        </Button>
+      </HStack>
+    </VStack>
   )
 
   // 質問前(新規チャット): 中央に大きく検索欄(ChatGPT風の空状態)
@@ -145,6 +250,16 @@ export function ChatHome({
               borderRadius="lg"
               maxW="85%"
             >
+              {/* 送信時に添付した画像(このセッション中のみ表示) */}
+              {message.imageUrl && (
+                <Image
+                  src={message.imageUrl}
+                  alt="添付画像"
+                  maxH="160px"
+                  borderRadius="md"
+                  mb={2}
+                />
+              )}
               <Text whiteSpace="pre-wrap">{message.content}</Text>
 
               {/* 根拠マニュアル(引用)があれば下に並べる */}
