@@ -75,7 +75,7 @@ erDiagram
 | Manual | ✅実装済み | マニュアル1件。PDF本体はS3、ここにはメタ情報のみ |
 | ManualChunk | ✅実装済み | マニュアルを検索しやすい断片に分割＋埋め込みベクトル。RAGの心臓部 |
 | User | ✅実装済み | 利用者。Cognitoの`sub`と紐付け、初回アクセス時に自動登録(JIT)。roleは今後の権限制御用 |
-| Conversation | ✅実装済み | 1つの会話スレッド（サイドバーの履歴1行）。認証導入後にuserIdを追加予定 |
+| Conversation | ✅実装済み | 1つの会話スレッド（サイドバーの履歴1行）。userIdで所有者に紐付く |
 | Message | ✅実装済み | 会話内の各発言（ユーザー質問 / AI回答）。`citations` Json列に根拠を内包 |
 | Citation | 🔄設計変更 | 独立テーブルにせず `Message.citations`（Json）に統合 |
 
@@ -83,7 +83,7 @@ erDiagram
 
 - `ManualCategory 1 ── N Manual` … 1カテゴリに複数マニュアル
 - `Manual 1 ── N ManualChunk` … 1マニュアルを複数の断片に分割（RAG用）
-- `User 1 ── N Conversation 1 ── N Message` … ユーザーごとの会話履歴（Userは認証導入時に追加）
+- `User 1 ── N Conversation 1 ── N Message` … ユーザーごとの会話履歴
 - AI回答と根拠マニュアルの関係は、`Message.citations`（Json）に回答時点のスナップショットとして内包（中間テーブルは作らない）
 
 ## 設計上のポイント
