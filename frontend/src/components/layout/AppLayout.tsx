@@ -7,6 +7,7 @@ interface AppLayoutProps {
   children: ReactNode
   selectedCategoryId: string | null
   onSelectCategory: (category: Category | null) => void
+  onSearch: (keyword: string) => void
 }
 
 /** 画面全体の骨組み: 左サイドバー + メインエリア */
@@ -14,12 +15,14 @@ export function AppLayout({
   children,
   selectedCategoryId,
   onSelectCategory,
+  onSearch,
 }: AppLayoutProps) {
   return (
     <Flex h="100vh">
       <Sidebar
         selectedCategoryId={selectedCategoryId}
         onSelectCategory={onSelectCategory}
+        onSearch={onSearch}
       />
       <Box as="main" flex="1" overflowY="auto">
         {children}

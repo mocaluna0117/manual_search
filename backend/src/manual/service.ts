@@ -22,6 +22,53 @@ export class ManualService {
     });
   }
 
+  /** キーワード検索。タイトル/説明/ファイル名/本文(チャンク)を部分一致で探す */
+  async search(keyword: string) {
+    const kw = keyword.trim();
+    if (!kw) return [];
+
+    // mode: 'insensitive' = 大文字小文字を区別しない(ILIKE)
+    const contains = { contains: kw, mode: 'insensitive' as const };
+    const manuals = await this.prisma.manual.findMany({
+      where: {
+        OR: [
+          { title: contains },
+          { description: contains },
+          { fileName: contains },
+          { chunks: { some: { content: contains } } },
+        ],
+      },
+      include: {
+        // 本文がヒットした場合に備えて、最初にマッチしたチャンクを1つだけ取る
+        chunks: {
+          where: { content: contains },
+          orderBy: { chunkIndex: 'asc' },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+    });
+
+    return manuals.map((manual) => ({
+      manual,
+      snippet: manual.chunks[0]
+        ? this.makeSnippet(manual.chunks[0].content, kw)
+        : null,
+    }));
+  }
+
+  /** ヒット箇所の前後を切り出した抜粋を作る */
+  private makeSnippet(content: string, keyword: string, radius = 60) {
+    const index = content.toLowerCase().indexOf(keyword.toLowerCase());
+    if (index < 0) return content.slice(0, radius * 2);
+    const start = Math.max(0, index - radius);
+    const end = Math.min(content.length, index + keyword.length + radius);
+    const head = start > 0 ? '…' : '';
+    const tail = end < content.length ? '…' : '';
+    return `${head}${content.slice(start, end)}${tail}`;
+  }
+
   async register(input: RegisterManualInput) {
     const manual = await this.prisma.manual.create({ data: input });
     // 取り込みは裏で実行(fire-and-forget)。ユーザーを何十秒も待たせないため、

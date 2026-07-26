@@ -54,11 +54,17 @@ enum IngestStatus {
   FAILED
 }
 
+type ManualSearchResult {
+  manual: Manual!
+  snippet: String
+}
+
 type Query {
   health: String!
   dbHealth: String!
   manualCategories: [ManualCategory!]!
   manuals(categoryId: ID): [Manual!]!
+  searchManuals(keyword: String!): [ManualSearchResult!]!
   manualDownloadUrl(id: ID!): String!
   ragHealth: String!
   ragSearch(question: String!): RagAnswer!

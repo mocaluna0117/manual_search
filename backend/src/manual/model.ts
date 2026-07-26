@@ -61,3 +61,13 @@ export class Manual {
   @Field()
   updatedAt!: Date;
 }
+
+// キーワード検索の1件分。マニュアル本体と、本文がヒットした場合はその抜粋を返す
+@ObjectType()
+export class ManualSearchResult {
+  @Field(() => Manual)
+  manual!: Manual;
+
+  @Field(() => String, { nullable: true })
+  snippet!: string | null;
+}

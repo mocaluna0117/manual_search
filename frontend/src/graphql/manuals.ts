@@ -117,6 +117,43 @@ export const INGEST_MANUAL_MUTATION: TypedDocumentNode<
   }
 `
 
+// --- キーワード検索 ---
+
+export interface ManualSearchResult {
+  manual: Manual
+  snippet: string | null
+}
+
+interface SearchManualsData {
+  searchManuals: ManualSearchResult[]
+}
+
+interface SearchManualsVars {
+  keyword: string
+}
+
+export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
+  SearchManualsData,
+  SearchManualsVars
+> = gql`
+  query SearchManuals($keyword: String!) {
+    searchManuals(keyword: $keyword) {
+      manual {
+        id
+        title
+        description
+        fileName
+        size
+        categoryId
+        ingestStatus
+        ingestError
+        chunkCount
+      }
+      snippet
+    }
+  }
+`
+
 // --- 閲覧用URLの発行 ---
 
 interface DownloadUrlData {

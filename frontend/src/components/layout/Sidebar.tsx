@@ -1,5 +1,13 @@
 import { useQuery } from '@apollo/client/react'
-import { Box, Button, Separator, Spinner, Text, VStack } from '@chakra-ui/react'
+import {
+  Box,
+  Button,
+  Input,
+  Separator,
+  Spinner,
+  Text,
+  VStack,
+} from '@chakra-ui/react'
 import { useState } from 'react'
 import { CATEGORIES_QUERY, type Category } from '../../graphql/categories'
 import { ConnectionStatus } from '../ConnectionStatus'
@@ -11,11 +19,21 @@ const dummyChats = ['経費精算のやり方を教えて', 'VPNに接続でき�
 interface SidebarProps {
   selectedCategoryId: string | null
   onSelectCategory: (category: Category | null) => void
+  onSearch: (keyword: string) => void
 }
 
-export function Sidebar({ selectedCategoryId, onSelectCategory }: SidebarProps) {
+export function Sidebar({
+  selectedCategoryId,
+  onSelectCategory,
+  onSearch,
+}: SidebarProps) {
   const { data, loading } = useQuery(CATEGORIES_QUERY)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [keyword, setKeyword] = useState('')
+
+  const handleSearch = () => {
+    if (keyword.trim()) onSearch(keyword.trim())
+  }
 
   return (
     <VStack
@@ -38,6 +56,20 @@ export function Sidebar({ selectedCategoryId, onSelectCategory }: SidebarProps) 
       >
         ＋ 新しいチャット
       </Button>
+
+      {/* キーワード検索(AI検索と別の、従来型の検索) */}
+      <Input
+        size="sm"
+        placeholder="🔍 マニュアル名・内容で検索"
+        bg="gray.800"
+        borderColor="gray.600"
+        _placeholder={{ color: 'gray.400' }}
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSearch()
+        }}
+      />
 
       {/* チャット履歴 */}
       <Box flex="1" overflowY="auto">

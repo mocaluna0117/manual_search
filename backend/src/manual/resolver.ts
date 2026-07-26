@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
-import { Manual, ManualUploadTarget } from './model';
+import { Manual, ManualSearchResult, ManualUploadTarget } from './model';
 import { ManualService } from './service';
 
 @Resolver(() => Manual)
@@ -29,6 +29,12 @@ export class ManualResolver {
       throw new BadRequestException('PDFファイルのみアップロードできます');
     }
     return this.storageService.createUploadUrl(fileName);
+  }
+
+  // キーワード検索(タイトル/説明/ファイル名/本文の部分一致)
+  @Query(() => [ManualSearchResult])
+  searchManuals(@Args('keyword') keyword: string) {
+    return this.manualService.search(keyword);
   }
 
   // PDFを開くための署名付きURL(15分有効)を発行

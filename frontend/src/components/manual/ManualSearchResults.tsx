@@ -1,0 +1,116 @@
+import { useLazyQuery, useQuery } from '@apollo/client/react'
+import {
+  Box,
+  Button,
+  Card,
+  Heading,
+  HStack,
+  Spinner,
+  Text,
+  VStack,
+} from '@chakra-ui/react'
+import { Fragment } from 'react'
+import {
+  MANUAL_DOWNLOAD_URL_QUERY,
+  SEARCH_MANUALS_QUERY,
+} from '../../graphql/manuals'
+import { formatSize } from '../../lib/format'
+
+interface ManualSearchResultsProps {
+  keyword: string
+}
+
+/** 文中のキーワードをハイライトして表示する */
+function HighlightedText({ text, keyword }: { text: string; keyword: string }) {
+  // 正規表現の特殊文字をエスケープしてから、キーワード位置で分割する
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === keyword.toLowerCase() ? (
+          <Text as="mark" key={i} bg="yellow.200">
+            {part}
+          </Text>
+        ) : (
+          <Fragment key={i}>{part}</Fragment>
+        ),
+      )}
+    </>
+  )
+}
+
+export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
+  const { data, loading } = useQuery(SEARCH_MANUALS_QUERY, {
+    variables: { keyword },
+  })
+
+  const [fetchDownloadUrl] = useLazyQuery(MANUAL_DOWNLOAD_URL_QUERY, {
+    fetchPolicy: 'no-cache',
+  })
+
+  const handleOpen = async (id: string) => {
+    const { data: urlData } = await fetchDownloadUrl({ variables: { id } })
+    if (urlData) {
+      window.open(urlData.manualDownloadUrl, '_blank')
+    }
+  }
+
+  return (
+    <Box p={8} maxW="800px" mx="auto">
+      <Heading size="lg" mb={2}>
+        🔍 「{keyword}」の検索結果
+      </Heading>
+
+      {loading && <Spinner mt={4} />}
+
+      {data && (
+        <Text color="gray.500" mb={6}>
+          {data.searchManuals.length}件見つかりました
+        </Text>
+      )}
+
+      <VStack gap={3} align="stretch">
+        {data?.searchManuals.map(({ manual, snippet }) => (
+          <Card.Root key={manual.id} size="sm">
+            <Card.Body>
+              <HStack justify="space-between" align="start">
+                <Box>
+                  <Card.Title>
+                    <HighlightedText text={manual.title} keyword={keyword} />
+                  </Card.Title>
+                  {manual.description && (
+                    <Card.Description>
+                      <HighlightedText
+                        text={manual.description}
+                        keyword={keyword}
+                      />
+                    </Card.Description>
+                  )}
+                  {/* 本文ヒット時の抜粋 */}
+                  {snippet && (
+                    <Text fontSize="sm" color="gray.600" mt={2}>
+                      <HighlightedText text={snippet} keyword={keyword} />
+                    </Text>
+                  )}
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    {manual.fileName}（{formatSize(manual.size)}）
+                  </Text>
+                </Box>
+                <Button
+                  size="sm"
+                  colorPalette="blue"
+                  variant="outline"
+                  flexShrink={0}
+                  onClick={() => handleOpen(manual.id)}
+                >
+                  開く
+                </Button>
+              </HStack>
+            </Card.Body>
+          </Card.Root>
+        ))}
+      </VStack>
+    </Box>
+  )
+}
