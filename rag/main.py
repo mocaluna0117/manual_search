@@ -11,6 +11,7 @@ from pypdf import PdfReader
 from chunking import split_text
 from embedding import create_embedder, to_vector_literal
 from llm import Context, create_answer_generator
+from vision import MAX_TRANSCRIBE_PAGES, create_transcriber, render_page_jpeg
 
 load_dotenv()  # rag/.env を読み込む
 
@@ -19,6 +20,10 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 app = FastAPI(title="Manual Search RAG Service")
 embedder = create_embedder()
 answer_generator = create_answer_generator()
+transcriber = create_transcriber()
+
+# これ未満の文字数しか取れないページは「実質画像のページ」とみなし書き起こしに回す
+MIN_TEXT_CHARS_PER_PAGE = 20
 
 
 class SearchRequest(BaseModel):
@@ -47,6 +52,7 @@ class IngestResponse(BaseModel):
     manual_id: str
     page_count: int
     chunk_count: int
+    transcribed_page_count: int = 0  # Claudeの画像認識で書き起こしたページ数
 
 
 @app.get("/health")
@@ -70,9 +76,26 @@ def ingest(req: IngestRequest) -> IngestResponse:
     # 2) ページごとにテキスト抽出
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
-        pages = [page.extract_text() or "" for page in reader.pages]
+        pages = [(page.extract_text() or "").strip() for page in reader.pages]
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"PDFを解析できません: {e}")
+
+    # 2.5) テキストがほぼ取れないページ(スキャン・画像ページ)は
+    #      Claudeの画像認識で書き起こす(上限ページ数まで)
+    transcribed_count = 0
+    if transcriber.enabled:
+        for i, text in enumerate(pages):
+            if len(text) >= MIN_TEXT_CHARS_PER_PAGE:
+                continue
+            if transcribed_count >= MAX_TRANSCRIBE_PAGES:
+                break  # コストの安全弁。超過分は素通し(空ページ扱い)
+            try:
+                image = render_page_jpeg(pdf_bytes, i)
+                pages[i] = transcriber.transcribe(image)
+                transcribed_count += 1
+            except Exception:
+                # 1ページの失敗で取り込み全体を止めない(そのページだけ諦める)
+                continue
 
     full_text = "\n".join(pages)
     chunks = split_text(full_text)
@@ -98,6 +121,7 @@ def ingest(req: IngestRequest) -> IngestResponse:
         manual_id=req.manual_id,
         page_count=len(pages),
         chunk_count=len(chunks),
+        transcribed_page_count=transcribed_count,
     )
 
 
