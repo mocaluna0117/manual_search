@@ -44,6 +44,31 @@ model Manual {
   updatedAt     DateTime          @updatedAt
 }
 
+enum MessageRole {
+  USER // 利用者の質問
+  ASSISTANT // AIの回答
+}
+
+// 会話スレッド(サイドバー履歴の1行)。認証導入後にuserIdを追加して所有者を紐付ける
+model Conversation {
+  id        String    @id @default(uuid())
+  title     String // 最初の質問から自動生成
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String       @map("conversation_id")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String
+  // 回答時点の根拠マニュアル(スナップショット)。後でマニュアルが削除されても履歴は読める
+  citations      Json?
+  createdAt      DateTime     @default(now()) @map("created_at")
+}
+
 // RAG用: マニュアルを検索しやすい断片に分割したもの。
 // embeddingはPrisma未対応のpgvector型なのでUnsupportedで宣言し、SQLで直接扱う
 model ManualChunk {

@@ -25,6 +25,33 @@ type RagAnswer {
   citations: [RagCitation!]!
 }
 
+type ChatMessage {
+  id: ID!
+  role: MessageRole!
+  content: String!
+  citations: [RagCitation!]!
+  createdAt: DateTime!
+}
+
+"""メッセージの発言者(USER=質問 / ASSISTANT=AI回答)"""
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+type Conversation {
+  id: ID!
+  title: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  messages: [ChatMessage!]!
+}
+
+type AskResult {
+  conversationId: ID!
+  message: ChatMessage!
+}
+
 type ManualUploadTarget {
   uploadUrl: String!
   fileKey: String!
@@ -63,16 +90,20 @@ type Query {
   health: String!
   dbHealth: String!
   manualCategories: [ManualCategory!]!
+  conversations: [Conversation!]!
+  conversation(id: ID!): Conversation!
+  ragHealth: String!
+  ragSearch(question: String!): RagAnswer!
   manuals(categoryId: ID): [Manual!]!
   searchManuals(keyword: String!): [ManualSearchResult!]!
   manualDownloadUrl(id: ID!): String!
-  ragHealth: String!
-  ragSearch(question: String!): RagAnswer!
 }
 
 type Mutation {
   createManualCategory(name: String!): ManualCategory!
   deleteManualCategory(id: ID!): ManualCategory!
+  askQuestion(question: String!, conversationId: ID): AskResult!
+  deleteConversation(id: ID!): Conversation!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!
   registerManual(input: RegisterManualInput!): Manual!
   deleteManual(id: ID!): Manual!

@@ -1,7 +1,9 @@
-import { useQuery } from '@apollo/client/react'
+import { useMutation, useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
+  HStack,
+  IconButton,
   Input,
   Separator,
   Spinner,
@@ -10,29 +12,46 @@ import {
 } from '@chakra-ui/react'
 import { useState } from 'react'
 import { CATEGORIES_QUERY, type Category } from '../../graphql/categories'
+import {
+  CONVERSATIONS_QUERY,
+  DELETE_CONVERSATION_MUTATION,
+} from '../../graphql/chat'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 
-// TODO: チャット履歴も後でGraphQLから取得する
-const dummyChats = ['経費精算のやり方を教えて', 'VPNに接続できないときは']
-
 interface SidebarProps {
   selectedCategoryId: string | null
+  selectedConversationId: string | null
   onSelectCategory: (category: Category | null) => void
+  onSelectConversation: (conversationId: string) => void
   onSearch: (keyword: string) => void
 }
 
 export function Sidebar({
   selectedCategoryId,
+  selectedConversationId,
   onSelectCategory,
+  onSelectConversation,
   onSearch,
 }: SidebarProps) {
   const { data, loading } = useQuery(CATEGORIES_QUERY)
+  const { data: chatData, loading: loadingChats } = useQuery(CONVERSATIONS_QUERY)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
+  const [deleteConversation] = useMutation(DELETE_CONVERSATION_MUTATION, {
+    refetchQueries: ['Conversations'],
+  })
+
   const handleSearch = () => {
     if (keyword.trim()) onSearch(keyword.trim())
+  }
+
+  const handleDeleteConversation = async (id: string, title: string) => {
+    if (!window.confirm(`会話「${title}」を削除しますか？`)) return
+    await deleteConversation({ variables: { id } })
+    // 開いていた会話を消した場合はホームに戻す
+    if (id === selectedConversationId) onSelectCategory(null)
   }
 
   return (
@@ -71,34 +90,60 @@ export function Sidebar({
         }}
       />
 
-      {/* チャット履歴 */}
+      {/* チャット履歴(DBから取得) */}
       <Box flex="1" overflowY="auto">
         <Text fontSize="xs" color="gray.400" mb={2}>
           チャット履歴
         </Text>
+        {loadingChats && <Spinner size="sm" />}
+        {chatData && chatData.conversations.length === 0 && (
+          <Text fontSize="sm" color="gray.500">
+            履歴はまだありません
+          </Text>
+        )}
         <VStack gap={1} align="stretch">
-          {dummyChats.map((title) => (
-            <Button
-              key={title}
-              variant="ghost"
-              size="sm"
-              justifyContent="flex-start"
-              color="gray.100"
-              _hover={{ bg: 'gray.700' }}
-              overflow="hidden"
-              textOverflow="ellipsis"
-              whiteSpace="nowrap"
-              display="block"
-              textAlign="left"
-            >
-              {title}
-            </Button>
+          {chatData?.conversations.map((conversation) => (
+            <HStack key={conversation.id} gap={0} className="group">
+              <Button
+                variant="ghost"
+                size="sm"
+                flex="1"
+                justifyContent="flex-start"
+                color="gray.100"
+                bg={
+                  conversation.id === selectedConversationId
+                    ? 'gray.700'
+                    : undefined
+                }
+                _hover={{ bg: 'gray.700' }}
+                overflow="hidden"
+                textOverflow="ellipsis"
+                whiteSpace="nowrap"
+                display="block"
+                textAlign="left"
+                onClick={() => onSelectConversation(conversation.id)}
+              >
+                {conversation.title}
+              </Button>
+              <IconButton
+                aria-label="会話を削除"
+                size="xs"
+                variant="ghost"
+                color="gray.500"
+                _hover={{ color: 'red.400', bg: 'gray.700' }}
+                onClick={() =>
+                  handleDeleteConversation(conversation.id, conversation.title)
+                }
+              >
+                🗑
+              </IconButton>
+            </HStack>
           ))}
         </VStack>
 
         <Separator my={4} borderColor="gray.700" />
 
-        {/* カテゴリ別マニュアル（DBから取得） */}
+        {/* カテゴリ別マニュアル(DBから取得) */}
         <Text fontSize="xs" color="gray.400" mb={2}>
           マニュアル（カテゴリ別）
         </Text>

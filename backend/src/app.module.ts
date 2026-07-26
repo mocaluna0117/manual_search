@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppResolver } from './app.resolver';
 import { AppService } from './app.service';
 import { CategoryModule } from './category/module';
+import { ChatModule } from './chat/module';
 import { ManualModule } from './manual/module';
 import { PrismaModule } from './prisma/module';
 import { RagModule } from './rag/module';
@@ -24,6 +25,7 @@ import { RagModule } from './rag/module';
     }),
     PrismaModule,
     CategoryModule,
+    ChatModule,
     ManualModule,
     RagModule,
   ],

@@ -6,7 +6,9 @@ import { Sidebar } from './Sidebar'
 interface AppLayoutProps {
   children: ReactNode
   selectedCategoryId: string | null
+  selectedConversationId: string | null
   onSelectCategory: (category: Category | null) => void
+  onSelectConversation: (conversationId: string) => void
   onSearch: (keyword: string) => void
 }
 
@@ -14,14 +16,18 @@ interface AppLayoutProps {
 export function AppLayout({
   children,
   selectedCategoryId,
+  selectedConversationId,
   onSelectCategory,
+  onSelectConversation,
   onSearch,
 }: AppLayoutProps) {
   return (
     <Flex h="100vh">
       <Sidebar
         selectedCategoryId={selectedCategoryId}
+        selectedConversationId={selectedConversationId}
         onSelectCategory={onSelectCategory}
+        onSelectConversation={onSelectConversation}
         onSearch={onSearch}
       />
       <Box as="main" flex="1" overflowY="auto">
