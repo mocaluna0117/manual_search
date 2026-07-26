@@ -11,7 +11,9 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useState } from 'react'
+import { useAuth } from 'react-oidc-context'
 import { CATEGORIES_QUERY, type Category } from '../../graphql/categories'
+import { signOutRedirect } from '../../lib/auth'
 import {
   CONVERSATIONS_QUERY,
   DELETE_CONVERSATION_MUTATION,
@@ -34,10 +36,16 @@ export function Sidebar({
   onSelectConversation,
   onSearch,
 }: SidebarProps) {
+  const auth = useAuth()
   const { data, loading } = useQuery(CATEGORIES_QUERY)
   const { data: chatData, loading: loadingChats } = useQuery(CONVERSATIONS_QUERY)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
+
+  const handleLogout = async () => {
+    await auth.removeUser() // ブラウザ内のトークンを破棄
+    signOutRedirect() // Cognito側のセッションも切ってログイン画面へ
+  }
 
   const [deleteConversation] = useMutation(DELETE_CONVERSATION_MUTATION, {
     refetchQueries: ['Conversations'],
@@ -184,9 +192,23 @@ export function Sidebar({
       </Button>
       <UploadManualDialog open={uploadOpen} onClose={() => setUploadOpen(false)} />
 
-      {/* 下部: 開発用の疎通ステータス */}
+      {/* 下部: ログインユーザーと疎通ステータス */}
       <Box>
-        <ConnectionStatus />
+        <Text fontSize="xs" color="gray.400" mb={1} truncate>
+          👤 {auth.user?.profile.email}
+        </Text>
+        <HStack justify="space-between">
+          <ConnectionStatus />
+          <Button
+            size="xs"
+            variant="ghost"
+            color="gray.400"
+            _hover={{ bg: 'gray.700' }}
+            onClick={() => void handleLogout()}
+          >
+            ログアウト
+          </Button>
+        </HStack>
       </Box>
     </VStack>
   )

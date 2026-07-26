@@ -6,6 +6,7 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppResolver } from './app.resolver';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/module';
 import { CategoryModule } from './category/module';
 import { ChatModule } from './chat/module';
 import { ManualModule } from './manual/module';
@@ -22,7 +23,10 @@ import { RagModule } from './rag/module';
       autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
       playground: true,
       plugins: [],
+      // 認証ガードがHTTPリクエスト(のAuthorizationヘッダ)を読めるようにcontextへ渡す
+      context: ({ req }: { req: unknown }) => ({ req }),
     }),
+    AuthModule,
     PrismaModule,
     CategoryModule,
     ChatModule,

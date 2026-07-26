@@ -1,4 +1,7 @@
+import { Spinner, VStack } from '@chakra-ui/react'
 import { useState } from 'react'
+import { useAuth } from 'react-oidc-context'
+import { LoginScreen } from './components/auth/LoginScreen'
 import { ChatHome } from './components/chat/ChatHome'
 import { AppLayout } from './components/layout/AppLayout'
 import { CategoryManualList } from './components/manual/CategoryManualList'
@@ -13,9 +16,24 @@ type View =
   | { type: 'search'; keyword: string }
 
 function App() {
+  const auth = useAuth()
   const [view, setView] = useState<View>({ type: 'home' })
 
   const isChat = view.type === 'home' || view.type === 'chat'
+
+  // 認証状態の確認中(リダイレクトから戻った直後など)
+  if (auth.isLoading) {
+    return (
+      <VStack h="100vh" justify="center">
+        <Spinner size="lg" />
+      </VStack>
+    )
+  }
+
+  // 未ログインならログイン画面だけを見せる(アプリ本体は一切見せない)
+  if (!auth.isAuthenticated) {
+    return <LoginScreen />
+  }
 
   return (
     <AppLayout

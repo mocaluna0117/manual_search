@@ -14,8 +14,10 @@
     "@chakra-ui/react": "^3.36.0",
     "@emotion/react": "^11.14.0",
     "graphql": "^16.14.2",
+    "oidc-client-ts": "^3.5.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "react-oidc-context": "^3.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
