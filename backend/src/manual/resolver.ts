@@ -13,13 +13,15 @@ export class ManualResolver {
     private readonly storageService: StorageService,
   ) {}
 
-  // 一覧。categoryIdを渡すと絞り込み(サイドバーのカテゴリクリック用)
+  // 一覧。categoryIdで絞り込み、uncategorized=trueでカテゴリ未設定のみ
   @Query(() => [Manual])
   manuals(
     @Args('categoryId', { type: () => ID, nullable: true })
     categoryId?: string,
+    @Args('uncategorized', { type: () => Boolean, nullable: true })
+    uncategorized?: boolean,
   ) {
-    return this.manualService.findAll(categoryId);
+    return this.manualService.findAll(categoryId, uncategorized);
   }
 
   @Roles(UserRole.ADMIN)

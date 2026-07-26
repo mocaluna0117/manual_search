@@ -23,7 +23,8 @@ import { ME_QUERY } from '../../graphql/me'
 import { formatSize } from '../../lib/format'
 
 interface CategoryManualListProps {
-  categoryId: string
+  categoryId?: string
+  uncategorized?: boolean // trueなら「カテゴリ未設定」のマニュアルを表示
   categoryName: string
 }
 
@@ -53,10 +54,11 @@ function IngestStatusBadge({
 
 export function CategoryManualList({
   categoryId,
+  uncategorized,
   categoryName,
 }: CategoryManualListProps) {
   const { data, loading, startPolling, stopPolling } = useQuery(MANUALS_QUERY, {
-    variables: { categoryId },
+    variables: { categoryId, uncategorized },
   })
   const { data: meData } = useQuery(ME_QUERY)
   const isAdmin = meData?.me.role === 'ADMIN'

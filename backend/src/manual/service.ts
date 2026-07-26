@@ -15,9 +15,14 @@ export class ManualService {
     private readonly rag: RagService,
   ) {}
 
-  findAll(categoryId?: string) {
+  findAll(categoryId?: string, uncategorized?: boolean) {
     return this.prisma.manual.findMany({
-      where: categoryId ? { categoryId } : undefined,
+      // uncategorized=trueなら「カテゴリ未設定」だけに絞る(nullでの絞り込み)
+      where: uncategorized
+        ? { categoryId: null }
+        : categoryId
+          ? { categoryId }
+          : undefined,
       orderBy: { createdAt: 'desc' },
     });
   }

@@ -13,6 +13,7 @@ type View =
   | { type: 'home' } // 新規チャット
   | { type: 'chat'; conversationId: string } // 既存の会話
   | { type: 'category'; category: Category }
+  | { type: 'uncategorized' } // カテゴリ未設定のマニュアル一覧
   | { type: 'search'; keyword: string }
 
 function App() {
@@ -45,6 +46,7 @@ function App() {
       onSelectConversation={(conversationId) =>
         setView({ type: 'chat', conversationId })
       }
+      onSelectUncategorized={() => setView({ type: 'uncategorized' })}
       onSearch={(keyword) => setView({ type: 'search', keyword })}
     >
       {view.type === 'category' && (
@@ -53,6 +55,9 @@ function App() {
           categoryId={view.category.id}
           categoryName={view.category.name}
         />
+      )}
+      {view.type === 'uncategorized' && (
+        <CategoryManualList key="uncategorized" uncategorized categoryName="未分類" />
       )}
       {view.type === 'search' && (
         <ManualSearchResults key={view.keyword} keyword={view.keyword} />

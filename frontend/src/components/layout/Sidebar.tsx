@@ -12,7 +12,12 @@ import {
 } from '@chakra-ui/react'
 import { useState } from 'react'
 import { useAuth } from 'react-oidc-context'
-import { CATEGORIES_QUERY, type Category } from '../../graphql/categories'
+import {
+  CATEGORIES_QUERY,
+  CREATE_CATEGORY_MUTATION,
+  DELETE_CATEGORY_MUTATION,
+  type Category,
+} from '../../graphql/categories'
 import { signOutRedirect } from '../../lib/auth'
 import {
   CONVERSATIONS_QUERY,
@@ -27,6 +32,7 @@ interface SidebarProps {
   selectedConversationId: string | null
   onSelectCategory: (category: Category | null) => void
   onSelectConversation: (conversationId: string) => void
+  onSelectUncategorized: () => void
   onSearch: (keyword: string) => void
 }
 
@@ -35,6 +41,7 @@ export function Sidebar({
   selectedConversationId,
   onSelectCategory,
   onSelectConversation,
+  onSelectUncategorized,
   onSearch,
 }: SidebarProps) {
   const auth = useAuth()
@@ -53,6 +60,39 @@ export function Sidebar({
   const [deleteConversation] = useMutation(DELETE_CONVERSATION_MUTATION, {
     refetchQueries: ['Conversations'],
   })
+
+  // カテゴリ管理(ADMINのみUIに出る。本命の防御はバックエンド)
+  const [addingCategory, setAddingCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [createCategory] = useMutation(CREATE_CATEGORY_MUTATION, {
+    refetchQueries: ['ManualCategories'],
+  })
+  const [deleteCategory] = useMutation(DELETE_CATEGORY_MUTATION, {
+    refetchQueries: ['ManualCategories'],
+  })
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim()
+    if (!name) return
+    try {
+      await createCategory({ variables: { name } })
+      setNewCategoryName('')
+      setAddingCategory(false)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'カテゴリを作成できませんでした')
+    }
+  }
+
+  const handleDeleteCategory = async (category: Category) => {
+    if (!window.confirm(`カテゴリ「${category.name}」を削除しますか？`)) return
+    try {
+      await deleteCategory({ variables: { id: category.id } })
+      if (category.id === selectedCategoryId) onSelectCategory(null)
+    } catch (e) {
+      // マニュアルが残っている場合はバックエンドが理由を返してくる
+      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+    }
+  }
 
   const handleSearch = () => {
     if (keyword.trim()) onSearch(keyword.trim())
@@ -155,9 +195,44 @@ export function Sidebar({
         <Separator my={4} borderColor="gray.700" />
 
         {/* カテゴリ別マニュアル(DBから取得) */}
-        <Text fontSize="xs" color="gray.400" mb={2}>
-          マニュアル（カテゴリ別）
-        </Text>
+        <HStack justify="space-between" mb={2}>
+          <Text fontSize="xs" color="gray.400">
+            マニュアル（カテゴリ別）
+          </Text>
+          {isAdmin && (
+            <IconButton
+              aria-label="カテゴリを追加"
+              size="2xs"
+              variant="ghost"
+              color="gray.400"
+              _hover={{ color: 'gray.100', bg: 'gray.700' }}
+              onClick={() => setAddingCategory((v) => !v)}
+            >
+              ＋
+            </IconButton>
+          )}
+        </HStack>
+
+        {/* カテゴリ追加フォーム(＋を押すと出る) */}
+        {addingCategory && (
+          <Input
+            size="sm"
+            mb={2}
+            autoFocus
+            placeholder="カテゴリ名を入力してEnter"
+            bg="gray.800"
+            borderColor="gray.600"
+            _placeholder={{ color: 'gray.400' }}
+            value={newCategoryName}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+                void handleCreateCategory()
+              if (e.key === 'Escape') setAddingCategory(false)
+            }}
+          />
+        )}
+
         {loading && <Spinner size="sm" />}
         {data && data.manualCategories.length === 0 && (
           <Text fontSize="sm" color="gray.500">
@@ -166,19 +241,44 @@ export function Sidebar({
         )}
         <VStack gap={1} align="stretch">
           {data?.manualCategories.map((category) => (
-            <Button
-              key={category.id}
-              variant="ghost"
-              size="sm"
-              justifyContent="flex-start"
-              color="gray.100"
-              bg={category.id === selectedCategoryId ? 'gray.700' : undefined}
-              _hover={{ bg: 'gray.700' }}
-              onClick={() => onSelectCategory(category)}
-            >
-              📁 {category.name}
-            </Button>
+            <HStack key={category.id} gap={0}>
+              <Button
+                variant="ghost"
+                size="sm"
+                flex="1"
+                justifyContent="flex-start"
+                color="gray.100"
+                bg={category.id === selectedCategoryId ? 'gray.700' : undefined}
+                _hover={{ bg: 'gray.700' }}
+                onClick={() => onSelectCategory(category)}
+              >
+                📁 {category.name}
+              </Button>
+              {isAdmin && (
+                <IconButton
+                  aria-label="カテゴリを削除"
+                  size="xs"
+                  variant="ghost"
+                  color="gray.500"
+                  _hover={{ color: 'red.400', bg: 'gray.700' }}
+                  onClick={() => void handleDeleteCategory(category)}
+                >
+                  🗑
+                </IconButton>
+              )}
+            </HStack>
           ))}
+          {/* カテゴリ未設定のマニュアル置き場 */}
+          <Button
+            variant="ghost"
+            size="sm"
+            justifyContent="flex-start"
+            color="gray.400"
+            _hover={{ bg: 'gray.700' }}
+            onClick={onSelectUncategorized}
+          >
+            📂 未分類
+          </Button>
         </VStack>
       </Box>
 

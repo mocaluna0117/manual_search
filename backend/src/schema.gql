@@ -107,7 +107,7 @@ type Query {
   conversation(id: ID!): Conversation!
   ragHealth: String!
   ragSearch(question: String!): RagAnswer!
-  manuals(categoryId: ID): [Manual!]!
+  manuals(categoryId: ID, uncategorized: Boolean): [Manual!]!
   searchManuals(keyword: String!): [ManualSearchResult!]!
   manualDownloadUrl(id: ID!): String!
 }

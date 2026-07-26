@@ -80,11 +80,12 @@ interface ManualsData {
 
 interface ManualsVars {
   categoryId?: string
+  uncategorized?: boolean
 }
 
 export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
-  query Manuals($categoryId: ID) {
-    manuals(categoryId: $categoryId) {
+  query Manuals($categoryId: ID, $uncategorized: Boolean) {
+    manuals(categoryId: $categoryId, uncategorized: $uncategorized) {
       id
       title
       description

@@ -9,6 +9,7 @@ interface AppLayoutProps {
   selectedConversationId: string | null
   onSelectCategory: (category: Category | null) => void
   onSelectConversation: (conversationId: string) => void
+  onSelectUncategorized: () => void
   onSearch: (keyword: string) => void
 }
 
@@ -19,6 +20,7 @@ export function AppLayout({
   selectedConversationId,
   onSelectCategory,
   onSelectConversation,
+  onSelectUncategorized,
   onSearch,
 }: AppLayoutProps) {
   return (
@@ -28,6 +30,7 @@ export function AppLayout({
         selectedConversationId={selectedConversationId}
         onSelectCategory={onSelectCategory}
         onSelectConversation={onSelectConversation}
+        onSelectUncategorized={onSelectUncategorized}
         onSearch={onSearch}
       />
       <Box as="main" flex="1" overflowY="auto">
