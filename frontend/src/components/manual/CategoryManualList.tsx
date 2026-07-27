@@ -1,4 +1,4 @@
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client/react'
+import { useMutation, useQuery } from '@apollo/client/react'
 import {
   Badge,
   Box,
@@ -14,11 +14,11 @@ import { useEffect } from 'react'
 import {
   DELETE_MANUAL_MUTATION,
   INGEST_MANUAL_MUTATION,
-  MANUAL_DOWNLOAD_URL_QUERY,
   MANUALS_QUERY,
   type IngestStatus,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
+import { useManualViewer } from './ManualViewerProvider'
 
 import { formatSize } from '../../lib/format'
 
@@ -75,11 +75,8 @@ export function CategoryManualList({
     stopPolling()
   }, [hasInFlight, startPolling, stopPolling])
 
-  // useLazyQuery: useQueryと違い「呼んだときだけ」実行される。ボタン起点の取得はこちら
-  const [fetchDownloadUrl] = useLazyQuery(MANUAL_DOWNLOAD_URL_QUERY, {
-    // 署名付きURLは期限があるので毎回サーバーから取り直す(キャッシュしない)
-    fetchPolicy: 'no-cache',
-  })
+  // アプリ内のPDFビューアを開く(共通のモーダル)
+  const { openManual } = useManualViewer()
 
   const [deleteManual] = useMutation(DELETE_MANUAL_MUTATION, {
     // 削除後に一覧を取り直して画面を最新化する
@@ -89,13 +86,6 @@ export function CategoryManualList({
   const [ingestManual] = useMutation(INGEST_MANUAL_MUTATION, {
     refetchQueries: ['Manuals'],
   })
-
-  const handleOpen = async (id: string) => {
-    const { data: urlData } = await fetchDownloadUrl({ variables: { id } })
-    if (urlData) {
-      window.open(urlData.manualDownloadUrl, '_blank')
-    }
-  }
 
   const handleDelete = async (id: string, title: string) => {
     if (!window.confirm(`「${title}」を削除しますか？元に戻せません。`)) return
@@ -154,7 +144,7 @@ export function CategoryManualList({
                     size="sm"
                     colorPalette="blue"
                     variant="outline"
-                    onClick={() => handleOpen(manual.id)}
+                    onClick={() => openManual(manual.id, manual.title)}
                   >
                     開く
                   </Button>

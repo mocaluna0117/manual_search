@@ -6,6 +6,7 @@ import { ChatHome } from './components/chat/ChatHome'
 import { AppLayout } from './components/layout/AppLayout'
 import { CategoryManualList } from './components/manual/CategoryManualList'
 import { ManualSearchResults } from './components/manual/ManualSearchResults'
+import { ManualViewerProvider } from './components/manual/ManualViewerProvider'
 import type { Category } from './graphql/categories'
 
 // メインエリアに何を表示するか。判別可能ユニオン型で「今どの画面か」を1つの値で表す
@@ -37,7 +38,8 @@ function App() {
   }
 
   return (
-    <AppLayout
+    <ManualViewerProvider>
+      <AppLayout
       selectedCategoryId={view.type === 'category' ? view.category.id : null}
       selectedConversationId={view.type === 'chat' ? view.conversationId : null}
       onSelectCategory={(category) =>
@@ -73,6 +75,7 @@ function App() {
         />
       )}
     </AppLayout>
+    </ManualViewerProvider>
   )
 }
 

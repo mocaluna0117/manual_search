@@ -1,4 +1,4 @@
-import { useLazyQuery, useQuery } from '@apollo/client/react'
+import { useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
@@ -10,11 +10,9 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { Fragment } from 'react'
-import {
-  MANUAL_DOWNLOAD_URL_QUERY,
-  SEARCH_MANUALS_QUERY,
-} from '../../graphql/manuals'
+import { SEARCH_MANUALS_QUERY } from '../../graphql/manuals'
 import { formatSize } from '../../lib/format'
+import { useManualViewer } from './ManualViewerProvider'
 
 interface ManualSearchResultsProps {
   keyword: string
@@ -45,16 +43,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
     variables: { keyword },
   })
 
-  const [fetchDownloadUrl] = useLazyQuery(MANUAL_DOWNLOAD_URL_QUERY, {
-    fetchPolicy: 'no-cache',
-  })
-
-  const handleOpen = async (id: string) => {
-    const { data: urlData } = await fetchDownloadUrl({ variables: { id } })
-    if (urlData) {
-      window.open(urlData.manualDownloadUrl, '_blank')
-    }
-  }
+  const { openManual } = useManualViewer()
 
   return (
     <Box p={8} maxW="800px" mx="auto">
@@ -102,7 +91,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
                   colorPalette="blue"
                   variant="outline"
                   flexShrink={0}
-                  onClick={() => handleOpen(manual.id)}
+                  onClick={() => openManual(manual.id, manual.title)}
                 >
                   開く
                 </Button>

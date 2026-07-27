@@ -1,4 +1,4 @@
-import { useLazyQuery, useMutation, useQuery } from '@apollo/client/react'
+import { useMutation, useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
@@ -17,7 +17,7 @@ import {
   CONVERSATION_QUERY,
   type ChatMessage,
 } from '../../graphql/chat'
-import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
+import { useManualViewer } from '../manual/ManualViewerProvider'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -82,20 +82,8 @@ export function ChatHome({
     refetchQueries: ['Conversations'],
   })
 
-  // 引用カードからPDFを開く(署名付きURLは期限があるので毎回取り直す)
-  const [fetchDownloadUrl] = useLazyQuery(MANUAL_DOWNLOAD_URL_QUERY, {
-    fetchPolicy: 'no-cache',
-  })
-
-  const handleOpenManual = async (manualId: string) => {
-    const { data, error } = await fetchDownloadUrl({ variables: { id: manualId } })
-    if (data) {
-      window.open(data.manualDownloadUrl, '_blank')
-    } else if (error) {
-      // 引用は回答時点のスナップショットなので、その後削除されていることがある
-      window.alert('このマニュアルは削除された可能性があり、開けませんでした')
-    }
-  }
+  // 引用カードからアプリ内ビューアでPDFを開く
+  const { openManual } = useManualViewer()
 
   // メッセージが増えたら一番下まで自動スクロール
   useEffect(() => {
@@ -291,7 +279,7 @@ export function ChatHome({
                       py={2}
                       cursor="pointer"
                       _hover={{ bg: 'blue.50' }}
-                      onClick={() => void handleOpenManual(citation.manualId)}
+                      onClick={() => openManual(citation.manualId, citation.title)}
                     >
                       <Text fontWeight="medium" color="blue.600">
                         📄 {citation.title} ↗
