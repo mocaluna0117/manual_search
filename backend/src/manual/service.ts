@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  type OnApplicationBootstrap,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
@@ -11,7 +12,7 @@ import { RegisterManualInput } from './input';
 import { IngestStatus, RegisterOutcome } from './model';
 
 @Injectable()
-export class ManualService {
+export class ManualService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ManualService.name);
 
   constructor(
@@ -19,6 +20,28 @@ export class ManualService {
     private readonly storage: StorageService,
     private readonly rag: RagService,
   ) {}
+
+  /**
+   * 起動時に「取り込み中(PROCESSING)」で止まっている行を失敗扱いに戻す。
+   *
+   * 取り込みはfire-and-forgetで走るため、途中で再起動・デプロイ・OOMが起きると
+   * PROCESSINGのまま永久に残り、AI検索の対象にならないまま画面が
+   * 「取り込み中…」を出し続ける(ポーリングも止まらない)。
+   * FAILEDにしておけば管理者が「再取り込み」で復旧できる。
+   */
+  async onApplicationBootstrap() {
+    const { count } = await this.prisma.manual.updateMany({
+      where: { ingestStatus: IngestStatus.PROCESSING },
+      data: {
+        ingestStatus: IngestStatus.FAILED,
+        ingestError:
+          'サーバーの再起動により取り込みが中断されました。再取り込みしてください',
+      },
+    });
+    if (count > 0) {
+      this.logger.warn(`中断された取り込みを${count}件FAILEDに戻しました`);
+    }
+  }
 
   findAll(categoryId?: string, uncategorized?: boolean) {
     return this.prisma.manual.findMany({

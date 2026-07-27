@@ -3,10 +3,16 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
+  type S3ClientConfig,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+
+/** endpointは値があるときだけ設定する(未設定ならAWS S3の既定URLが使われる) */
+function withEndpoint(config: S3ClientConfig, endpoint?: string): S3ClientConfig {
+  return endpoint ? { ...config, endpoint } : config;
+}
 
 @Injectable()
 export class StorageService {
@@ -17,29 +23,36 @@ export class StorageService {
   constructor() {
     this.bucket = process.env.S3_BUCKET ?? 'manuals';
 
-    const baseConfig = {
+    const accessKeyId = process.env.S3_ACCESS_KEY;
+    const secretAccessKey = process.env.S3_SECRET_KEY;
+
+    const baseConfig: S3ClientConfig = {
       region: process.env.S3_REGION ?? 'us-east-1',
       // MinIOはパス形式(host/bucket/key)のURLを使う。S3は仮想ホスト形式が既定
       forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY ?? '',
-        secretAccessKey: process.env.S3_SECRET_KEY ?? '',
-      },
+      // credentialsは「明示的にキーが設定されているときだけ」渡す。
+      // AWS SDK v3はcredentialsを指定すると既定の資格情報チェーンを使わなくなるため、
+      // 空文字を渡すとECSタスクロール(コンテナ資格情報)が一切効かず全操作が403になる。
+      // ローカル(MinIO)はキーあり / 本番(S3+タスクロール)はキーなし、で切り替わる
+      ...(accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {}),
     };
 
     // サーバー内部からの操作用(削除など)。MinIOのときだけendpointを指定
-    this.s3 = new S3Client({
-      ...baseConfig,
-      endpoint: process.env.S3_ENDPOINT,
-    });
+    this.s3 = new S3Client(
+      withEndpoint(baseConfig, process.env.S3_ENDPOINT),
+    );
 
     // 署名付きURL生成用。コンテナ環境では「ブラウザから見えるアドレス」が
     // 内部アドレス(minio:9000)と違うため、S3_PUBLIC_ENDPOINTで上書きできる。
     // 本番のAmazon S3では両方とも未設定でよい(同じURLになる)
-    this.presignS3 = new S3Client({
-      ...baseConfig,
-      endpoint: process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT,
-    });
+    this.presignS3 = new S3Client(
+      withEndpoint(
+        baseConfig,
+        process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT,
+      ),
+    );
   }
 
   /**

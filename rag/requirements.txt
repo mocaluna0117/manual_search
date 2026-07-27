@@ -6,3 +6,4 @@ python-dotenv
 boto3
 pypdfium2
 pillow
+pytest

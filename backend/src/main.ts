@@ -9,6 +9,9 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
   });
+  // SIGTERM/SIGINTでNestのライフサイクルフックを動かす。
+  // ECSはタスク停止時にSIGTERMを送るので、これが無いと終了処理が走らない
+  app.enableShutdownHooks();
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
