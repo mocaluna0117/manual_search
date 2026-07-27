@@ -62,6 +62,16 @@ export class Manual {
   updatedAt!: Date;
 }
 
+// AI自動分類の実行結果
+@ObjectType()
+export class AutoOrganizeResult {
+  @Field(() => Int)
+  movedCount!: number;
+
+  @Field(() => [String])
+  createdCategories!: string[];
+}
+
 // キーワード検索の1件分。マニュアル本体と、本文がヒットした場合はその抜粋を返す
 @ObjectType()
 export class ManualSearchResult {

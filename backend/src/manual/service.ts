@@ -80,10 +80,12 @@ export class ManualService {
   }
 
   async register(input: RegisterManualInput) {
-    const manual = await this.prisma.manual.create({ data: input });
+    // autoCategorizeはDBの列ではないので分離する
+    const { autoCategorize, ...data } = input;
+    const manual = await this.prisma.manual.create({ data });
     // 取り込みは裏で実行(fire-and-forget)。ユーザーを何十秒も待たせないため、
     // awaitせずに即レスポンスを返し、進行状況はingestStatusで見せる
-    void this.runIngest(manual.id);
+    void this.runIngest(manual.id, autoCategorize ?? false);
     return manual;
   }
 
@@ -101,7 +103,7 @@ export class ManualService {
   }
 
   /** 取り込みの実行本体。結果(成功/失敗)は例外でなくDBのステータスに記録する */
-  private async runIngest(id: string) {
+  private async runIngest(id: string, autoCategorize = false) {
     try {
       const manual = await this.prisma.manual.findUniqueOrThrow({
         where: { id },
@@ -127,6 +129,11 @@ export class ManualService {
           ingestedAt: new Date(),
         },
       });
+
+      // 「AIにおまかせ」指定なら、取り込み完了後にカテゴリを自動で割り当てる
+      if (autoCategorize) {
+        await this.autoCategorizeOne(id);
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : '不明なエラー';
       this.logger.error(`取り込み失敗 manual=${id}: ${message}`);
@@ -137,6 +144,82 @@ export class ManualService {
         })
         .catch(() => undefined); // マニュアル自体が削除済みの場合は無視
     }
+  }
+
+  /** 未分類(かつ取り込み済み)のマニュアルをAIでまとめて自動分類する */
+  async autoOrganize() {
+    const manuals = await this.prisma.manual.findMany({
+      where: { categoryId: null, ingestStatus: IngestStatus.COMPLETED },
+      include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
+    });
+    if (manuals.length === 0) {
+      return { movedCount: 0, createdCategories: [] };
+    }
+    const categories = await this.prisma.manualCategory.findMany();
+    // 全マニュアルを1回のAI呼び出しで見せることで、一貫性のある分類にする
+    const assignments = await this.rag.organize(
+      manuals.map((m) => ({
+        manualId: m.id,
+        title: m.title,
+        snippet: m.chunks[0]?.content.slice(0, 120) ?? '',
+      })),
+      categories.map((c) => c.name),
+    );
+    return this.applyAssignments(assignments);
+  }
+
+  /** 1件だけAIで分類する(アップロード時の「AIにおまかせ」用)。失敗しても取り込みは成功扱い */
+  private async autoCategorizeOne(manualId: string) {
+    try {
+      const manual = await this.prisma.manual.findUnique({
+        where: { id: manualId },
+        include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
+      });
+      if (!manual || manual.categoryId) return;
+      const categories = await this.prisma.manualCategory.findMany();
+      const assignments = await this.rag.organize(
+        [
+          {
+            manualId: manual.id,
+            title: manual.title,
+            snippet: manual.chunks[0]?.content.slice(0, 120) ?? '',
+          },
+        ],
+        categories.map((c) => c.name),
+      );
+      await this.applyAssignments(assignments);
+    } catch (e) {
+      // 分類の失敗は致命的ではない(未分類のまま残るだけ)
+      const message = e instanceof Error ? e.message : '不明なエラー';
+      this.logger.error(`自動分類失敗 manual=${manualId}: ${message}`);
+    }
+  }
+
+  /** AIの割り当て結果をDBに反映する(カテゴリが無ければ作る) */
+  private async applyAssignments(
+    assignments: { manualId: string; category: string }[],
+  ) {
+    const createdCategories: string[] = [];
+    let movedCount = 0;
+    for (const assignment of assignments) {
+      const name = assignment.category.trim();
+      if (!name) continue;
+      let category = await this.prisma.manualCategory.findFirst({
+        where: { name },
+      });
+      if (!category) {
+        category = await this.prisma.manualCategory.create({
+          data: { name },
+        });
+        createdCategories.push(name);
+      }
+      await this.prisma.manual.update({
+        where: { id: assignment.manualId },
+        data: { categoryId: category.id },
+      });
+      movedCount++;
+    }
+    return { movedCount, createdCategories };
   }
 
   /** マニュアルを別カテゴリへ移動する(categoryId=nullで未分類へ) */

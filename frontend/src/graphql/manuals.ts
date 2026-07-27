@@ -53,6 +53,7 @@ interface RegisterManualVars {
     fileName: string
     size: number
     categoryId?: string
+    autoCategorize?: boolean
   }
 }
 
@@ -193,6 +194,24 @@ export const MOVE_MANUAL_MUTATION: TypedDocumentNode<
     moveManual(id: $id, categoryId: $categoryId) {
       id
       categoryId
+    }
+  }
+`
+
+// --- AIによる自動分類(ADMIN専用) ---
+
+interface AutoOrganizeData {
+  autoOrganizeManuals: {
+    movedCount: number
+    createdCategories: string[]
+  }
+}
+
+export const AUTO_ORGANIZE_MUTATION: TypedDocumentNode<AutoOrganizeData> = gql`
+  mutation AutoOrganizeManuals {
+    autoOrganizeManuals {
+      movedCount
+      createdCategories
     }
   }
 `

@@ -131,7 +131,10 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
               fileKey,
               fileName: item.file.name,
               size: item.file.size,
-              categoryId: categoryId || undefined,
+              categoryId:
+                categoryId && categoryId !== '__auto' ? categoryId : undefined,
+              // 「AIにおまかせ」なら取り込み完了後に自動でカテゴリが付く
+              autoCategorize: categoryId === '__auto' || undefined,
             },
           },
         })
@@ -281,6 +284,9 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                       onChange={(e) => setCategoryId(e.target.value)}
                     >
                       <option value="">未分類</option>
+                      <option value="__auto">
+                        🤖 AIにおまかせ（内容から自動分類）
+                      </option>
                       {categoriesData?.manualCategories.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}

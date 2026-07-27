@@ -6,7 +6,9 @@
 環境変数 ANSWER_PROVIDER=stub|bedrock で切り替える。
 """
 
+import json
 import os
+import re
 from typing import Protocol
 
 # RAGの心臓部: 「抜粋だけを根拠に答えろ」と縛ることで、
@@ -77,6 +79,11 @@ class StubAnswerGenerator:
         # LLM無しの簡易版: 直近のユーザー発言をつなげるだけ
         recent = " ".join(h.content for h in history[-4:] if h.role == "user")
         return f"{recent} {question}".strip()
+
+    def classify_manuals(
+        self, manuals: list[dict], categories: list[str]
+    ) -> list[dict]:
+        return []  # LLM無しでは分類できない(空=何も割り当てない)
 
 
 class BedrockAnswerGenerator:
@@ -159,6 +166,36 @@ class BedrockAnswerGenerator:
             inferenceConfig={"maxTokens": 200, "temperature": 0},
         )
         return res["output"]["message"]["content"][0]["text"].strip()
+
+    def classify_manuals(
+        self, manuals: list[dict], categories: list[str]
+    ) -> list[dict]:
+        """マニュアル一覧をカテゴリに割り当てる(全体を1回のリクエストで見せて
+        一貫性のある分類にする)。戻り値: [{"manual_id":…, "category":…}]"""
+        lines = "\n".join(
+            f"- id={m['manual_id']} タイトル: {m['title']}\n  冒頭: {m['snippet'][:100]}"
+            for m in manuals
+        )
+        existing = "、".join(categories) if categories else "(まだ無い)"
+        prompt = (
+            "あなたは社内マニュアルの整理係です。以下のマニュアル一覧を内容ごとにカテゴリ分けしてください。\n\n"
+            "ルール:\n"
+            "- できるだけ「既存カテゴリ」を使う。適切なものが無い場合だけ新しいカテゴリ名を作る\n"
+            "- 新しいカテゴリ名は誰にでも分かる簡潔な日本語(2〜10文字程度)にする\n"
+            "- カテゴリを細かく増やしすぎない(マニュアル10件あたり2〜4カテゴリが目安)\n"
+            '- JSON配列のみを出力する: [{"manual_id": "...", "category": "カテゴリ名"}, ...]\n\n'
+            f"既存カテゴリ: {existing}\n\nマニュアル一覧:\n{lines}"
+        )
+        res = self.client.converse(
+            modelId=self.model_id,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 4000, "temperature": 0},
+        )
+        text = res["output"]["message"]["content"][0]["text"]
+        match = re.search(r"\[.*\]", text, re.DOTALL)  # コードフェンス等を除去
+        if not match:
+            raise ValueError("分類結果のJSONを取り出せませんでした")
+        return json.loads(match.group(0))
 
 
 def create_answer_generator() -> AnswerGenerator:

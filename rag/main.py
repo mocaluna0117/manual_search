@@ -253,6 +253,47 @@ def ingest(req: IngestRequest) -> IngestResponse:
     )
 
 
+class OrganizeItem(BaseModel):
+    manual_id: str
+    title: str
+    snippet: str
+
+
+class OrganizeRequest(BaseModel):
+    manuals: list[OrganizeItem]
+    categories: list[str]  # 既存カテゴリ名
+
+
+class OrganizeAssignment(BaseModel):
+    manual_id: str
+    category: str
+
+
+class OrganizeResponse(BaseModel):
+    assignments: list[OrganizeAssignment]
+
+
+@app.post("/organize", response_model=OrganizeResponse)
+def organize(req: OrganizeRequest) -> OrganizeResponse:
+    """マニュアル一覧をAIでカテゴリ分けする(DBへの書き込みは行わない=判断だけ返す)"""
+    if not req.manuals:
+        return OrganizeResponse(assignments=[])
+    try:
+        raw = answer_generator.classify_manuals(
+            [m.model_dump() for m in req.manuals], req.categories
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"分類に失敗しました: {e}")
+
+    valid_ids = {m.manual_id for m in req.manuals}
+    assignments = [
+        OrganizeAssignment(manual_id=a["manual_id"], category=str(a["category"]).strip())
+        for a in raw
+        if a.get("manual_id") in valid_ids and str(a.get("category", "")).strip()
+    ]
+    return OrganizeResponse(assignments=assignments)
+
+
 @app.post("/search", response_model=SearchResponse)
 def search(req: SearchRequest) -> SearchResponse:
     """質問(+添付画像)に近いチャンクをベクトル検索し、Claudeが回答を生成する。

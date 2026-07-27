@@ -3,7 +3,12 @@ import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Roles, UserRole } from '../auth/roles';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
-import { Manual, ManualSearchResult, ManualUploadTarget } from './model';
+import {
+  AutoOrganizeResult,
+  Manual,
+  ManualSearchResult,
+  ManualUploadTarget,
+} from './model';
 import { ManualService } from './service';
 
 @Resolver(() => Manual)
@@ -63,6 +68,13 @@ export class ManualResolver {
     categoryId?: string,
   ) {
     return this.manualService.move(id, categoryId ?? null);
+  }
+
+  // 未分類のマニュアルをAIでまとめて自動分類(カテゴリが無ければAIが命名して作る)
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => AutoOrganizeResult)
+  autoOrganizeManuals() {
+    return this.manualService.autoOrganize();
   }
 
   // 複数まとめて移動。戻り値は移動した件数

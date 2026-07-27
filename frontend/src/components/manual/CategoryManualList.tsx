@@ -13,6 +13,7 @@ import {
 } from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
 import {
+  AUTO_ORGANIZE_MUTATION,
   DELETE_MANUAL_MUTATION,
   INGEST_MANUAL_MUTATION,
   MANUALS_QUERY,
@@ -137,6 +138,36 @@ export function CategoryManualList({
     }
   }
 
+  // AIによる一括自動分類(未分類ビュー専用)
+  const [autoOrganize, { loading: organizing }] = useMutation(
+    AUTO_ORGANIZE_MUTATION,
+    { refetchQueries: ['Manuals', 'ManualCategories'] },
+  )
+
+  const handleAutoOrganize = async () => {
+    const count = data?.manuals.length ?? 0
+    if (
+      !window.confirm(
+        `未分類の${count}件をAIが内容から分類します（必要ならカテゴリも自動作成されます）。よろしいですか？`,
+      )
+    )
+      return
+    try {
+      const { data: result } = await autoOrganize()
+      if (result) {
+        const { movedCount, createdCategories } = result.autoOrganizeManuals
+        window.alert(
+          `${movedCount}件を分類しました` +
+            (createdCategories.length > 0
+              ? `\n新しく作られたカテゴリ: ${createdCategories.join('、')}`
+              : ''),
+        )
+      }
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '自動分類に失敗しました')
+    }
+  }
+
   const [deleteManual] = useMutation(DELETE_MANUAL_MUTATION, {
     // 削除後に一覧を取り直して画面を最新化する
     refetchQueries: ['Manuals'],
@@ -166,6 +197,18 @@ export function CategoryManualList({
       {/* まとめて移動の操作バー(管理者のみ) */}
       {isAdmin && (data?.manuals.length ?? 0) > 0 && (
         <HStack mb={4} gap={3}>
+          {/* 未分類ビューにだけ出る: AIによる一括自動分類 */}
+          {uncategorized && (
+            <Button
+              size="sm"
+              colorPalette="purple"
+              variant="outline"
+              loading={organizing}
+              onClick={() => void handleAutoOrganize()}
+            >
+              🤖 AIで自動分類
+            </Button>
+          )}
           <HStack as="label" gap={2} cursor="pointer" fontSize="sm">
             <input
               type="checkbox"

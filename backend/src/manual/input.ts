@@ -21,4 +21,8 @@ export class RegisterManualInput {
 
   @Field(() => ID, { nullable: true })
   categoryId?: string;
+
+  // trueなら取り込み完了後にAIがカテゴリを自動で割り当てる
+  @Field(() => Boolean, { nullable: true })
+  autoCategorize?: boolean;
 }

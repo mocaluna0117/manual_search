@@ -52,6 +52,42 @@ export class RagService {
     return body.chunk_count;
   }
 
+  /** マニュアル一覧のカテゴリ分けをAIに依頼する(判断だけ返る。DB反映は呼び出し側) */
+  async organize(
+    manuals: { manualId: string; title: string; snippet: string }[],
+    categories: string[],
+  ): Promise<{ manualId: string; category: string }[]> {
+    let res: Response;
+    try {
+      res = await fetch(`${this.baseUrl}/organize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manuals: manuals.map((m) => ({
+            manual_id: m.manualId,
+            title: m.title,
+            snippet: m.snippet,
+          })),
+          categories,
+        }),
+      });
+    } catch {
+      throw new ServiceUnavailableException('RAGサービスに接続できません');
+    }
+    if (!res.ok) {
+      throw new ServiceUnavailableException(
+        `自動分類に失敗しました (HTTP ${res.status})`,
+      );
+    }
+    const body = (await res.json()) as {
+      assignments: { manual_id: string; category: string }[];
+    };
+    return body.assignments.map((a) => ({
+      manualId: a.manual_id,
+      category: a.category,
+    }));
+  }
+
   async search(
     question: string,
     image?: { base64: string; format: string },
