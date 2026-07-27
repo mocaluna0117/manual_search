@@ -65,6 +65,17 @@ export class ManualResolver {
     return this.manualService.move(id, categoryId ?? null);
   }
 
+  // 複数まとめて移動。戻り値は移動した件数
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  moveManuals(
+    @Args('ids', { type: () => [ID] }) ids: string[],
+    @Args('categoryId', { type: () => ID, nullable: true })
+    categoryId?: string,
+  ) {
+    return this.manualService.moveMany(ids, categoryId ?? null);
+  }
+
   // DBの行とストレージの実ファイルを両方削除
   @Roles(UserRole.ADMIN)
   @Mutation(() => Manual)

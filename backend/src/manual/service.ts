@@ -159,6 +159,24 @@ export class ManualService {
     });
   }
 
+  /** 複数のマニュアルをまとめて移動する。戻り値は移動した件数 */
+  async moveMany(ids: string[], categoryId: string | null) {
+    if (ids.length === 0) return 0;
+    if (categoryId) {
+      const category = await this.prisma.manualCategory.findUnique({
+        where: { id: categoryId },
+      });
+      if (!category) {
+        throw new BadRequestException('移動先のカテゴリが見つかりません');
+      }
+    }
+    const result = await this.prisma.manual.updateMany({
+      where: { id: { in: ids } },
+      data: { categoryId },
+    });
+    return result.count;
+  }
+
   async getDownloadUrl(id: string) {
     const manual = await this.prisma.manual.findUnique({ where: { id } });
     if (!manual) {

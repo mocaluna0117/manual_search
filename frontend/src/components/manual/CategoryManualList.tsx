@@ -11,12 +11,13 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   DELETE_MANUAL_MUTATION,
   INGEST_MANUAL_MUTATION,
   MANUALS_QUERY,
   MOVE_MANUAL_MUTATION,
+  MOVE_MANUALS_MUTATION,
   type IngestStatus,
 } from '../../graphql/manuals'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
@@ -98,6 +99,44 @@ export function CategoryManualList({
     }
   }
 
+  // まとめて移動: チェック選択と一括操作バー
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkDest, setBulkDest] = useState('__unset') // '__unset'=未選択 / ''=未分類
+  const [moveManuals, { loading: bulkMoving }] = useMutation(
+    MOVE_MANUALS_MUTATION,
+    { refetchQueries: ['Manuals'] },
+  )
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allSelected =
+    (data?.manuals.length ?? 0) > 0 && selected.size === data?.manuals.length
+
+  const toggleSelectAll = () => {
+    if (allSelected) setSelected(new Set())
+    else setSelected(new Set(data?.manuals.map((m) => m.id) ?? []))
+  }
+
+  const handleBulkMove = async () => {
+    if (bulkDest === '__unset' || selected.size === 0) return
+    try {
+      await moveManuals({
+        variables: { ids: [...selected], categoryId: bulkDest || null },
+      })
+      setSelected(new Set())
+      setBulkDest('__unset')
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '移動できませんでした')
+    }
+  }
+
   const [deleteManual] = useMutation(DELETE_MANUAL_MUTATION, {
     // 削除後に一覧を取り直して画面を最新化する
     refetchQueries: ['Manuals'],
@@ -124,12 +163,73 @@ export function CategoryManualList({
         <Text color="gray.500">このカテゴリにはまだマニュアルがありません</Text>
       )}
 
+      {/* まとめて移動の操作バー(管理者のみ) */}
+      {isAdmin && (data?.manuals.length ?? 0) > 0 && (
+        <HStack mb={4} gap={3}>
+          <HStack as="label" gap={2} cursor="pointer" fontSize="sm">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              style={{ width: 16, height: 16, cursor: 'pointer' }}
+            />
+            <Text>すべて選択</Text>
+          </HStack>
+          {selected.size > 0 && (
+            <>
+              <Text fontSize="sm" color="blue.600" fontWeight="medium">
+                {selected.size}件選択中
+              </Text>
+              <NativeSelect.Root size="sm" w="170px">
+                <NativeSelect.Field
+                  value={bulkDest}
+                  onChange={(e) => setBulkDest(e.target.value)}
+                >
+                  <option value="__unset">移動先を選択…</option>
+                  <option value="">📂 未分類</option>
+                  {categoriesData?.manualCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      📁 {c.name}
+                    </option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+              <Button
+                size="sm"
+                colorPalette="blue"
+                loading={bulkMoving}
+                disabled={bulkDest === '__unset'}
+                onClick={() => void handleBulkMove()}
+              >
+                移動
+              </Button>
+            </>
+          )}
+        </HStack>
+      )}
+
       <VStack gap={3} align="stretch">
         {data?.manuals.map((manual) => (
           <Card.Root key={manual.id} size="sm">
             <Card.Body>
               <HStack justify="space-between" align="start">
-                <Box>
+                {/* まとめて移動用のチェックボックス */}
+                {isAdmin && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(manual.id)}
+                    onChange={() => toggleSelect(manual.id)}
+                    style={{
+                      width: 16,
+                      height: 16,
+                      marginTop: 6,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                <Box flex="1">
                   <Card.Title>{manual.title}</Card.Title>
                   {manual.description && (
                     <Card.Description>{manual.description}</Card.Description>

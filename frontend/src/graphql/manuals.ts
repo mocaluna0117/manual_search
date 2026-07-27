@@ -197,6 +197,26 @@ export const MOVE_MANUAL_MUTATION: TypedDocumentNode<
   }
 `
 
+// --- まとめて移動(ADMIN専用) ---
+
+interface MoveManualsData {
+  moveManuals: number
+}
+
+interface MoveManualsVars {
+  ids: string[]
+  categoryId: string | null
+}
+
+export const MOVE_MANUALS_MUTATION: TypedDocumentNode<
+  MoveManualsData,
+  MoveManualsVars
+> = gql`
+  mutation MoveManuals($ids: [ID!]!, $categoryId: ID) {
+    moveManuals(ids: $ids, categoryId: $categoryId)
+  }
+`
+
 // --- 削除 ---
 
 interface DeleteManualData {
