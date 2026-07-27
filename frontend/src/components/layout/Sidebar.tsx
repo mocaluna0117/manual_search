@@ -147,10 +147,13 @@ export function Sidebar({
       // スマホでは非表示、md(768px)以上で表示
       display={{ base: 'none', md: 'flex' }}
     >
+      {/* 目立たせすぎず、下部の「マニュアルを追加」と同じ枠線スタイルに揃える */}
       <Button
-        colorPalette="blue"
-        variant="solid"
+        variant="outline"
         size="sm"
+        color="fg"
+        borderColor="border.emphasized"
+        _hover={{ bg: 'bg.emphasized' }}
         onClick={() => onSelectCategory(null)}
       >
         ＋ 新しいチャット
