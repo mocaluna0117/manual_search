@@ -202,9 +202,13 @@ export function ChatHome({
           aria-label="画像を添付"
           size="lg"
           variant="outline"
+          borderRadius="full"
+          fontSize="xl"
+          color="gray.600"
+          alignSelf="flex-end" // 入力欄が伸びても下端に揃える
           onClick={() => fileInputRef.current?.click()}
         >
-          📷
+          ＋
         </IconButton>
         <Textarea
           size="lg"
