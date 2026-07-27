@@ -54,6 +54,17 @@ export class ManualResolver {
     return this.manualService.register(input);
   }
 
+  // 別カテゴリへ移動(categoryId省略で未分類へ)
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Manual)
+  moveManual(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('categoryId', { type: () => ID, nullable: true })
+    categoryId?: string,
+  ) {
+    return this.manualService.move(id, categoryId ?? null);
+  }
+
   // DBの行とストレージの実ファイルを両方削除
   @Roles(UserRole.ADMIN)
   @Mutation(() => Manual)

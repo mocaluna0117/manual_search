@@ -6,6 +6,7 @@ import {
   Card,
   Heading,
   HStack,
+  NativeSelect,
   Spinner,
   Text,
   VStack,
@@ -15,8 +16,10 @@ import {
   DELETE_MANUAL_MUTATION,
   INGEST_MANUAL_MUTATION,
   MANUALS_QUERY,
+  MOVE_MANUAL_MUTATION,
   type IngestStatus,
 } from '../../graphql/manuals'
+import { CATEGORIES_QUERY } from '../../graphql/categories'
 import { ME_QUERY } from '../../graphql/me'
 import { useManualViewer } from './ManualViewerProvider'
 
@@ -78,6 +81,23 @@ export function CategoryManualList({
   // アプリ内のPDFビューアを開く(共通のモーダル)
   const { openManual } = useManualViewer()
 
+  // 移動先の選択肢用(Apolloがキャッシュ済みなので追加の通信はほぼ無し)
+  const { data: categoriesData } = useQuery(CATEGORIES_QUERY)
+  const [moveManual] = useMutation(MOVE_MANUAL_MUTATION, {
+    // 移動後に一覧を取り直す(このカテゴリの一覧からカードが消える)
+    refetchQueries: ['Manuals'],
+  })
+
+  const handleMove = async (id: string, newCategoryId: string) => {
+    try {
+      await moveManual({
+        variables: { id, categoryId: newCategoryId || null },
+      })
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '移動できませんでした')
+    }
+  }
+
   const [deleteManual] = useMutation(DELETE_MANUAL_MUTATION, {
     // 削除後に一覧を取り直して画面を最新化する
     refetchQueries: ['Manuals'],
@@ -130,6 +150,23 @@ export function CategoryManualList({
                   </HStack>
                 </Box>
                 <HStack gap={2} flexShrink={0}>
+                  {/* 移動先カテゴリの選択(選んだ瞬間に移動) */}
+                  {isAdmin && (
+                    <NativeSelect.Root size="sm" w="140px">
+                      <NativeSelect.Field
+                        value={manual.categoryId ?? ''}
+                        onChange={(e) => void handleMove(manual.id, e.target.value)}
+                      >
+                        <option value="">📂 未分類</option>
+                        {categoriesData?.manualCategories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            📁 {c.name}
+                          </option>
+                        ))}
+                      </NativeSelect.Field>
+                      <NativeSelect.Indicator />
+                    </NativeSelect.Root>
+                  )}
                   {isAdmin && manual.ingestStatus === 'FAILED' && (
                     <Button
                       size="sm"

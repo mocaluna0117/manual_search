@@ -174,6 +174,29 @@ export const MANUAL_DOWNLOAD_URL_QUERY: TypedDocumentNode<
   }
 `
 
+// --- カテゴリ間の移動(ADMIN専用) ---
+
+interface MoveManualData {
+  moveManual: Pick<Manual, 'id' | 'categoryId'>
+}
+
+interface MoveManualVars {
+  id: string
+  categoryId: string | null
+}
+
+export const MOVE_MANUAL_MUTATION: TypedDocumentNode<
+  MoveManualData,
+  MoveManualVars
+> = gql`
+  mutation MoveManual($id: ID!, $categoryId: ID) {
+    moveManual(id: $id, categoryId: $categoryId) {
+      id
+      categoryId
+    }
+  }
+`
+
 // --- 削除 ---
 
 interface DeleteManualData {

@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
 import { StorageService } from '../storage/service';
@@ -132,6 +137,26 @@ export class ManualService {
         })
         .catch(() => undefined); // マニュアル自体が削除済みの場合は無視
     }
+  }
+
+  /** マニュアルを別カテゴリへ移動する(categoryId=nullで未分類へ) */
+  async move(id: string, categoryId: string | null) {
+    const manual = await this.prisma.manual.findUnique({ where: { id } });
+    if (!manual) {
+      throw new NotFoundException('マニュアルが見つかりません');
+    }
+    if (categoryId) {
+      const category = await this.prisma.manualCategory.findUnique({
+        where: { id: categoryId },
+      });
+      if (!category) {
+        throw new BadRequestException('移動先のカテゴリが見つかりません');
+      }
+    }
+    return this.prisma.manual.update({
+      where: { id },
+      data: { categoryId },
+    });
   }
 
   async getDownloadUrl(id: string) {
