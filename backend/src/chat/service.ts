@@ -64,12 +64,20 @@ export class ChatService {
           take: 8, // 直近4往復まで(古いやりとりまで送るとノイズになる)
         })
       : [];
-    const history = recentMessages.reverse().map((m) => ({
-      role: (m.role === MessageRole.USER ? 'user' : 'assistant') as
-        | 'user'
-        | 'assistant',
-      content: m.content.slice(0, 500),
-    }));
+    const history = recentMessages.reverse().map((m) => {
+      // 過去に提示した選択肢も文脈に含める(「2です」の意味をClaudeが分かるように)
+      const options = (m.options as string[] | null) ?? [];
+      const optionsText =
+        options.length > 0
+          ? `\n選択肢: ${options.map((o, i) => `${i + 1}. ${o}`).join(' / ')}`
+          : '';
+      return {
+        role: (m.role === MessageRole.USER ? 'user' : 'assistant') as
+          | 'user'
+          | 'assistant',
+        content: m.content.slice(0, 500) + optionsText,
+      };
+    });
 
     // 3) 質問を保存(画像そのものは保存しない。添付があったことだけ履歴に残す)
     await this.prisma.message.create({
@@ -84,10 +92,12 @@ export class ChatService {
     //    (取り込みステータスと同じ発想: 非同期の結果はデータとして記録する)
     let answer: string;
     let citations: RagCitation[] = [];
+    let options: string[] = [];
     try {
       const result = await this.rag.search(question, image, history);
       answer = result.answer;
       citations = result.citations;
+      options = result.options;
     } catch (e) {
       answer = `エラーが発生しました: ${e instanceof Error ? e.message : '不明なエラー'}`;
     }
@@ -99,6 +109,7 @@ export class ChatService {
         role: MessageRole.ASSISTANT,
         content: answer,
         citations: citations as unknown as Prisma.InputJsonValue,
+        options: options as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -134,6 +145,7 @@ export class ChatService {
       role: message.role,
       content: message.content,
       citations: (message.citations as RagCitation[] | null) ?? [],
+      options: (message.options as string[] | null) ?? [],
       createdAt: message.createdAt,
     };
   }

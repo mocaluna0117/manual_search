@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import urllib.request
 from io import BytesIO
 
@@ -54,6 +55,17 @@ class Citation(BaseModel):
 class SearchResponse(BaseModel):
     answer: str
     citations: list[Citation]
+    options: list[str] = []  # 絞り込み質問の選択肢(ボタン表示用)
+
+
+OPTION_PATTERN = re.compile(r"^\[選択肢\]\s*(.+)$", re.MULTILINE)
+
+
+def extract_options(answer: str) -> tuple[str, list[str]]:
+    """回答文から[選択肢]行を抜き出し、(本文, 選択肢リスト)に分ける"""
+    options = [m.strip() for m in OPTION_PATTERN.findall(answer)]
+    cleaned = OPTION_PATTERN.sub("", answer).strip()
+    return cleaned, options
 
 
 class IngestRequest(BaseModel):
@@ -219,14 +231,17 @@ def search(req: SearchRequest) -> SearchResponse:
         )
         for _manual_id, title, content, page, _distance in rows
     ]
+    options: list[str] = []
     try:
-        answer = answer_generator.generate(
+        raw_answer = answer_generator.generate(
             req.question, contexts, image=image, history=req.history
         )
+        # 絞り込み質問の場合、[選択肢]行を本文から分離してボタン用データにする
+        answer, options = extract_options(raw_answer)
     except Exception as e:
         answer = (
             f"関連しそうなマニュアルが{len(citations)}件見つかりましたが、"
             f"回答文の生成に失敗しました({e})。以下の抜粋をご確認ください。"
         )
 
-    return SearchResponse(answer=answer, citations=citations)
+    return SearchResponse(answer=answer, citations=citations, options=options)

@@ -104,8 +104,8 @@ export function ChatHome({
     setAttachedImage(file)
   }
 
-  const handleSubmit = async () => {
-    const question = input.trim()
+  /** 質問を送る。入力欄からの送信と選択肢ボタンのクリックの両方から使う */
+  const send = async (question: string) => {
     if (!question || loading) return
     const image = attachedImage
     setInput('')
@@ -119,6 +119,7 @@ export function ChatHome({
         role: 'USER',
         content: question,
         citations: [],
+        options: [],
         imageUrl: image ? URL.createObjectURL(image) : undefined,
       },
     ])
@@ -146,10 +147,13 @@ export function ChatHome({
           role: 'ASSISTANT',
           content: `エラーが発生しました: ${e instanceof Error ? e.message : '不明なエラー'}`,
           citations: [],
+          options: [],
         },
       ])
     }
   }
+
+  const handleSubmit = () => void send(input.trim())
 
   const searchInput = (
     <VStack w="100%" maxW="640px" gap={2} align="stretch">
@@ -270,6 +274,29 @@ export function ChatHome({
                 <MarkdownText>{message.content}</MarkdownText>
               ) : (
                 <Text whiteSpace="pre-wrap">{message.content}</Text>
+              )}
+
+              {/* 絞り込み質問の選択肢。クリックがそのまま回答になる */}
+              {message.options.length > 0 && (
+                <VStack mt={3} gap={2} align="stretch">
+                  {message.options.map((option, i) => (
+                    <Button
+                      key={i}
+                      size="sm"
+                      variant="outline"
+                      colorPalette="blue"
+                      bg="white"
+                      justifyContent="flex-start"
+                      whiteSpace="normal"
+                      h="auto"
+                      py={2}
+                      disabled={loading}
+                      onClick={() => void send(option)}
+                    >
+                      {option}
+                    </Button>
+                  ))}
+                </VStack>
               )}
 
               {/* 根拠マニュアル(引用)。クリックでPDFが開く */}

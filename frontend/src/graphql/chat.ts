@@ -8,6 +8,7 @@ export interface ChatMessage {
   role: MessageRole
   content: string
   citations: RagCitation[]
+  options: string[] // 絞り込み質問の選択肢(ボタン表示)
 }
 
 export interface Conversation {
@@ -58,6 +59,7 @@ export const CONVERSATION_QUERY: TypedDocumentNode<
           snippet
           pageNumber
         }
+        options
       }
     }
   }
@@ -103,6 +105,7 @@ export const ASK_MUTATION: TypedDocumentNode<AskData, AskVars> = gql`
           snippet
           pageNumber
         }
+        options
       }
     }
   }

@@ -10,6 +10,7 @@ interface RagSearchResponse {
     snippet: string;
     page: number | null;
   }[];
+  options: string[];
 }
 
 // Python(FastAPI)のRAGサービスを呼ぶHTTPクライアント。
@@ -86,6 +87,7 @@ export class RagService {
         snippet: c.snippet,
         pageNumber: c.page ?? null,
       })),
+      options: body.options ?? [],
     };
   }
 }

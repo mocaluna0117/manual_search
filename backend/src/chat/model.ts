@@ -24,6 +24,10 @@ export class ChatMessage {
   @Field(() => [RagCitation])
   citations!: RagCitation[];
 
+  // 絞り込み質問の選択肢(クリックで回答できるボタンになる)
+  @Field(() => [String])
+  options!: string[];
+
   @Field()
   createdAt!: Date;
 }

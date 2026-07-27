@@ -24,4 +24,8 @@ export class RagAnswer {
 
   @Field(() => [RagCitation])
   citations!: RagCitation[];
+
+  // 絞り込み質問の選択肢(フロントでボタン表示する)
+  @Field(() => [String])
+  options!: string[];
 }
