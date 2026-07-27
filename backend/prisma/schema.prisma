@@ -28,7 +28,6 @@ enum IngestStatus {
 model Manual {
   id            String            @id @default(uuid())
   title         String
-  description   String?
   fileKey       String            @map("file_key") // S3上のファイルの場所(キー)
   fileName      String            @map("file_name") // 元のPDFファイル名
   fileLastModified DateTime?      @map("file_last_modified") // 元ファイルの最終更新日時(同名アップロード時の新旧判定に使用)

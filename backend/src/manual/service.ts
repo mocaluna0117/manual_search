@@ -43,7 +43,6 @@ export class ManualService {
       where: {
         OR: [
           { title: contains },
-          { description: contains },
           { fileName: contains },
           { chunks: { some: { content: contains } } },
         ],
@@ -130,8 +129,7 @@ export class ManualService {
       where: { id: existing.id },
       data: {
         title: data.title,
-        // 説明・カテゴリは未指定なら既存の設定を維持する
-        description: data.description ?? existing.description,
+        // カテゴリは未指定なら既存の設定を維持する
         categoryId: data.categoryId ?? existing.categoryId,
         fileKey: data.fileKey,
         fileName: data.fileName,

@@ -274,9 +274,6 @@ export function CategoryManualList({
                 )}
                 <Box flex="1">
                   <Card.Title>{manual.title}</Card.Title>
-                  {manual.description && (
-                    <Card.Description>{manual.description}</Card.Description>
-                  )}
                   <Text fontSize="xs" color="gray.500" mt={1}>
                     {manual.fileName}（{formatSize(manual.size)}）
                   </Text>

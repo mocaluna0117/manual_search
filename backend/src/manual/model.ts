@@ -28,9 +28,6 @@ export class Manual {
   @Field()
   title!: string;
 
-  @Field(() => String, { nullable: true })
-  description!: string | null;
-
   @Field()
   fileKey!: string;
 

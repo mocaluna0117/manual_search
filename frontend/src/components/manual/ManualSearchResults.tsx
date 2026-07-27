@@ -68,14 +68,6 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
                   <Card.Title>
                     <HighlightedText text={manual.title} keyword={keyword} />
                   </Card.Title>
-                  {manual.description && (
-                    <Card.Description>
-                      <HighlightedText
-                        text={manual.description}
-                        keyword={keyword}
-                      />
-                    </Card.Description>
-                  )}
                   {/* 本文ヒット時の抜粋 */}
                   {snippet && (
                     <Text fontSize="sm" color="gray.600" mt={2}>

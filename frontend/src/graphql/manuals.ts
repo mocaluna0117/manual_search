@@ -32,7 +32,6 @@ export type IngestStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
 export interface Manual {
   id: string
   title: string
-  description: string | null
   fileName: string
   size: number
   categoryId: string | null
@@ -54,7 +53,6 @@ interface RegisterManualData {
 interface RegisterManualVars {
   input: {
     title: string
-    description?: string
     fileKey: string
     fileName: string
     size: number
@@ -74,7 +72,6 @@ export const REGISTER_MANUAL_MUTATION: TypedDocumentNode<
       manual {
         id
         title
-        description
         fileName
         size
         categoryId
@@ -99,7 +96,6 @@ export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
     manuals(categoryId: $categoryId, uncategorized: $uncategorized) {
       id
       title
-      description
       fileName
       size
       categoryId
@@ -153,7 +149,6 @@ export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
       manual {
         id
         title
-        description
         fileName
         size
         categoryId

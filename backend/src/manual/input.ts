@@ -7,9 +7,6 @@ export class RegisterManualInput {
   @Field()
   title!: string;
 
-  @Field(() => String, { nullable: true })
-  description?: string;
-
   @Field()
   fileKey!: string;
 

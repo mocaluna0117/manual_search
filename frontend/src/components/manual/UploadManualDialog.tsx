@@ -11,7 +11,6 @@ import {
   Portal,
   Spinner,
   Text,
-  Textarea,
   VStack,
 } from '@chakra-ui/react'
 import { useRef, useState } from 'react'
@@ -71,7 +70,6 @@ function outcomeNote(outcome?: RegisterOutcome): string | null {
 
 export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const [items, setItems] = useState<UploadItem[]>([])
-  const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -113,7 +111,6 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const resetAndClose = () => {
     if (uploading) return // アップロード中は閉じられない
     setItems([])
-    setDescription('')
     setCategoryId('')
     onClose()
   }
@@ -152,11 +149,6 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
           variables: {
             input: {
               title: item.title.trim() || item.file.name,
-              // 説明は1件だけのときのみ(まとめてアップロード時は省略)
-              description:
-                items.length === 1 && description.trim()
-                  ? description.trim()
-                  : undefined,
               fileKey,
               fileName: item.file.name,
               size: item.file.size,
@@ -324,20 +316,6 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                       </Box>
                     ))}
                   </VStack>
-                )}
-
-                {/* 説明(1件のときだけ) */}
-                {items.length === 1 && (
-                  <div>
-                    <Text fontSize="sm" mb={1}>
-                      説明（任意）
-                    </Text>
-                    <Textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="どんな内容のマニュアルか"
-                    />
-                  </div>
                 )}
 
                 {/* カテゴリ(全ファイル共通) */}
