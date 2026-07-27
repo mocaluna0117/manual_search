@@ -26,6 +26,8 @@ interface ChatHomeProps {
   conversationId: string | null
   /** 新規チャットの最初の回答が返り、会話がDBにできたときに呼ばれる */
   onConversationCreated: (id: string) => void
+  /** 会話が見つからなかった(削除済み・他ユーザーのもの)ときに呼ばれる */
+  onConversationNotFound?: () => void
 }
 
 // 表示用: サーバーのメッセージ + 送信時だけ持つ画像プレビューURL
@@ -91,8 +93,25 @@ function fileToBase64(file: File): Promise<string> {
 export function ChatHome({
   conversationId,
   onConversationCreated,
+  onConversationNotFound,
 }: ChatHomeProps) {
-  const [input, setInput] = useState('')
+  // 入力途中の内容を会話ごとの「下書き」として保存し、リロード後も復元する
+  const draftKey = `manualSearch.draft.${conversationId ?? 'new'}`
+  const [input, setInput] = useState(() => {
+    try {
+      return localStorage.getItem(draftKey) ?? ''
+    } catch {
+      return ''
+    }
+  })
+  useEffect(() => {
+    try {
+      if (input) localStorage.setItem(draftKey, input)
+      else localStorage.removeItem(draftKey) // 送信・クリアしたら下書きも消す
+    } catch {
+      // ストレージが使えない環境では黙って諦める(機能自体は動く)
+    }
+  }, [input, draftKey])
   // サーバーに保存済みのメッセージ + 送信中の楽観的な表示をまとめて持つ
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [attachedImage, setAttachedImage] = useState<File | null>(null)
@@ -106,20 +125,28 @@ export function ChatHome({
   const justLoadedHistoryRef = useRef(false)
 
   // 既存の会話を開いた場合は履歴をDBから読み込む
-  const { data: conversationData, loading: loadingHistory } = useQuery(
-    CONVERSATION_QUERY,
-    {
-      variables: { id: conversationId ?? '' },
-      skip: !conversationId,
-      fetchPolicy: 'cache-and-network',
-    },
-  )
+  const {
+    data: conversationData,
+    loading: loadingHistory,
+    error: conversationError,
+  } = useQuery(CONVERSATION_QUERY, {
+    variables: { id: conversationId ?? '' },
+    skip: !conversationId,
+    fetchPolicy: 'cache-and-network',
+  })
   useEffect(() => {
     if (conversationData) {
       justLoadedHistoryRef.current = true
       setMessages(conversationData.conversation.messages)
     }
   }, [conversationData])
+
+  // 会話が見つからない(削除済み等)ならホームに戻してもらう
+  useEffect(() => {
+    if (conversationError && conversationId) {
+      onConversationNotFound?.()
+    }
+  }, [conversationError, conversationId, onConversationNotFound])
 
   const [ask, { loading }] = useMutation(ASK_MUTATION, {
     // 新規会話ができたらサイドバーの履歴一覧を更新する

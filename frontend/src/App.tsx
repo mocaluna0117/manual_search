@@ -1,5 +1,5 @@
 import { Spinner, VStack } from '@chakra-ui/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './components/auth/LoginScreen'
 import { ChatHome } from './components/chat/ChatHome'
@@ -17,9 +17,30 @@ type View =
   | { type: 'uncategorized' } // カテゴリ未設定のマニュアル一覧
   | { type: 'search'; keyword: string }
 
+const VIEW_STORAGE_KEY = 'manualSearch.view'
+
+/** 前回開いていた画面をlocalStorageから復元する(壊れていたらホーム) */
+function loadInitialView(): View {
+  try {
+    const raw = localStorage.getItem(VIEW_STORAGE_KEY)
+    if (raw) {
+      const saved = JSON.parse(raw) as View
+      if (saved && typeof saved === 'object' && 'type' in saved) return saved
+    }
+  } catch {
+    // 壊れたデータは無視してホームへ
+  }
+  return { type: 'home' }
+}
+
 function App() {
   const auth = useAuth()
-  const [view, setView] = useState<View>({ type: 'home' })
+  const [view, setView] = useState<View>(loadInitialView)
+
+  // 画面を切り替えるたびに保存(リロードしても同じ画面に戻れる)
+  useEffect(() => {
+    localStorage.setItem(VIEW_STORAGE_KEY, JSON.stringify(view))
+  }, [view])
 
   const isChat = view.type === 'home' || view.type === 'chat'
 
@@ -72,6 +93,8 @@ function App() {
           onConversationCreated={(conversationId) =>
             setView({ type: 'chat', conversationId })
           }
+          // 復元した会話が削除済み/他ユーザーのものだった場合はホームへ
+          onConversationNotFound={() => setView({ type: 'home' })}
         />
       )}
     </AppLayout>
