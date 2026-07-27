@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@apollo/client/react'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
@@ -17,6 +17,7 @@ import {
   CONVERSATION_QUERY,
   type ChatMessage,
 } from '../../graphql/chat'
+import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -80,6 +81,21 @@ export function ChatHome({
     // 新規会話ができたらサイドバーの履歴一覧を更新する
     refetchQueries: ['Conversations'],
   })
+
+  // 引用カードからPDFを開く(署名付きURLは期限があるので毎回取り直す)
+  const [fetchDownloadUrl] = useLazyQuery(MANUAL_DOWNLOAD_URL_QUERY, {
+    fetchPolicy: 'no-cache',
+  })
+
+  const handleOpenManual = async (manualId: string) => {
+    const { data, error } = await fetchDownloadUrl({ variables: { id: manualId } })
+    if (data) {
+      window.open(data.manualDownloadUrl, '_blank')
+    } else if (error) {
+      // 引用は回答時点のスナップショットなので、その後削除されていることがある
+      window.alert('このマニュアルは削除された可能性があり、開けませんでした')
+    }
+  }
 
   // メッセージが増えたら一番下まで自動スクロール
   useEffect(() => {
@@ -262,7 +278,7 @@ export function ChatHome({
               )}
               <Text whiteSpace="pre-wrap">{message.content}</Text>
 
-              {/* 根拠マニュアル(引用)があれば下に並べる */}
+              {/* 根拠マニュアル(引用)。クリックでPDFが開く */}
               {message.citations.length > 0 && (
                 <VStack mt={2} gap={1} align="stretch">
                   {message.citations.map((citation, i) => (
@@ -273,8 +289,13 @@ export function ChatHome({
                       borderRadius="md"
                       px={3}
                       py={2}
+                      cursor="pointer"
+                      _hover={{ bg: 'blue.50' }}
+                      onClick={() => void handleOpenManual(citation.manualId)}
                     >
-                      📄 {citation.title}
+                      <Text fontWeight="medium" color="blue.600">
+                        📄 {citation.title} ↗
+                      </Text>
                       <Text color="gray.500" lineClamp={2}>
                         {citation.snippet}
                       </Text>
