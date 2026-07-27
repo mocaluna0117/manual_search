@@ -214,12 +214,12 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                 <Box
                   borderWidth="2px"
                   borderStyle="dashed"
-                  borderColor="gray.300"
+                  borderColor="border.emphasized"
                   borderRadius="md"
                   p={6}
                   textAlign="center"
                   cursor="pointer"
-                  _hover={{ borderColor: 'blue.400', bg: 'blue.50' }}
+                  _hover={{ borderColor: 'blue.solid', bg: 'blue.subtle' }}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
@@ -227,10 +227,10 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                     addFiles(e.dataTransfer.files)
                   }}
                 >
-                  <Text color="gray.600">
+                  <Text color="fg.muted">
                     クリックして選択、またはここにPDFをドラッグ&ドロップ
                   </Text>
-                  <Text fontSize="xs" color="gray.400" mt={1}>
+                  <Text fontSize="xs" color="fg.subtle" mt={1}>
                     複数ファイルをまとめて選択できます
                   </Text>
                   <input
@@ -266,7 +266,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                               )
                             }
                           />
-                          <Text fontSize="xs" color="gray.500" flexShrink={0}>
+                          <Text fontSize="xs" color="fg.muted" flexShrink={0}>
                             {formatSize(item.file.size)}
                           </Text>
                           {!uploading && item.status !== 'done' && (
@@ -288,7 +288,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                         {/* アップロード前: 同名マニュアルがある場合の予告 */}
                         {item.status === 'pending' &&
                           existingFileNames.has(item.file.name) && (
-                            <Text fontSize="xs" color="orange.600" mt={1}>
+                            <Text fontSize="xs" color="orange.fg" mt={1}>
                               ⚠️ 同名のマニュアルが既にあります。ファイルの更新日が新しい方だけが残ります
                             </Text>
                           )}
@@ -299,8 +299,8 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                             fontSize="xs"
                             color={
                               item.outcome === 'UPDATED'
-                                ? 'blue.600'
-                                : 'orange.600'
+                                ? 'blue.fg'
+                                : 'orange.fg'
                             }
                             mt={1}
                           >
@@ -309,7 +309,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                         )}
 
                         {item.error && (
-                          <Text fontSize="xs" color="red.500" mt={1}>
+                          <Text fontSize="xs" color="fg.error" mt={1}>
                             {item.error}
                           </Text>
                         )}
@@ -344,7 +344,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
 
                 {/* 進捗サマリ */}
                 {items.length > 1 && (uploading || doneCount > 0) && (
-                  <Text fontSize="sm" color="gray.600">
+                  <Text fontSize="sm" color="fg.muted">
                     {doneCount} / {items.length} 件完了
                   </Text>
                 )}

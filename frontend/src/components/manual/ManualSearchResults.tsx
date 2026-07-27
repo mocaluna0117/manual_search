@@ -27,7 +27,7 @@ function HighlightedText({ text, keyword }: { text: string; keyword: string }) {
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === keyword.toLowerCase() ? (
-          <Text as="mark" key={i} bg="yellow.200">
+          <Text as="mark" key={i} bg="yellow.subtle" color="fg">
             {part}
           </Text>
         ) : (
@@ -54,7 +54,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
       {loading && <Spinner mt={4} />}
 
       {data && (
-        <Text color="gray.500" mb={6}>
+        <Text color="fg.muted" mb={6}>
           {data.searchManuals.length}件見つかりました
         </Text>
       )}
@@ -70,11 +70,11 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
                   </Card.Title>
                   {/* 本文ヒット時の抜粋 */}
                   {snippet && (
-                    <Text fontSize="sm" color="gray.600" mt={2}>
+                    <Text fontSize="sm" color="fg.muted" mt={2}>
                       <HighlightedText text={snippet} keyword={keyword} />
                     </Text>
                   )}
-                  <Text fontSize="xs" color="gray.500" mt={1}>
+                  <Text fontSize="xs" color="fg.muted" mt={1}>
                     {manual.fileName}（{formatSize(manual.size)}）
                   </Text>
                 </Box>

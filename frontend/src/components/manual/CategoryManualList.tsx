@@ -191,7 +191,7 @@ export function CategoryManualList({
       {loading && <Spinner />}
 
       {data && data.manuals.length === 0 && (
-        <Text color="gray.500">このカテゴリにはまだマニュアルがありません</Text>
+        <Text color="fg.muted">このカテゴリにはまだマニュアルがありません</Text>
       )}
 
       {/* まとめて移動の操作バー(管理者のみ) */}
@@ -220,7 +220,7 @@ export function CategoryManualList({
           </HStack>
           {selected.size > 0 && (
             <>
-              <Text fontSize="sm" color="blue.600" fontWeight="medium">
+              <Text fontSize="sm" color="blue.fg" fontWeight="medium">
                 {selected.size}件選択中
               </Text>
               <NativeSelect.Root size="sm" w="170px">
@@ -274,7 +274,7 @@ export function CategoryManualList({
                 )}
                 <Box flex="1">
                   <Card.Title>{manual.title}</Card.Title>
-                  <Text fontSize="xs" color="gray.500" mt={1}>
+                  <Text fontSize="xs" color="fg.muted" mt={1}>
                     {manual.fileName}（{formatSize(manual.size)}）
                   </Text>
                   <HStack mt={2} gap={2}>
@@ -283,7 +283,7 @@ export function CategoryManualList({
                       chunkCount={manual.chunkCount}
                     />
                     {manual.ingestStatus === 'FAILED' && manual.ingestError && (
-                      <Text fontSize="xs" color="red.500">
+                      <Text fontSize="xs" color="fg.error">
                         {manual.ingestError}
                       </Text>
                     )}

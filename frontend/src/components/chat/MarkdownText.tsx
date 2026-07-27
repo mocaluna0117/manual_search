@@ -34,25 +34,25 @@ export function MarkdownText({ children }: { children: string }) {
         },
         '& th, & td': {
           border: '1px solid',
-          borderColor: 'gray.300',
+          borderColor: 'border.emphasized',
           padding: '4px 10px',
         },
-        '& th': { background: 'rgba(0,0,0,0.04)' },
+        '& th': { background: 'bg.emphasized' },
         '& code': {
-          background: 'rgba(0,0,0,0.06)',
+          background: 'bg.emphasized',
           padding: '0 4px',
           borderRadius: '4px',
           fontSize: '0.9em',
         },
         '& blockquote': {
           borderLeft: '3px solid',
-          borderColor: 'gray.300',
+          borderColor: 'border.emphasized',
           paddingLeft: '0.8em',
-          color: 'gray.600',
+          color: 'fg.muted',
           marginBottom: '0.6em',
         },
-        '& hr': { margin: '0.8em 0', borderColor: 'gray.200' },
-        '& a': { color: 'blue.600', textDecoration: 'underline' },
+        '& hr': { margin: '0.8em 0', borderColor: 'border' },
+        '& a': { color: 'blue.fg', textDecoration: 'underline' },
       }}
     >
       <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>

@@ -8,7 +8,7 @@ export function LoginScreen() {
   return (
     <VStack h="100vh" justify="center" gap={6} px={4}>
       <Heading size="2xl">社内マニュアル検索</Heading>
-      <Text color="gray.500">
+      <Text color="fg.muted">
         このサイトは社内向けです。アカウントでサインインしてください
       </Text>
       <Button
@@ -19,7 +19,7 @@ export function LoginScreen() {
         サインイン
       </Button>
       {auth.error && (
-        <Text fontSize="sm" color="red.500">
+        <Text fontSize="sm" color="fg.error">
           サインインでエラーが発生しました: {auth.error.message}
         </Text>
       )}

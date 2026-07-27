@@ -1,10 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>社内マニュアル検索</title>
+    <script>
+      // 端末(OS/ブラウザ)のダークモード設定に追随して<html>のクラスを切り替える。
+      // Reactの描画より先に実行するので、起動時に明るい画面が一瞬見える現象が起きない。
+      // Chakraは .dark クラスを見て配色を切り替える(_dark条件)
+      ;(function () {
+        var mq = window.matchMedia('(prefers-color-scheme: dark)')
+        function apply(isDark) {
+          var root = document.documentElement
+          root.classList.toggle('dark', isDark)
+          root.classList.toggle('light', !isDark)
+        }
+        apply(mq.matches)
+        // アプリを開いたまま端末側の設定が変わった場合も即座に反映する
+        mq.addEventListener('change', function (e) {
+          apply(e.matches)
+        })
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

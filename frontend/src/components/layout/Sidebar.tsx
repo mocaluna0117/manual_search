@@ -140,10 +140,10 @@ export function Sidebar({
       p={3}
       gap={4}
       align="stretch"
-      bg="gray.50"
-      color="gray.800"
+      bg="bg.subtle"
+      color="fg"
       borderRightWidth="1px"
-      borderColor="gray.200"
+      borderColor="border"
       // スマホでは非表示、md(768px)以上で表示
       display={{ base: 'none', md: 'flex' }}
     >
@@ -160,9 +160,9 @@ export function Sidebar({
       <Input
         size="sm"
         placeholder="🔍 マニュアル名・内容で検索"
-        bg="white"
-        borderColor="gray.300"
-        _placeholder={{ color: 'gray.500' }}
+        bg="bg.panel"
+        borderColor="border.emphasized"
+        _placeholder={{ color: 'fg.subtle' }}
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
         onKeyDown={(e) => {
@@ -172,12 +172,12 @@ export function Sidebar({
 
       {/* チャット履歴(DBから取得) */}
       <Box flex="1" overflowY="auto">
-        <Text fontSize="xs" color="gray.500" mb={2}>
+        <Text fontSize="xs" color="fg.muted" mb={2}>
           チャット履歴
         </Text>
         {loadingChats && <Spinner size="sm" />}
         {chatData && chatData.conversations.length === 0 && (
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="fg.muted">
             履歴はまだありません
           </Text>
         )}
@@ -189,13 +189,13 @@ export function Sidebar({
                 size="sm"
                 flex="1"
                 justifyContent="flex-start"
-                color="gray.800"
+                color="fg"
                 bg={
                   conversation.id === selectedConversationId
-                    ? 'gray.200'
+                    ? 'bg.emphasized'
                     : undefined
                 }
-                _hover={{ bg: 'gray.200' }}
+                _hover={{ bg: 'bg.emphasized' }}
                 overflow="hidden"
                 textOverflow="ellipsis"
                 whiteSpace="nowrap"
@@ -209,8 +209,8 @@ export function Sidebar({
                 aria-label="会話を削除"
                 size="xs"
                 variant="ghost"
-                color="gray.500"
-                _hover={{ color: 'red.500', bg: 'gray.200' }}
+                color="fg.muted"
+                _hover={{ color: 'fg.error', bg: 'bg.emphasized' }}
                 onClick={() =>
                   handleDeleteConversation(conversation.id, conversation.title)
                 }
@@ -221,11 +221,11 @@ export function Sidebar({
           ))}
         </VStack>
 
-        <Separator my={4} borderColor="gray.200" />
+        <Separator my={4} borderColor="border" />
 
         {/* カテゴリ別マニュアル(DBから取得) */}
         <HStack justify="space-between" mb={2}>
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="fg.muted">
             マニュアル（カテゴリ別）
           </Text>
           {isAdmin && (
@@ -233,8 +233,8 @@ export function Sidebar({
               aria-label="カテゴリを追加"
               size="2xs"
               variant="ghost"
-              color="gray.600"
-              _hover={{ color: 'gray.800', bg: 'gray.200' }}
+              color="fg.muted"
+              _hover={{ color: 'fg', bg: 'bg.emphasized' }}
               onClick={() => setAddingCategory((v) => !v)}
             >
               ＋
@@ -249,9 +249,9 @@ export function Sidebar({
             mb={2}
             autoFocus
             placeholder="カテゴリ名を入力してEnter"
-            bg="white"
-            borderColor="gray.300"
-            _placeholder={{ color: 'gray.500' }}
+            bg="bg.panel"
+            borderColor="border.emphasized"
+            _placeholder={{ color: 'fg.subtle' }}
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
             onKeyDown={(e) => {
@@ -264,7 +264,7 @@ export function Sidebar({
 
         {loading && <Spinner size="sm" />}
         {data && data.manualCategories.length === 0 && (
-          <Text fontSize="sm" color="gray.500">
+          <Text fontSize="sm" color="fg.muted">
             カテゴリはまだありません
           </Text>
         )}
@@ -276,8 +276,8 @@ export function Sidebar({
                 key={category.id}
                 size="sm"
                 autoFocus
-                bg="white"
-                borderColor="gray.300"
+                bg="bg.panel"
+                borderColor="border.emphasized"
                 value={editingName}
                 onChange={(e) => setEditingName(e.target.value)}
                 onBlur={() => setEditingCategory(null)}
@@ -294,9 +294,9 @@ export function Sidebar({
                   size="sm"
                   flex="1"
                   justifyContent="flex-start"
-                  color="gray.800"
-                  bg={category.id === selectedCategoryId ? 'gray.200' : undefined}
-                  _hover={{ bg: 'gray.200' }}
+                  color="fg"
+                  bg={category.id === selectedCategoryId ? 'bg.emphasized' : undefined}
+                  _hover={{ bg: 'bg.emphasized' }}
                   onClick={() => onSelectCategory(category)}
                 >
                   📁 {category.name}
@@ -307,8 +307,8 @@ export function Sidebar({
                       aria-label="カテゴリ名を変更"
                       size="xs"
                       variant="ghost"
-                      color="gray.500"
-                      _hover={{ color: 'gray.800', bg: 'gray.200' }}
+                      color="fg.muted"
+                      _hover={{ color: 'fg', bg: 'bg.emphasized' }}
                       onClick={() => {
                         setEditingCategory(category)
                         setEditingName(category.name)
@@ -320,8 +320,8 @@ export function Sidebar({
                       aria-label="カテゴリを削除"
                       size="xs"
                       variant="ghost"
-                      color="gray.500"
-                      _hover={{ color: 'red.500', bg: 'gray.200' }}
+                      color="fg.muted"
+                      _hover={{ color: 'fg.error', bg: 'bg.emphasized' }}
                       onClick={() => void handleDeleteCategory(category)}
                     >
                       🗑
@@ -336,8 +336,8 @@ export function Sidebar({
             variant="ghost"
             size="sm"
             justifyContent="flex-start"
-            color="gray.600"
-            _hover={{ bg: 'gray.200' }}
+            color="fg.muted"
+            _hover={{ bg: 'bg.emphasized' }}
             onClick={onSelectUncategorized}
           >
             📂 未分類
@@ -351,9 +351,9 @@ export function Sidebar({
           <Button
             variant="outline"
             size="sm"
-            color="gray.800"
-            borderColor="gray.300"
-            _hover={{ bg: 'gray.200' }}
+            color="fg"
+            borderColor="border.emphasized"
+            _hover={{ bg: 'bg.emphasized' }}
             onClick={() => setUploadOpen(true)}
           >
             📄 マニュアルを追加
@@ -367,7 +367,7 @@ export function Sidebar({
 
       {/* 下部: ログインユーザーと疎通ステータス */}
       <Box>
-        <Text fontSize="xs" color="gray.500" mb={1} truncate>
+        <Text fontSize="xs" color="fg.muted" mb={1} truncate>
           👤 {auth.user?.profile.email}
         </Text>
         <HStack justify="space-between">
@@ -375,8 +375,8 @@ export function Sidebar({
           <Button
             size="xs"
             variant="ghost"
-            color="gray.600"
-            _hover={{ bg: 'gray.200' }}
+            color="fg.muted"
+            _hover={{ bg: 'bg.emphasized' }}
             onClick={() => void handleLogout()}
           >
             ログアウト

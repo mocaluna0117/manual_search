@@ -275,7 +275,7 @@ export function ChatHome({
             h="48px"
             borderRadius="sm"
           />
-          <Text fontSize="xs" color="gray.500">
+          <Text fontSize="xs" color="fg.muted">
             {attachedImage.name}
           </Text>
           <IconButton
@@ -307,7 +307,7 @@ export function ChatHome({
           variant="outline"
           borderRadius="full"
           fontSize="xl"
-          color="gray.600"
+          color="fg.muted"
           alignSelf="flex-end" // 入力欄が伸びても下端に揃える
           onClick={() => fileInputRef.current?.click()}
         >
@@ -348,7 +348,7 @@ export function ChatHome({
     return (
       <VStack h="100%" justify="center" gap={6} px={4}>
         <Heading size="2xl">社内マニュアル検索</Heading>
-        <Text color="gray.500">
+        <Text color="fg.muted">
           知りたいことを入力すると、AIが最適なマニュアルを案内します
         </Text>
         {searchInput}
@@ -369,8 +369,8 @@ export function ChatHome({
               ref={index === messages.length - 1 ? lastMessageRef : undefined}
               style={{ scrollMarginTop: '12px' }} // 先頭に合わせた時に少し余白を残す
               alignSelf={message.role === 'USER' ? 'flex-end' : 'flex-start'}
-              bg={message.role === 'USER' ? 'blue.500' : 'gray.100'}
-              color={message.role === 'USER' ? 'white' : 'gray.900'}
+              bg={message.role === 'USER' ? 'blue.solid' : 'bg.muted'}
+              color={message.role === 'USER' ? 'blue.contrast' : 'fg'}
               px={4}
               py={2}
               borderRadius="lg"
@@ -402,7 +402,7 @@ export function ChatHome({
                       size="sm"
                       variant="outline"
                       colorPalette="blue"
-                      bg="white"
+                      bg="bg.panel"
                       justifyContent="flex-start"
                       whiteSpace="normal"
                       h="auto"
@@ -419,7 +419,7 @@ export function ChatHome({
                     <HStack gap={2}>
                       <Input
                         size="sm"
-                        bg="white"
+                        bg="bg.panel"
                         placeholder="✏️ その他（自由に入力してEnterで送信）"
                         value={otherText}
                         onChange={(e) => setOtherText(e.target.value)}
@@ -450,14 +450,14 @@ export function ChatHome({
                     <Box
                       key={group.manualId}
                       fontSize="sm"
-                      bg="white"
+                      bg="bg.panel"
                       borderRadius="md"
                       px={3}
                       py={2}
                     >
                       <Text
                         fontWeight="medium"
-                        color="blue.600"
+                        color="blue.fg"
                         cursor="pointer"
                         _hover={{ textDecoration: 'underline' }}
                         onClick={() =>
