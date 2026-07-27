@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT}:5432"
+      # 127.0.0.1に限定する。0.0.0.0だと同一LANの誰からでもpsqlで接続でき、
+      # ManualChunk.contentのマニュアル本文が平文で読める
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
     volumes: 
       - ./.volumes/db:/var/lib/postgresql/data
     healthcheck:
@@ -27,8 +29,10 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "${MINIO_PORT}:9000" # S3 API(アプリからの接続先)
-      - "${MINIO_CONSOLE_PORT}:9001" # 管理画面(ブラウザで見る用)
+      # こちらも127.0.0.1に限定(PDF本体が入っている)。
+      # backend/ragはDockerネットワーク経由(minio:9000)なので影響しない
+      - "127.0.0.1:${MINIO_PORT}:9000" # S3 API(アプリからの接続先)
+      - "127.0.0.1:${MINIO_CONSOLE_PORT}:9001" # 管理画面(ブラウザで見る用)
     volumes:
       - ./.volumes/minio:/data
     healthcheck:
@@ -77,6 +81,8 @@ services:
       minio:
         condition: service_healthy
     ports:
+      # Cognito認証で保護されており、スマホ実機からの動作確認にも使うため
+      # LANに開けたままにする(DB/MinIOと違い認証なしでは何も読めない)
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
