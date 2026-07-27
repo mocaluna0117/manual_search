@@ -40,6 +40,29 @@ export const CREATE_CATEGORY_MUTATION: TypedDocumentNode<
   }
 `
 
+// --- カテゴリ名の変更(ADMIN専用) ---
+
+interface UpdateCategoryData {
+  updateManualCategory: Category
+}
+
+interface UpdateCategoryVars {
+  id: string
+  name: string
+}
+
+export const UPDATE_CATEGORY_MUTATION: TypedDocumentNode<
+  UpdateCategoryData,
+  UpdateCategoryVars
+> = gql`
+  mutation UpdateManualCategory($id: ID!, $name: String!) {
+    updateManualCategory(id: $id, name: $name) {
+      id
+      name
+    }
+  }
+`
+
 // --- カテゴリ削除(ADMIN専用。マニュアルが残っていると失敗する) ---
 
 interface DeleteCategoryData {

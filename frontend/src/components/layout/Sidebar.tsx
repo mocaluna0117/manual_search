@@ -16,6 +16,7 @@ import {
   CATEGORIES_QUERY,
   CREATE_CATEGORY_MUTATION,
   DELETE_CATEGORY_MUTATION,
+  UPDATE_CATEGORY_MUTATION,
   type Category,
 } from '../../graphql/categories'
 import { signOutRedirect } from '../../lib/auth'
@@ -91,6 +92,32 @@ export function Sidebar({
     } catch (e) {
       // マニュアルが残っている場合はバックエンドが理由を返してくる
       window.alert(e instanceof Error ? e.message : '削除できませんでした')
+    }
+  }
+
+  // カテゴリ名のインライン編集
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [editingName, setEditingName] = useState('')
+  const [updateCategory] = useMutation(UPDATE_CATEGORY_MUTATION, {
+    refetchQueries: ['ManualCategories'],
+  })
+
+  const handleRenameCategory = async () => {
+    if (!editingCategory) return
+    const name = editingName.trim()
+    if (!name || name === editingCategory.name) {
+      setEditingCategory(null)
+      return
+    }
+    try {
+      await updateCategory({ variables: { id: editingCategory.id, name } })
+      // 開いているカテゴリを改名した場合は、メイン画面の見出しも更新する
+      if (editingCategory.id === selectedCategoryId) {
+        onSelectCategory({ id: editingCategory.id, name })
+      }
+      setEditingCategory(null)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '名前を変更できませんでした')
     }
   }
 
@@ -240,34 +267,68 @@ export function Sidebar({
           </Text>
         )}
         <VStack gap={1} align="stretch">
-          {data?.manualCategories.map((category) => (
-            <HStack key={category.id} gap={0}>
-              <Button
-                variant="ghost"
+          {data?.manualCategories.map((category) =>
+            editingCategory?.id === category.id ? (
+              // 編集モード: その場で名前を書き換える
+              <Input
+                key={category.id}
                 size="sm"
-                flex="1"
-                justifyContent="flex-start"
-                color="gray.100"
-                bg={category.id === selectedCategoryId ? 'gray.700' : undefined}
-                _hover={{ bg: 'gray.700' }}
-                onClick={() => onSelectCategory(category)}
-              >
-                📁 {category.name}
-              </Button>
-              {isAdmin && (
-                <IconButton
-                  aria-label="カテゴリを削除"
-                  size="xs"
+                autoFocus
+                bg="gray.800"
+                borderColor="gray.600"
+                value={editingName}
+                onChange={(e) => setEditingName(e.target.value)}
+                onBlur={() => setEditingCategory(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+                    void handleRenameCategory()
+                  if (e.key === 'Escape') setEditingCategory(null)
+                }}
+              />
+            ) : (
+              <HStack key={category.id} gap={0}>
+                <Button
                   variant="ghost"
-                  color="gray.500"
-                  _hover={{ color: 'red.400', bg: 'gray.700' }}
-                  onClick={() => void handleDeleteCategory(category)}
+                  size="sm"
+                  flex="1"
+                  justifyContent="flex-start"
+                  color="gray.100"
+                  bg={category.id === selectedCategoryId ? 'gray.700' : undefined}
+                  _hover={{ bg: 'gray.700' }}
+                  onClick={() => onSelectCategory(category)}
                 >
-                  🗑
-                </IconButton>
-              )}
-            </HStack>
-          ))}
+                  📁 {category.name}
+                </Button>
+                {isAdmin && (
+                  <>
+                    <IconButton
+                      aria-label="カテゴリ名を変更"
+                      size="xs"
+                      variant="ghost"
+                      color="gray.500"
+                      _hover={{ color: 'gray.100', bg: 'gray.700' }}
+                      onClick={() => {
+                        setEditingCategory(category)
+                        setEditingName(category.name)
+                      }}
+                    >
+                      ✏️
+                    </IconButton>
+                    <IconButton
+                      aria-label="カテゴリを削除"
+                      size="xs"
+                      variant="ghost"
+                      color="gray.500"
+                      _hover={{ color: 'red.400', bg: 'gray.700' }}
+                      onClick={() => void handleDeleteCategory(category)}
+                    >
+                      🗑
+                    </IconButton>
+                  </>
+                )}
+              </HStack>
+            ),
+          )}
           {/* カテゴリ未設定のマニュアル置き場 */}
           <Button
             variant="ghost"

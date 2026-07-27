@@ -21,6 +21,15 @@ export class CategoryResolver {
 
   @Roles(UserRole.ADMIN)
   @Mutation(() => ManualCategory)
+  updateManualCategory(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('name') name: string,
+  ) {
+    return this.categoryService.rename(id, name);
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => ManualCategory)
   deleteManualCategory(@Args('id', { type: () => ID }) id: string) {
     return this.categoryService.delete(id);
   }
