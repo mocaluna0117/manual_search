@@ -37,6 +37,10 @@ export class Manual {
   @Field()
   fileName!: string;
 
+  // 元ファイルの最終更新日時(同名アップロード時の新旧判定に使う)
+  @Field(() => Date, { nullable: true })
+  fileLastModified!: Date | null;
+
   @Field()
   mimeType!: string;
 
@@ -60,6 +64,27 @@ export class Manual {
 
   @Field()
   updatedAt!: Date;
+}
+
+// 同名ファイルをアップロードしたときの登録結果の種別
+export enum RegisterOutcome {
+  CREATED = 'CREATED', // 新規追加
+  UPDATED = 'UPDATED', // 同名の既存マニュアルを新しい版で置き換えた
+  SKIPPED_OLDER = 'SKIPPED_OLDER', // 既存の方が新しいため取り込まなかった
+}
+
+registerEnumType(RegisterOutcome, {
+  name: 'RegisterOutcome',
+  description: '登録結果(新規/既存を更新/古いためスキップ)',
+});
+
+@ObjectType()
+export class RegisterManualResult {
+  @Field(() => Manual)
+  manual!: Manual;
+
+  @Field(() => RegisterOutcome)
+  outcome!: RegisterOutcome;
 }
 
 // AI自動分類の実行結果

@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
-import { IngestStatus } from './model';
+import { IngestStatus, RegisterOutcome } from './model';
 
 @Injectable()
 export class ManualService {
@@ -79,14 +79,75 @@ export class ManualService {
     return `${head}${content.slice(start, end)}${tail}`;
   }
 
+  /**
+   * アップロード済みファイルのメタデータを登録する。
+   * 同名(fileName一致)のマニュアルが既にある場合は最終更新日で新旧を判定し、
+   * 新しい方だけを残す(古いものをアップロードした場合は取り込まない)。
+   */
   async register(input: RegisterManualInput) {
     // autoCategorizeはDBの列ではないので分離する
     const { autoCategorize, ...data } = input;
-    const manual = await this.prisma.manual.create({ data });
-    // 取り込みは裏で実行(fire-and-forget)。ユーザーを何十秒も待たせないため、
-    // awaitせずに即レスポンスを返し、進行状況はingestStatusで見せる
+
+    const existing = await this.prisma.manual.findFirst({
+      where: { fileName: data.fileName },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 同名が無ければ通常の新規追加
+    if (!existing) {
+      const manual = await this.prisma.manual.create({ data });
+      // 取り込みは裏で実行(fire-and-forget)。ユーザーを何十秒も待たせないため、
+      // awaitせずに即レスポンスを返し、進行状況はingestStatusで見せる
+      void this.runIngest(manual.id, autoCategorize ?? false);
+      return { manual, outcome: RegisterOutcome.CREATED };
+    }
+
+    // 新旧の判定。既存の最終更新日が不明な場合は登録日時で代用する
+    const existingTime = (
+      existing.fileLastModified ?? existing.createdAt
+    ).getTime();
+    const incomingTime = data.fileLastModified?.getTime();
+
+    // 送られてきた側の更新日が不明なときは比較できないので、
+    // 既存を壊さない安全側に倒して別マニュアルとして追加する
+    if (incomingTime === undefined) {
+      const manual = await this.prisma.manual.create({ data });
+      void this.runIngest(manual.id, autoCategorize ?? false);
+      return { manual, outcome: RegisterOutcome.CREATED };
+    }
+
+    // 既存の方が新しい(または同時刻)なら取り込まない。
+    // アップロード済みの実ファイルは迷子になるので消しておく
+    if (incomingTime <= existingTime) {
+      await this.storage.deleteObject(data.fileKey).catch(() => undefined);
+      return { manual: existing, outcome: RegisterOutcome.SKIPPED_OLDER };
+    }
+
+    // 送られてきた方が新しい: 既存を同じIDのまま差し替える。
+    // IDを保つことで、過去の会話に残った引用リンクも生き続ける
+    const oldFileKey = existing.fileKey;
+    const manual = await this.prisma.manual.update({
+      where: { id: existing.id },
+      data: {
+        title: data.title,
+        // 説明・カテゴリは未指定なら既存の設定を維持する
+        description: data.description ?? existing.description,
+        categoryId: data.categoryId ?? existing.categoryId,
+        fileKey: data.fileKey,
+        fileName: data.fileName,
+        fileLastModified: data.fileLastModified,
+        size: data.size,
+        // 中身が変わったので取り込みをやり直す
+        ingestStatus: IngestStatus.PENDING,
+        ingestError: null,
+        chunkCount: null,
+        ingestedAt: null,
+      },
+    });
+    // 旧ファイルはもう参照されないので削除(失敗しても登録は成功扱い)
+    await this.storage.deleteObject(oldFileKey).catch(() => undefined);
     void this.runIngest(manual.id, autoCategorize ?? false);
-    return manual;
+    return { manual, outcome: RegisterOutcome.UPDATED };
   }
 
   /** 手動での(再)取り込み。FAILEDになったマニュアルのリトライ用 */

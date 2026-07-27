@@ -41,8 +41,14 @@ export interface Manual {
   chunkCount: number | null
 }
 
+/** 同名ファイルをアップロードしたときの結果 */
+export type RegisterOutcome = 'CREATED' | 'UPDATED' | 'SKIPPED_OLDER'
+
 interface RegisterManualData {
-  registerManual: Manual
+  registerManual: {
+    manual: Manual
+    outcome: RegisterOutcome
+  }
 }
 
 interface RegisterManualVars {
@@ -54,6 +60,7 @@ interface RegisterManualVars {
     size: number
     categoryId?: string
     autoCategorize?: boolean
+    fileLastModified?: string // ISO8601。同名アップロード時の新旧判定に使う
   }
 }
 
@@ -63,12 +70,15 @@ export const REGISTER_MANUAL_MUTATION: TypedDocumentNode<
 > = gql`
   mutation RegisterManual($input: RegisterManualInput!) {
     registerManual(input: $input) {
-      id
-      title
-      description
-      fileName
-      size
-      categoryId
+      outcome
+      manual {
+        id
+        title
+        description
+        fileName
+        size
+        categoryId
+      }
     }
   }
 `

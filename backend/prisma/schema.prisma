@@ -31,6 +31,7 @@ model Manual {
   description   String?
   fileKey       String            @map("file_key") // S3上のファイルの場所(キー)
   fileName      String            @map("file_name") // 元のPDFファイル名
+  fileLastModified DateTime?      @map("file_last_modified") // 元ファイルの最終更新日時(同名アップロード時の新旧判定に使用)
   mimeType      String            @map("mime_type") @default("application/pdf")
   size          Int               // ファイルサイズ（バイト）
   categoryId    String?

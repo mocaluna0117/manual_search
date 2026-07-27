@@ -18,7 +18,9 @@ import { useRef, useState } from 'react'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
 import {
   CREATE_UPLOAD_URL_MUTATION,
+  MANUALS_QUERY,
   REGISTER_MANUAL_MUTATION,
+  type RegisterOutcome,
 } from '../../graphql/manuals'
 import { formatSize } from '../../lib/format'
 
@@ -32,6 +34,7 @@ interface UploadItem {
   file: File
   title: string
   status: 'pending' | 'uploading' | 'done' | 'error'
+  outcome?: RegisterOutcome // 完了後: 新規追加 / 既存を更新 / 古いのでスキップ
   error?: string
 }
 
@@ -42,9 +45,27 @@ function StatusBadge({ item }: { item: UploadItem }) {
     case 'uploading':
       return <Spinner size="xs" />
     case 'done':
+      if (item.outcome === 'UPDATED') {
+        return <Badge colorPalette="blue">🔄 更新</Badge>
+      }
+      if (item.outcome === 'SKIPPED_OLDER') {
+        return <Badge colorPalette="orange">⏭ スキップ</Badge>
+      }
       return <Badge colorPalette="green">✅ 完了</Badge>
     case 'error':
       return <Badge colorPalette="red">❌ 失敗</Badge>
+  }
+}
+
+/** 完了後に「何が起きたか」を1行で説明する */
+function outcomeNote(outcome?: RegisterOutcome): string | null {
+  switch (outcome) {
+    case 'UPDATED':
+      return '同名の既存マニュアルを、この新しいファイルで置き換えました'
+    case 'SKIPPED_OLDER':
+      return '既存マニュアルの方が新しいため、取り込みませんでした'
+    default:
+      return null
   }
 }
 
@@ -56,6 +77,14 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: categoriesData } = useQuery(CATEGORIES_QUERY)
+  // 既存マニュアルのファイル名一覧(アップロード前に同名を知らせるため)
+  const { data: existingData } = useQuery(MANUALS_QUERY, {
+    fetchPolicy: 'cache-and-network',
+  })
+  const existingFileNames = new Set(
+    existingData?.manuals.map((m) => m.fileName) ?? [],
+  )
+
   const [createUploadUrl] = useMutation(CREATE_UPLOAD_URL_MUTATION)
   const [registerManual] = useMutation(REGISTER_MANUAL_MUTATION, {
     // 登録後に一覧クエリを取り直し、開いているカテゴリ一覧へ即反映する
@@ -119,7 +148,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
         }
 
         // 3) メタデータをDBに登録(取り込みは自動で始まる)
-        await registerManual({
+        const { data: registered } = await registerManual({
           variables: {
             input: {
               title: item.title.trim() || item.file.name,
@@ -135,11 +164,21 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                 categoryId && categoryId !== '__auto' ? categoryId : undefined,
               // 「AIにおまかせ」なら取り込み完了後に自動でカテゴリが付く
               autoCategorize: categoryId === '__auto' || undefined,
+              // 同名マニュアルがある場合の新旧判定に使う(ブラウザが持つファイルの更新日時)
+              fileLastModified: new Date(item.file.lastModified).toISOString(),
             },
           },
         })
         setItems((prev) =>
-          prev.map((it, idx) => (idx === i ? { ...it, status: 'done' } : it)),
+          prev.map((it, idx) =>
+            idx === i
+              ? {
+                  ...it,
+                  status: 'done',
+                  outcome: registered?.registerManual.outcome,
+                }
+              : it,
+          ),
         )
       } catch (e) {
         setItems((prev) =>
@@ -217,44 +256,72 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
 
                 {/* ファイルごとの状態リスト */}
                 {items.length > 0 && (
-                  <VStack gap={2} align="stretch" maxH="240px" overflowY="auto">
+                  <VStack gap={3} align="stretch" maxH="260px" overflowY="auto">
                     {items.map((item, i) => (
-                      <HStack key={`${item.file.name}-${i}`} gap={2}>
-                        <StatusBadge item={item} />
-                        <Input
-                          size="sm"
-                          flex="1"
-                          value={item.title}
-                          disabled={uploading || item.status === 'done'}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((it, idx) =>
-                                idx === i ? { ...it, title: e.target.value } : it,
-                              ),
-                            )
-                          }
-                        />
-                        <Text fontSize="xs" color="gray.500" flexShrink={0}>
-                          {formatSize(item.file.size)}
-                        </Text>
-                        {!uploading && item.status !== 'done' && (
-                          <IconButton
-                            aria-label="リストから外す"
-                            size="xs"
-                            variant="ghost"
-                            onClick={() =>
-                              setItems((prev) => prev.filter((_, idx) => idx !== i))
+                      <Box key={`${item.file.name}-${i}`}>
+                        <HStack gap={2}>
+                          <StatusBadge item={item} />
+                          <Input
+                            size="sm"
+                            flex="1"
+                            value={item.title}
+                            disabled={uploading || item.status === 'done'}
+                            onChange={(e) =>
+                              setItems((prev) =>
+                                prev.map((it, idx) =>
+                                  idx === i ? { ...it, title: e.target.value } : it,
+                                ),
+                              )
                             }
+                          />
+                          <Text fontSize="xs" color="gray.500" flexShrink={0}>
+                            {formatSize(item.file.size)}
+                          </Text>
+                          {!uploading && item.status !== 'done' && (
+                            <IconButton
+                              aria-label="リストから外す"
+                              size="xs"
+                              variant="ghost"
+                              onClick={() =>
+                                setItems((prev) =>
+                                  prev.filter((_, idx) => idx !== i),
+                                )
+                              }
+                            >
+                              ✕
+                            </IconButton>
+                          )}
+                        </HStack>
+
+                        {/* アップロード前: 同名マニュアルがある場合の予告 */}
+                        {item.status === 'pending' &&
+                          existingFileNames.has(item.file.name) && (
+                            <Text fontSize="xs" color="orange.600" mt={1}>
+                              ⚠️ 同名のマニュアルが既にあります。ファイルの更新日が新しい方だけが残ります
+                            </Text>
+                          )}
+
+                        {/* アップロード後: 何が起きたかの説明 */}
+                        {item.status === 'done' && outcomeNote(item.outcome) && (
+                          <Text
+                            fontSize="xs"
+                            color={
+                              item.outcome === 'UPDATED'
+                                ? 'blue.600'
+                                : 'orange.600'
+                            }
+                            mt={1}
                           >
-                            ✕
-                          </IconButton>
+                            {outcomeNote(item.outcome)}
+                          </Text>
                         )}
+
                         {item.error && (
-                          <Text fontSize="xs" color="red.500" flexShrink={0}>
+                          <Text fontSize="xs" color="red.500" mt={1}>
                             {item.error}
                           </Text>
                         )}
-                      </HStack>
+                      </Box>
                     ))}
                   </VStack>
                 )}

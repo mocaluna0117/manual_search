@@ -8,6 +8,7 @@ import {
   Manual,
   ManualSearchResult,
   ManualUploadTarget,
+  RegisterManualResult,
 } from './model';
 import { ManualService } from './service';
 
@@ -52,9 +53,10 @@ export class ManualResolver {
     return this.manualService.getDownloadUrl(id);
   }
 
-  // アップロード完了後にメタデータをDBへ登録
+  // アップロード完了後にメタデータをDBへ登録。
+  // 同名ファイルがある場合は最終更新日の新しい方を残す(outcomeで結果が分かる)
   @Roles(UserRole.ADMIN)
-  @Mutation(() => Manual)
+  @Mutation(() => RegisterManualResult)
   registerManual(@Args('input') input: RegisterManualInput) {
     return this.manualService.register(input);
   }
