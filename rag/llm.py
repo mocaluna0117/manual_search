@@ -27,7 +27,8 @@ SYSTEM_PROMPT = """あなたは社内マニュアル検索の案内係です。�
 - 相手が選択肢に答えたら、その内容を踏まえて絞り込んだ案内をする
 - 具体的に回答できた場合も、メッセージの最後に「次に知りたくなりそうなこと」を[選択肢]形式で2〜3個提案する(例: 関連する手順、注意点、別のケース、お客様への説明例)。ただし抜粋から答えられる内容に限る
 - どのマニュアルにも該当しそうにない場合: 正直にそう伝え、問い合わせ先(担当部署など)への相談を提案する
-- 手順を説明するときは箇条書きを使う"""
+- 手順を説明するときは箇条書きを使う
+- メッセージの一番最後に、実際に回答の根拠として使った抜粋の番号を「[参照] 1,3」の形式で1行だけ書く。読んだが使わなかった抜粋は含めない。どの抜粋も使っていない場合は「[参照] なし」と書く。[選択肢]行がある場合は[参照]行をその前に置く"""
 
 
 class Context:
@@ -94,8 +95,10 @@ class BedrockAnswerGenerator:
         image: tuple[bytes, str] | None = None,
         history: list[HistoryMessage] | None = None,
     ) -> str:
+        # 抜粋に番号を振る([参照]行で「どれを使ったか」を申告してもらうため)
         excerpts = "\n\n".join(
-            f"【{c.title}】\n{c.content}" for c in contexts
+            f"【抜粋{i}】{c.title}\n{c.content}"
+            for i, c in enumerate(contexts, start=1)
         )
         user_message = f"# マニュアル抜粋\n{excerpts}\n\n# 質問\n{question}"
 

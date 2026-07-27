@@ -59,6 +59,21 @@ class SearchResponse(BaseModel):
 
 
 OPTION_PATTERN = re.compile(r"^\[選択肢\]\s*(.+)$", re.MULTILINE)
+REFERENCE_PATTERN = re.compile(r"^\[参照\]\s*(.*)$", re.MULTILINE)
+
+
+def extract_references(answer: str, total: int) -> tuple[str, list[int] | None]:
+    """回答文から[参照]行を抜き出し、(本文, 使った抜粋のindexリスト)に分ける。
+
+    戻りのリストがNone = 申告なし(保険の動作へ)、[] = 「[参照] なし」(引用ゼロ)。
+    """
+    m = REFERENCE_PATTERN.search(answer)
+    if not m:
+        return answer, None
+    cleaned = REFERENCE_PATTERN.sub("", answer).strip()
+    numbers = [int(n) for n in re.findall(r"\d+", m.group(1))]
+    used = [n - 1 for n in numbers if 1 <= n <= total]
+    return cleaned, used
 
 TOP_K = 8  # Claudeに渡す抜粋の数
 
@@ -283,17 +298,6 @@ def search(req: SearchRequest) -> SearchResponse:
             citations=[],
         )
 
-    # 引用は「同じマニュアルの同じページ」をまとめる(スコア順は維持)
-    citations: list[Citation] = []
-    seen: set[tuple[str, int | None]] = set()
-    for manual_id, title, content, page in rows:
-        if (manual_id, page) in seen:
-            continue
-        seen.add((manual_id, page))
-        citations.append(
-            Citation(manual_id=manual_id, title=title, snippet=content[:150], page=page)
-        )
-
     # 3) 取得した抜粋を根拠として、Claudeに回答文を書かせる。
     #    抜粋の見出しにページ番号を含めるので、回答文でも「(p.3)」のように言及できる。
     #    生成に失敗しても検索結果(引用)だけは返す(全滅させない)
@@ -305,16 +309,32 @@ def search(req: SearchRequest) -> SearchResponse:
         for _manual_id, title, content, page in rows
     ]
     options: list[str] = []
+    used_rows = rows[:3]  # 保険の既定値: 参照の申告が無ければ上位3件だけ引用に出す
     try:
         raw_answer = answer_generator.generate(
             req.question, contexts, image=image, history=req.history
         )
         # 絞り込み質問の場合、[選択肢]行を本文から分離してボタン用データにする
         answer, options = extract_options(raw_answer)
+        # [参照]行から「実際に根拠に使った抜粋」を特定し、引用をそこに絞る
+        answer, used = extract_references(answer, len(rows))
+        if used is not None:
+            used_rows = [rows[i] for i in used]
     except Exception as e:
         answer = (
-            f"関連しそうなマニュアルが{len(citations)}件見つかりましたが、"
+            "関連しそうなマニュアルが見つかりましたが、"
             f"回答文の生成に失敗しました({e})。以下の抜粋をご確認ください。"
+        )
+
+    # 引用は「実際に使われた抜粋」だけを、同じマニュアルの同じページでまとめて返す
+    citations: list[Citation] = []
+    seen: set[tuple[str, int | None]] = set()
+    for manual_id, title, content, page in used_rows:
+        if (manual_id, page) in seen:
+            continue
+        seen.add((manual_id, page))
+        citations.append(
+            Citation(manual_id=manual_id, title=title, snippet=content[:150], page=page)
         )
 
     return SearchResponse(answer=answer, citations=citations, options=options)
