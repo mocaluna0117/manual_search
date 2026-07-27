@@ -89,14 +89,29 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
     score = Σ 1/(60+順位) で足し合わせ、両方の得意分野を活かす。
     """
     # ルート1: ベクトル検索(意味の近さ)
+    #
+    # 最近傍検索はManualChunk単体で完結させ、タイトルの取得(JOIN)は後段で行う。
+    # JOINを含めたままORDER BY embeddingを書くと、Postgresが
+    # 「JOINしてからソート」の計画を選びHNSWインデックスが使われなくなる。
+    # AS MATERIALIZED でCTEのインライン展開も防ぎ、確実に索引を使わせる。
+    # 内側は多めに取り、取り込み未完了ぶんを除いた後にTOPまで絞る
     cur.execute(
         """
-        SELECT mc.id, mc.manual_id, m.title, mc.content, mc.page_number
-        FROM "ManualChunk" mc
-        JOIN "Manual" m ON m.id = mc.manual_id
-        WHERE mc.embedding IS NOT NULL
-          AND m.ingest_status = 'COMPLETED'
-        ORDER BY mc.embedding <=> %s::vector
+        WITH nearest AS MATERIALIZED (
+            SELECT id, manual_id, content, page_number,
+                   embedding <=> %s::vector AS distance
+            FROM "ManualChunk"
+            WHERE embedding IS NOT NULL
+            ORDER BY distance
+            LIMIT 40
+        )
+        SELECT n.id, n.manual_id, m.title, n.content, n.page_number
+        FROM nearest n
+        JOIN "Manual" m ON m.id = n.manual_id
+        WHERE m.ingest_status = 'COMPLETED'
+        -- JOINを挟むと内側のORDER BYは保たれないので、距離で明示的に並べ直す。
+        -- これを忘れるとRRFに渡る順位が崩れ、検索精度が静かに落ちる
+        ORDER BY n.distance
         LIMIT 20
         """,
         (query_vec,),
@@ -104,23 +119,28 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
     vector_rows = cur.fetchall()
 
     # ルート2: キーワード一致(マッチしたキーワード数が多い順)
+    #
+    # ILIKEの条件をWHEREにも書くのが重要。SELECT句でhitsを数えるだけだと
+    # 全チャンクを評価することになり、pg_trgmのインデックスが使われない
     keyword_rows = []
     if terms:
         hit_expr = " + ".join(
             ["(CASE WHEN mc.content ILIKE %s THEN 1 ELSE 0 END)"] * len(terms)
         )
+        any_match = " OR ".join(["mc.content ILIKE %s"] * len(terms))
+        patterns = [f"%{t}%" for t in terms]
         cur.execute(
             f"""
             SELECT mc.id, mc.manual_id, m.title, mc.content, mc.page_number,
                    ({hit_expr}) AS hits
             FROM "ManualChunk" mc
             JOIN "Manual" m ON m.id = mc.manual_id
-            WHERE mc.embedding IS NOT NULL
-              AND m.ingest_status = 'COMPLETED'
+            WHERE m.ingest_status = 'COMPLETED'
+              AND ({any_match})
             ORDER BY hits DESC
             LIMIT 20
             """,
-            [f"%{t}%" for t in terms],
+            patterns + patterns,  # hit_expr用 と WHERE用
         )
         keyword_rows = [r for r in cur.fetchall() if r[5] > 0]
 

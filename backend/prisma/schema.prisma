@@ -42,6 +42,10 @@ model Manual {
   ingestedAt    DateTime?         @map("ingested_at")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+
+  // 外部キー列にPostgresは自動でインデックスを作らないので明示する。
+  // 一覧は「カテゴリで絞って作成日時の降順」で引くため複合にしておく
+  @@index([categoryId, createdAt])
 }
 
 enum UserRole {
@@ -73,6 +77,8 @@ model Conversation {
   messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  @@index([userId, updatedAt])
 }
 
 model Message {
@@ -86,6 +92,9 @@ model Message {
   // 絞り込み質問の選択肢(ASSISTANTのみ)。フロントでボタンとして表示する
   options        Json?
   createdAt      DateTime     @default(now()) @map("created_at")
+
+  // 会話を開くたびに「この会話のメッセージを古い順」で引く
+  @@index([conversationId, createdAt])
 }
 
 // RAG用: マニュアルを検索しやすい断片に分割したもの。
