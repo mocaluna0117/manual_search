@@ -6,9 +6,9 @@ import {
   HStack,
   IconButton,
   Image,
-  Input,
   Spinner,
   Text,
+  Textarea,
   VStack,
 } from '@chakra-ui/react'
 import { useEffect, useRef, useState } from 'react'
@@ -206,14 +206,20 @@ export function ChatHome({
         >
           📷
         </IconButton>
-        <Input
+        <Textarea
           size="lg"
-          placeholder="例: 経費精算のやり方を教えて"
+          rows={1}
+          autoresize // 入力量に応じて高さが自動で伸びる
+          maxH="10em" // 伸びすぎ防止(超えたら内部スクロール)
+          placeholder="例: 経費精算のやり方を教えて（Shift+Enterで改行）"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            // 日本語変換の確定Enterでは送信しない
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSubmit()
+            // Enter=送信 / Shift+Enter=改行 / 日本語変換の確定Enterは無視
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault() // 送信時に改行が入らないように
+              handleSubmit()
+            }
           }}
         />
         <Button
@@ -221,6 +227,7 @@ export function ChatHome({
           colorPalette="blue"
           onClick={handleSubmit}
           loading={loading}
+          alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
         >
           検索
         </Button>
