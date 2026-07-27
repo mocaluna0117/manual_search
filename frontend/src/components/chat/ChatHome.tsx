@@ -45,7 +45,6 @@ const ALLOWED_IMAGE_TYPES: Record<string, string> = {
 interface CitationGroup {
   manualId: string
   title: string
-  snippet: string // 最も関連度が高いチャンクの抜粋
   topPage: number | null // 最も関連度が高いページ(タイトルクリック時に開く)
   pages: number[] // ページリンク一覧(昇順)
 }
@@ -61,7 +60,6 @@ function groupCitations(
       group = {
         manualId: citation.manualId,
         title: citation.title,
-        snippet: citation.snippet,
         topPage: citation.pageNumber,
         pages: [],
       }
@@ -446,9 +444,6 @@ export function ChatHome({
                         }
                       >
                         📄 {group.title} ↗
-                      </Text>
-                      <Text color="gray.500" lineClamp={2}>
-                        {group.snippet}
                       </Text>
                       {group.pages.length > 0 && (
                         <HStack mt={1} gap={1} flexWrap="wrap">
