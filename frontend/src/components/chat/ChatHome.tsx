@@ -61,6 +61,7 @@ export function ChatHome({
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [attachedImage, setAttachedImage] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const lastMessageRef = useRef<HTMLDivElement>(null)
   // 履歴を開いた直後かどうか(そのときだけ一番下へ即時ジャンプする)
@@ -228,6 +229,7 @@ export function ChatHome({
           ＋
         </IconButton>
         <Textarea
+          ref={textareaRef}
           size="lg"
           rows={1}
           autoresize // 入力量に応じて高さが自動で伸びる
@@ -326,6 +328,18 @@ export function ChatHome({
                       {option}
                     </Button>
                   ))}
+                  {/* どれにも当てはまらない人向け: 入力欄へ誘導(最新のメッセージにだけ表示) */}
+                  {index === messages.length - 1 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      color="gray.600"
+                      justifyContent="flex-start"
+                      onClick={() => textareaRef.current?.focus()}
+                    >
+                      ✏️ その他（自由に入力する）
+                    </Button>
+                  )}
                 </VStack>
               )}
 

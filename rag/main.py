@@ -122,7 +122,35 @@ def extract_options(answer: str) -> tuple[str, list[str]]:
     """回答文から[選択肢]行を抜き出し、(本文, 選択肢リスト)に分ける"""
     options = [m.strip() for m in OPTION_PATTERN.findall(answer)]
     cleaned = OPTION_PATTERN.sub("", answer).strip()
+    if not options:
+        # 保険: モデルが形式を守らず「選択肢: 1. A / 2. B」のように書いた場合も救済する
+        cleaned, options = _fallback_extract_options(cleaned)
     return cleaned, options
+
+
+def _fallback_extract_options(answer: str) -> tuple[str, list[str]]:
+    """文末付近の「選択肢: 1. A / 2. B / 3. C」パターンを解析してボタン化する保険"""
+    idx = answer.rfind("選択肢")
+    # 文末付近(400字以内)に無ければ、本文中の言及とみなして触らない
+    if idx == -1 or len(answer) - idx > 400:
+        return answer, []
+    m = re.match(r"選択肢[：:]\s*(.+)\s*$", answer[idx:], re.DOTALL)
+    if not m:
+        return answer, []
+    options = []
+    for item in re.split(r"[/／\n]", m.group(1)):
+        item = re.sub(r"^\s*\d+[.)]\s*", "", item).strip(" 　・*-")
+        if 2 <= len(item) <= 50:
+            options.append(item)
+    if not (2 <= len(options) <= 5):
+        return answer, []
+    cleaned = answer[:idx].rstrip()
+    # 直前に残った「次に知りたくなりそうなこと：」等の見出しを掃除
+    # (コロンが**の内側/外側どちらにあっても消せるように)
+    cleaned = re.sub(
+        r"(?:\*\*)?次に知りたくなりそうなこと[：:]?(?:\*\*)?[：:]?\s*$", "", cleaned
+    ).rstrip()
+    return cleaned.strip(), options
 
 
 class IngestRequest(BaseModel):
