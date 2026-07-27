@@ -51,9 +51,10 @@ class BedrockEmbedder:
     """Amazon Bedrock Titan Embeddings V2(本番用)"""
 
     def __init__(self, model_id: str, region: str):
-        import boto3  # bedrockを使うときだけimport(ローカル開発で必須にしない)
+        # bedrockを使うときだけimport(ローカル開発で必須にしない)
+        from bedrock import create_bedrock_client
 
-        self.client = boto3.client("bedrock-runtime", region_name=region)
+        self.client = create_bedrock_client(region)
         self.model_id = model_id
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:

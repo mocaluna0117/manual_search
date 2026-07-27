@@ -60,9 +60,10 @@ class BedrockTranscriber:
     enabled = True
 
     def __init__(self, model_id: str, region: str):
-        import boto3  # type: ignore[import-untyped]
+        from bedrock import create_bedrock_client
 
-        self.client = boto3.client("bedrock-runtime", region_name=region)
+        # 画像の書き起こしは1ページあたり時間がかかるため読み取り待ちを長めに取る
+        self.client = create_bedrock_client(region, read_timeout=120)
         self.model_id = model_id
 
     def transcribe(self, image_bytes: bytes) -> str:

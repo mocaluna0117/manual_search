@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 import re
 import urllib.request
@@ -6,11 +7,12 @@ from io import BytesIO
 
 import psycopg
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import UUID4, BaseModel
 from pypdf import PdfReader
 
 from chunking import split_text
+from security import fetch_pdf, require_api_token
 from embedding import create_embedder, to_vector_literal
 from llm import Context, create_answer_generator
 from vision import MAX_TRANSCRIBE_PAGES, create_transcriber, render_page_jpeg
@@ -18,6 +20,8 @@ from vision import MAX_TRANSCRIBE_PAGES, create_transcriber, render_page_jpeg
 load_dotenv()  # rag/.env を読み込む
 
 DATABASE_URL = os.environ["DATABASE_URL"]
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Manual Search RAG Service")
 embedder = create_embedder()
@@ -194,7 +198,7 @@ def _fallback_extract_options(answer: str) -> tuple[str, list[str]]:
 
 
 class IngestRequest(BaseModel):
-    manual_id: str
+    manual_id: UUID4
     download_url: str  # NestJSが発行した署名付きURL
 
 
@@ -210,25 +214,24 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/ingest", response_model=IngestResponse)
+@app.post("/ingest", response_model=IngestResponse, dependencies=[Depends(require_api_token)])
 def ingest(req: IngestRequest) -> IngestResponse:
     """PDFを取り込み、テキスト抽出→チャンク分割→DB保存する。
 
     embeddingはこの段階ではNULLのまま(次ステップでBedrockを使って埋める)。
     """
-    # 1) 署名付きURLからPDFをダウンロード
-    try:
-        with urllib.request.urlopen(req.download_url) as res:
-            pdf_bytes = res.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"PDFを取得できません: {e}")
+    # 1) 署名付きURLからPDFをダウンロード。
+    #    スキーム/ホスト/解決先IPを検証し、サイズ上限とタイムアウトも掛ける
+    #    (file://やメタデータエンドポイントを読ませられるのを防ぐ)
+    pdf_bytes = fetch_pdf(req.download_url)
 
     # 2) ページごとにテキスト抽出
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
         pages = [(page.extract_text() or "").strip() for page in reader.pages]
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"PDFを解析できません: {e}")
+        logger.warning("PDFの解析に失敗 manual=%s: %s", req.manual_id, e)
+        raise HTTPException(status_code=422, detail="PDFを解析できませんでした")
 
     # 2.5) テキストがほぼ取れないページ(スキャン・画像ページ)は
     #      Claudeの画像認識で書き起こす(上限ページ数まで)
@@ -261,17 +264,17 @@ def ingest(req: IngestRequest) -> IngestResponse:
         with conn.cursor() as cur:
             cur.execute(
                 'DELETE FROM "ManualChunk" WHERE manual_id = %s',
-                (req.manual_id,),
+                (str(req.manual_id),),
             )
             for i, ((content, page_no), emb) in enumerate(zip(chunks, embeddings)):
                 cur.execute(
                     'INSERT INTO "ManualChunk" (id, manual_id, chunk_index, page_number, content, embedding) '
                     "VALUES (gen_random_uuid(), %s, %s, %s, %s, %s::vector)",
-                    (req.manual_id, i, page_no, content, to_vector_literal(emb)),
+                    (str(req.manual_id), i, page_no, content, to_vector_literal(emb)),
                 )
 
     return IngestResponse(
-        manual_id=req.manual_id,
+        manual_id=str(req.manual_id),
         page_count=len(pages),
         chunk_count=len(chunks),
         transcribed_page_count=transcribed_count,
@@ -298,7 +301,7 @@ class OrganizeResponse(BaseModel):
     assignments: list[OrganizeAssignment]
 
 
-@app.post("/organize", response_model=OrganizeResponse)
+@app.post("/organize", response_model=OrganizeResponse, dependencies=[Depends(require_api_token)])
 def organize(req: OrganizeRequest) -> OrganizeResponse:
     """マニュアル一覧をAIでカテゴリ分けする(DBへの書き込みは行わない=判断だけ返す)"""
     if not req.manuals:
@@ -319,7 +322,7 @@ def organize(req: OrganizeRequest) -> OrganizeResponse:
     return OrganizeResponse(assignments=assignments)
 
 
-@app.post("/search", response_model=SearchResponse)
+@app.post("/search", response_model=SearchResponse, dependencies=[Depends(require_api_token)])
 def search(req: SearchRequest) -> SearchResponse:
     """質問(+添付画像)に近いチャンクをベクトル検索し、Claudeが回答を生成する。
 

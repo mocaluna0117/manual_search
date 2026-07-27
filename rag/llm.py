@@ -90,9 +90,9 @@ class BedrockAnswerGenerator:
     """本番用: Claude(Bedrock Converse API)で回答を生成する"""
 
     def __init__(self, model_id: str, region: str):
-        import boto3  # type: ignore[import-untyped]
+        from bedrock import create_bedrock_client
 
-        self.client = boto3.client("bedrock-runtime", region_name=region)
+        self.client = create_bedrock_client(region)
         self.model_id = model_id
 
     def generate(

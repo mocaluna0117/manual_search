@@ -99,6 +99,8 @@ services:
       COGNITO_REGION: ${AWS_REGION}
       COGNITO_USER_POOL_ID: ${COGNITO_USER_POOL_ID}
       COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+      # RAGサービス呼び出し用の共有トークン(rag側と同じ値)
+      RAG_API_TOKEN: ${RAG_API_TOKEN}
 
   rag:
     build: ./rag
@@ -113,6 +115,10 @@ services:
       AWS_REGION: ${AWS_REGION}
       BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
       BEDROCK_CHAT_MODEL_ID: jp.anthropic.claude-haiku-4-5-20251001-v1:0
+      # backendからの呼び出しだけを受け付ける(未設定だと全リクエストを拒否)
+      RAG_API_TOKEN: ${RAG_API_TOKEN}
+      # 取り込み用URLのダウンロード先をMinIOに限定(SSRF対策)
+      RAG_ALLOWED_DOWNLOAD_HOSTS: minio
     volumes:
       # ローカル実行用のAWS認証情報(読み取り専用)。本番ECSではタスクロールを使うので不要
       - ~/.aws:/root/.aws:ro
