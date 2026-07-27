@@ -368,13 +368,15 @@ export function ChatHome({
               key={message.id}
               ref={index === messages.length - 1 ? lastMessageRef : undefined}
               style={{ scrollMarginTop: '12px' }} // 先頭に合わせた時に少し余白を残す
-              alignSelf={message.role === 'USER' ? 'flex-end' : 'flex-start'}
+              // 左右に分かれず、どちらも左から流れる(自分=コンパクトな吹き出し / AI=全幅)
+              alignSelf={message.role === 'USER' ? 'flex-start' : 'stretch'}
+              w={message.role === 'USER' ? 'fit-content' : undefined}
               bg={message.role === 'USER' ? 'blue.500' : 'gray.100'}
               color={message.role === 'USER' ? 'white' : 'gray.900'}
               px={4}
               py={2}
               borderRadius="lg"
-              maxW="85%"
+              maxW={message.role === 'USER' ? '85%' : undefined}
             >
               {/* 送信時に添付した画像(このセッション中のみ表示) */}
               {message.imageUrl && (
