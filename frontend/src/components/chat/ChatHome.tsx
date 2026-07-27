@@ -61,8 +61,7 @@ export function ChatHome({
   // サーバーに保存済みのメッセージ + 送信中の楽観的な表示をまとめて持つ
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [attachedImage, setAttachedImage] = useState<File | null>(null)
-  // 選択肢の「その他」: その場に出るインライン入力欄の状態
-  const [otherOpen, setOtherOpen] = useState(false)
+  // 選択肢の下に常設する「その他」インライン入力欄の内容
   const [otherText, setOtherText] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -132,7 +131,6 @@ export function ChatHome({
     const image = attachedImage
     setInput('')
     setAttachedImage(null)
-    setOtherOpen(false)
     setOtherText('')
 
     // まず自分の発言を即表示(楽観的更新)。IDは仮でよい
@@ -334,45 +332,33 @@ export function ChatHome({
                       {option}
                     </Button>
                   ))}
-                  {/* どれにも当てはまらない人向け: その場で直接書けるインライン入力
+                  {/* どれにも当てはまらない人向け: 常設のインライン入力欄
                       (最新のメッセージにだけ表示) */}
-                  {index === messages.length - 1 &&
-                    (otherOpen ? (
-                      <HStack gap={2}>
-                        <Input
-                          size="sm"
-                          bg="white"
-                          autoFocus
-                          placeholder="自由に入力してEnterで送信（Escで閉じる）"
-                          value={otherText}
-                          onChange={(e) => setOtherText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                              void send(otherText.trim())
-                            }
-                            if (e.key === 'Escape') setOtherOpen(false)
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          colorPalette="blue"
-                          disabled={!otherText.trim() || loading}
-                          onClick={() => void send(otherText.trim())}
-                        >
-                          送信
-                        </Button>
-                      </HStack>
-                    ) : (
+                  {index === messages.length - 1 && (
+                    <HStack gap={2}>
+                      <Input
+                        size="sm"
+                        bg="white"
+                        placeholder="✏️ その他（自由に入力してEnterで送信）"
+                        value={otherText}
+                        onChange={(e) => setOtherText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                            void send(otherText.trim())
+                          }
+                        }}
+                      />
                       <Button
                         size="sm"
-                        variant="ghost"
-                        color="gray.600"
-                        justifyContent="flex-start"
-                        onClick={() => setOtherOpen(true)}
+                        colorPalette="blue"
+                        variant="outline"
+                        disabled={!otherText.trim() || loading}
+                        onClick={() => void send(otherText.trim())}
                       >
-                        ✏️ その他（自由に入力する）
+                        送信
                       </Button>
-                    ))}
+                    </HStack>
+                  )}
                 </VStack>
               )}
 
