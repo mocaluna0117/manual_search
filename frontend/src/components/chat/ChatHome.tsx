@@ -18,6 +18,7 @@ import {
   type ChatMessage,
 } from '../../graphql/chat'
 import { useManualViewer } from '../manual/ManualViewerProvider'
+import { MarkdownText } from './MarkdownText'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -264,7 +265,12 @@ export function ChatHome({
                   mb={2}
                 />
               )}
-              <Text whiteSpace="pre-wrap">{message.content}</Text>
+              {/* AIの回答はMarkdownを整形表示、ユーザーの発言はそのまま */}
+              {message.role === 'ASSISTANT' ? (
+                <MarkdownText>{message.content}</MarkdownText>
+              ) : (
+                <Text whiteSpace="pre-wrap">{message.content}</Text>
+              )}
 
               {/* 根拠マニュアル(引用)。クリックでPDFが開く */}
               {message.citations.length > 0 && (
