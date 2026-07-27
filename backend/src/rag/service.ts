@@ -54,6 +54,7 @@ export class RagService {
   async search(
     question: string,
     image?: { base64: string; format: string },
+    history?: { role: 'user' | 'assistant'; content: string }[],
   ): Promise<RagAnswer> {
     let res: Response;
     try {
@@ -64,6 +65,7 @@ export class RagService {
           question,
           image_base64: image?.base64,
           image_format: image?.format,
+          history: history ?? [],
         }),
       });
     } catch {

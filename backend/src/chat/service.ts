@@ -55,7 +55,23 @@ export class ChatService {
           data: { title: this.makeTitle(question), userId },
         });
 
-    // 2) 質問を保存(画像そのものは保存しない。添付があったことだけ履歴に残す)
+    // 2) この会話のこれまでのやりとりを集める(絞り込み対話の文脈としてRAGへ渡す)。
+    //    新しい質問を保存する「前」に取ることで、履歴と今回の質問が重複しない
+    const recentMessages = conversationId
+      ? await this.prisma.message.findMany({
+          where: { conversationId: conversation.id },
+          orderBy: { createdAt: 'desc' },
+          take: 8, // 直近4往復まで(古いやりとりまで送るとノイズになる)
+        })
+      : [];
+    const history = recentMessages.reverse().map((m) => ({
+      role: (m.role === MessageRole.USER ? 'user' : 'assistant') as
+        | 'user'
+        | 'assistant',
+      content: m.content.slice(0, 500),
+    }));
+
+    // 3) 質問を保存(画像そのものは保存しない。添付があったことだけ履歴に残す)
     await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
@@ -64,12 +80,12 @@ export class ChatService {
       },
     });
 
-    // 3) RAG検索。失敗しても例外にせず「エラーである」という回答を履歴に残す
+    // 4) RAG検索。失敗しても例外にせず「エラーである」という回答を履歴に残す
     //    (取り込みステータスと同じ発想: 非同期の結果はデータとして記録する)
     let answer: string;
     let citations: RagCitation[] = [];
     try {
-      const result = await this.rag.search(question, image);
+      const result = await this.rag.search(question, image, history);
       answer = result.answer;
       citations = result.citations;
     } catch (e) {

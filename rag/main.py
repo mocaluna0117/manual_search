@@ -30,10 +30,16 @@ MIN_TEXT_CHARS_PER_PAGE = 20
 ALLOWED_IMAGE_FORMATS = {"png", "jpeg", "webp", "gif"}
 
 
+class HistoryMessage(BaseModel):
+    role: str  # 'user' | 'assistant'
+    content: str
+
+
 class SearchRequest(BaseModel):
     question: str
     image_base64: str | None = None  # 質問に添付された画像(任意)
     image_format: str | None = None  # png / jpeg / webp / gif
+    history: list[HistoryMessage] = []  # 同じ会話のこれまでのやりとり(絞り込み対話用)
 
 
 class Citation(BaseModel):
@@ -141,10 +147,18 @@ def search(req: SearchRequest) -> SearchResponse:
 
     <=> はpgvectorのコサイン距離演算子。小さいほど「近い(似ている)」。
     """
-    # 0) 添付画像があればデコードし、検索に使える説明文をClaudeに作らせる。
+    # 0) 会話の続きなら、文脈を織り込んだ独立クエリに書き換える
+    #    (「2です」だけではベクトル検索できないため)
+    retrieval_query = req.question
+    if req.history:
+        try:
+            retrieval_query = answer_generator.rewrite_query(req.question, req.history)
+        except Exception:
+            pass  # 書き換えに失敗しても元の質問文で検索は続行する
+
+    # 0.5) 添付画像があればデコードし、検索に使える説明文をClaudeに作らせる。
     #    「この画面どうすれば？」のような質問文だけでは検索できないため
     image: tuple[bytes, str] | None = None
-    retrieval_query = req.question
     if req.image_base64:
         image_format = (req.image_format or "jpeg").lower()
         if image_format not in ALLOWED_IMAGE_FORMATS:
@@ -156,7 +170,7 @@ def search(req: SearchRequest) -> SearchResponse:
         image = (image_bytes, image_format)
         description = transcriber.describe(image_bytes, image_format)
         if description:
-            retrieval_query = f"{req.question}\n{description}"
+            retrieval_query = f"{retrieval_query}\n{description}"
 
     # 1) 質問文(+画像の説明)を、チャンクと同じ方法でベクトル化
     query_vec = to_vector_literal(embedder.embed_texts([retrieval_query])[0])
@@ -206,7 +220,9 @@ def search(req: SearchRequest) -> SearchResponse:
         for _manual_id, title, content, page, _distance in rows
     ]
     try:
-        answer = answer_generator.generate(req.question, contexts, image=image)
+        answer = answer_generator.generate(
+            req.question, contexts, image=image, history=req.history
+        )
     except Exception as e:
         answer = (
             f"関連しそうなマニュアルが{len(citations)}件見つかりましたが、"
