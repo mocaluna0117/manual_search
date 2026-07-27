@@ -39,6 +39,41 @@ const ALLOWED_IMAGE_TYPES: Record<string, string> = {
   'image/gif': 'gif',
 }
 
+// 引用をマニュアル単位にまとめる(同じマニュアルの複数ページを1カードに集約)
+interface CitationGroup {
+  manualId: string
+  title: string
+  snippet: string // 最も関連度が高いチャンクの抜粋
+  topPage: number | null // 最も関連度が高いページ(タイトルクリック時に開く)
+  pages: number[] // ページリンク一覧(昇順)
+}
+
+function groupCitations(
+  citations: ChatMessage['citations'],
+): CitationGroup[] {
+  const groups: CitationGroup[] = []
+  const byId = new Map<string, CitationGroup>()
+  for (const citation of citations) {
+    let group = byId.get(citation.manualId)
+    if (!group) {
+      group = {
+        manualId: citation.manualId,
+        title: citation.title,
+        snippet: citation.snippet,
+        topPage: citation.pageNumber,
+        pages: [],
+      }
+      byId.set(citation.manualId, group)
+      groups.push(group)
+    }
+    if (citation.pageNumber != null && !group.pages.includes(citation.pageNumber)) {
+      group.pages.push(citation.pageNumber)
+    }
+  }
+  for (const group of groups) group.pages.sort((a, b) => a - b)
+  return groups
+}
+
 /** File → base64文字列(data:プレフィックスを除いた本体) */
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -362,34 +397,49 @@ export function ChatHome({
                 </VStack>
               )}
 
-              {/* 根拠マニュアル(引用)。クリックでPDFが開く */}
+              {/* 根拠マニュアル(引用)。マニュアル単位に1カード、ページはリンクで並べる */}
               {message.citations.length > 0 && (
                 <VStack mt={2} gap={1} align="stretch">
-                  {message.citations.map((citation, i) => (
+                  {groupCitations(message.citations).map((group) => (
                     <Box
-                      key={`${citation.manualId}-${i}`}
+                      key={group.manualId}
                       fontSize="sm"
                       bg="white"
                       borderRadius="md"
                       px={3}
                       py={2}
-                      cursor="pointer"
-                      _hover={{ bg: 'blue.50' }}
-                      onClick={() =>
-                        openManual(
-                          citation.manualId,
-                          citation.title,
-                          citation.pageNumber,
-                        )
-                      }
                     >
-                      <Text fontWeight="medium" color="blue.600">
-                        📄 {citation.title}
-                        {citation.pageNumber ? `（p.${citation.pageNumber}）` : ''} ↗
+                      <Text
+                        fontWeight="medium"
+                        color="blue.600"
+                        cursor="pointer"
+                        _hover={{ textDecoration: 'underline' }}
+                        onClick={() =>
+                          openManual(group.manualId, group.title, group.topPage)
+                        }
+                      >
+                        📄 {group.title} ↗
                       </Text>
                       <Text color="gray.500" lineClamp={2}>
-                        {citation.snippet}
+                        {group.snippet}
                       </Text>
+                      {group.pages.length > 0 && (
+                        <HStack mt={1} gap={1} flexWrap="wrap">
+                          {group.pages.map((page) => (
+                            <Button
+                              key={page}
+                              size="2xs"
+                              variant="outline"
+                              colorPalette="blue"
+                              onClick={() =>
+                                openManual(group.manualId, group.title, page)
+                              }
+                            >
+                              p.{page}
+                            </Button>
+                          ))}
+                        </HStack>
+                      )}
                     </Box>
                   ))}
                 </VStack>
