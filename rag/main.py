@@ -60,6 +60,63 @@ class SearchResponse(BaseModel):
 
 OPTION_PATTERN = re.compile(r"^\[選択肢\]\s*(.+)$", re.MULTILINE)
 
+TOP_K = 8  # Claudeに渡す抜粋の数
+
+
+def hybrid_search(cur, query_vec: str, terms: list[str]):
+    """ベクトル検索とキーワード検索の結果をRRF(Reciprocal Rank Fusion)で融合する。
+
+    ベクトル検索は「意味の近さ」に強いが、電話番号・型番・固有名詞のような
+    「文字通りの一致」に弱い。キーワード検索はその逆。2つの順位を
+    score = Σ 1/(60+順位) で足し合わせ、両方の得意分野を活かす。
+    """
+    # ルート1: ベクトル検索(意味の近さ)
+    cur.execute(
+        """
+        SELECT mc.id, mc.manual_id, m.title, mc.content, mc.page_number
+        FROM "ManualChunk" mc
+        JOIN "Manual" m ON m.id = mc.manual_id
+        WHERE mc.embedding IS NOT NULL
+        ORDER BY mc.embedding <=> %s::vector
+        LIMIT 20
+        """,
+        (query_vec,),
+    )
+    vector_rows = cur.fetchall()
+
+    # ルート2: キーワード一致(マッチしたキーワード数が多い順)
+    keyword_rows = []
+    if terms:
+        hit_expr = " + ".join(
+            ["(CASE WHEN mc.content ILIKE %s THEN 1 ELSE 0 END)"] * len(terms)
+        )
+        cur.execute(
+            f"""
+            SELECT mc.id, mc.manual_id, m.title, mc.content, mc.page_number,
+                   ({hit_expr}) AS hits
+            FROM "ManualChunk" mc
+            JOIN "Manual" m ON m.id = mc.manual_id
+            WHERE mc.embedding IS NOT NULL
+            ORDER BY hits DESC
+            LIMIT 20
+            """,
+            [f"%{t}%" for t in terms],
+        )
+        keyword_rows = [r for r in cur.fetchall() if r[5] > 0]
+
+    # RRFで融合(同じチャンクが両ルートに出たら得点が加算される)
+    scores: dict[str, float] = {}
+    meta: dict[str, tuple] = {}
+    for rank, row in enumerate(vector_rows, start=1):
+        scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
+        meta[row[0]] = row[1:5]
+    for rank, row in enumerate(keyword_rows, start=1):
+        scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
+        meta.setdefault(row[0], row[1:5])
+
+    ranked = sorted(scores, key=lambda cid: scores[cid], reverse=True)[:TOP_K]
+    return [meta[cid] for cid in ranked]  # (manual_id, title, content, page_number)
+
 
 def extract_options(answer: str) -> tuple[str, list[str]]:
     """回答文から[選択肢]行を抜き出し、(本文, 選択肢リスト)に分ける"""
@@ -159,14 +216,13 @@ def search(req: SearchRequest) -> SearchResponse:
 
     <=> はpgvectorのコサイン距離演算子。小さいほど「近い(似ている)」。
     """
-    # 0) 会話の続きなら、文脈を織り込んだ独立クエリに書き換える
-    #    (「2です」だけではベクトル検索できないため)
+    # 0) 質問を「同義語込みの検索キーワード列」に展開する(クエリ拡張)。
+    #    質問者とマニュアルの語彙のずれを吸収し、会話の続き(「2です」等)は文脈も織り込む
     retrieval_query = req.question
-    if req.history:
-        try:
-            retrieval_query = answer_generator.rewrite_query(req.question, req.history)
-        except Exception:
-            pass  # 書き換えに失敗しても元の質問文で検索は続行する
+    try:
+        retrieval_query = answer_generator.rewrite_query(req.question, req.history)
+    except Exception:
+        pass  # 展開に失敗しても元の質問文で検索は続行する
 
     # 0.5) 添付画像があればデコードし、検索に使える説明文をClaudeに作らせる。
     #    「この画面どうすれば？」のような質問文だけでは検索できないため
@@ -187,22 +243,11 @@ def search(req: SearchRequest) -> SearchResponse:
     # 1) 質問文(+画像の説明)を、チャンクと同じ方法でベクトル化
     query_vec = to_vector_literal(embedder.embed_texts([retrieval_query])[0])
 
-    # 2) コサイン距離が近い順にチャンクを取得(マニュアル情報もJOINで添える)
+    # 2) ハイブリッド検索: ベクトル(意味) + キーワード一致(数字や固有名詞に強い)
+    terms = [t for t in re.split(r"\s+", retrieval_query) if len(t) >= 2][:10]
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT mc.manual_id, m.title, mc.content, mc.page_number,
-                       (mc.embedding <=> %s::vector) AS distance
-                FROM "ManualChunk" mc
-                JOIN "Manual" m ON m.id = mc.manual_id
-                WHERE mc.embedding IS NOT NULL
-                ORDER BY distance
-                LIMIT 5
-                """,
-                (query_vec,),
-            )
-            rows = cur.fetchall()
+            rows = hybrid_search(cur, query_vec, terms)
 
     if not rows:
         return SearchResponse(
@@ -210,10 +255,10 @@ def search(req: SearchRequest) -> SearchResponse:
             citations=[],
         )
 
-    # 引用は「同じマニュアルの同じページ」をまとめる(近い順は維持)
+    # 引用は「同じマニュアルの同じページ」をまとめる(スコア順は維持)
     citations: list[Citation] = []
     seen: set[tuple[str, int | None]] = set()
-    for manual_id, title, content, page, _distance in rows:
+    for manual_id, title, content, page in rows:
         if (manual_id, page) in seen:
             continue
         seen.add((manual_id, page))
@@ -229,7 +274,7 @@ def search(req: SearchRequest) -> SearchResponse:
             title=f"{title}(p.{page})" if page else title,
             content=content,
         )
-        for _manual_id, title, content, page, _distance in rows
+        for _manual_id, title, content, page in rows
     ]
     options: list[str] = []
     try:
