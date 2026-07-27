@@ -8,6 +8,7 @@ interface RagSearchResponse {
     manual_id: string;
     title: string;
     snippet: string;
+    page: number | null;
   }[];
 }
 
@@ -81,6 +82,7 @@ export class RagService {
         manualId: c.manual_id,
         title: c.title,
         snippet: c.snippet,
+        pageNumber: c.page ?? null,
       })),
     };
   }

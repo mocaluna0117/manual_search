@@ -279,10 +279,17 @@ export function ChatHome({
                       py={2}
                       cursor="pointer"
                       _hover={{ bg: 'blue.50' }}
-                      onClick={() => openManual(citation.manualId, citation.title)}
+                      onClick={() =>
+                        openManual(
+                          citation.manualId,
+                          citation.title,
+                          citation.pageNumber,
+                        )
+                      }
                     >
                       <Text fontWeight="medium" color="blue.600">
-                        📄 {citation.title} ↗
+                        📄 {citation.title}
+                        {citation.pageNumber ? `（p.${citation.pageNumber}）` : ''} ↗
                       </Text>
                       <Text color="gray.500" lineClamp={2}>
                         {citation.snippet}

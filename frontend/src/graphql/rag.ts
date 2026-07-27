@@ -4,6 +4,7 @@ export interface RagCitation {
   manualId: string
   title: string
   snippet: string
+  pageNumber: number | null
 }
 
 interface RagSearchData {
@@ -26,6 +27,7 @@ export const RAG_SEARCH_QUERY: TypedDocumentNode<RagSearchData, RagSearchVars> =
           manualId
           title
           snippet
+          pageNumber
         }
       }
     }

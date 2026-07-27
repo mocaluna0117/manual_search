@@ -56,6 +56,7 @@ export const CONVERSATION_QUERY: TypedDocumentNode<
           manualId
           title
           snippet
+          pageNumber
         }
       }
     }
@@ -100,6 +101,7 @@ export const ASK_MUTATION: TypedDocumentNode<AskData, AskVars> = gql`
           manualId
           title
           snippet
+          pageNumber
         }
       }
     }

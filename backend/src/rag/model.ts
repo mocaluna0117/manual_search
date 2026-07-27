@@ -1,4 +1,4 @@
-import { Field, ObjectType } from '@nestjs/graphql';
+import { Field, Int, ObjectType } from '@nestjs/graphql';
 
 // 回答の根拠となったマニュアルの断片
 @ObjectType()
@@ -11,6 +11,10 @@ export class RagCitation {
 
   @Field()
   snippet!: string;
+
+  // 元PDFの何ページ目か(ページ単位のピンポイント引用)
+  @Field(() => Int, { nullable: true })
+  pageNumber!: number | null;
 }
 
 @ObjectType()

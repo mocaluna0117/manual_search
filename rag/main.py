@@ -42,6 +42,7 @@ class Citation(BaseModel):
     manual_id: str
     title: str
     snippet: str
+    page: int | None = None  # 元PDFの何ページ目か
 
 
 class SearchResponse(BaseModel):
@@ -103,24 +104,27 @@ def ingest(req: IngestRequest) -> IngestResponse:
                 # 1ページの失敗で取り込み全体を止めない(そのページだけ諦める)
                 continue
 
-    full_text = "\n".join(pages)
-    chunks = split_text(full_text)
+    # 3) ページごとにチャンク化する(どのページ由来かを記録し、引用をページ単位にするため)
+    chunks: list[tuple[str, int]] = []  # (本文, ページ番号)
+    for page_no, text in enumerate(pages, start=1):
+        for piece in split_text(text):
+            chunks.append((piece, page_no))
 
-    # 3) 各チャンクをベクトル化
-    embeddings = embedder.embed_texts(chunks)
+    # 4) 各チャンクをベクトル化
+    embeddings = embedder.embed_texts([c[0] for c in chunks])
 
-    # 4) チャンクをDBへ保存(再取り込みに備え、同じマニュアルの既存チャンクは入れ替え)
+    # 5) チャンクをDBへ保存(再取り込みに備え、同じマニュアルの既存チャンクは入れ替え)
     with psycopg.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 'DELETE FROM "ManualChunk" WHERE manual_id = %s',
                 (req.manual_id,),
             )
-            for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+            for i, ((content, page_no), emb) in enumerate(zip(chunks, embeddings)):
                 cur.execute(
-                    'INSERT INTO "ManualChunk" (id, manual_id, chunk_index, content, embedding) '
-                    "VALUES (gen_random_uuid(), %s, %s, %s, %s::vector)",
-                    (req.manual_id, i, chunk, to_vector_literal(emb)),
+                    'INSERT INTO "ManualChunk" (id, manual_id, chunk_index, page_number, content, embedding) '
+                    "VALUES (gen_random_uuid(), %s, %s, %s, %s, %s::vector)",
+                    (req.manual_id, i, page_no, content, to_vector_literal(emb)),
                 )
 
     return IngestResponse(
@@ -162,7 +166,7 @@ def search(req: SearchRequest) -> SearchResponse:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT mc.manual_id, m.title, mc.content,
+                SELECT mc.manual_id, m.title, mc.content, mc.page_number,
                        (mc.embedding <=> %s::vector) AS distance
                 FROM "ManualChunk" mc
                 JOIN "Manual" m ON m.id = mc.manual_id
@@ -180,16 +184,26 @@ def search(req: SearchRequest) -> SearchResponse:
             citations=[],
         )
 
-    citations = [
-        Citation(manual_id=manual_id, title=title, snippet=content[:150])
-        for manual_id, title, content, _distance in rows
-    ]
+    # 引用は「同じマニュアルの同じページ」をまとめる(近い順は維持)
+    citations: list[Citation] = []
+    seen: set[tuple[str, int | None]] = set()
+    for manual_id, title, content, page, _distance in rows:
+        if (manual_id, page) in seen:
+            continue
+        seen.add((manual_id, page))
+        citations.append(
+            Citation(manual_id=manual_id, title=title, snippet=content[:150], page=page)
+        )
 
     # 3) 取得した抜粋を根拠として、Claudeに回答文を書かせる。
+    #    抜粋の見出しにページ番号を含めるので、回答文でも「(p.3)」のように言及できる。
     #    生成に失敗しても検索結果(引用)だけは返す(全滅させない)
     contexts = [
-        Context(title=title, content=content)
-        for _manual_id, title, content, _distance in rows
+        Context(
+            title=f"{title}(p.{page})" if page else title,
+            content=content,
+        )
+        for _manual_id, title, content, page, _distance in rows
     ]
     try:
         answer = answer_generator.generate(req.question, contexts, image=image)

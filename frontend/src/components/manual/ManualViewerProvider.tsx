@@ -11,8 +11,8 @@ import { createContext, useContext, useState, type ReactNode } from 'react'
 import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
 
 interface ManualViewerContextValue {
-  /** どの画面からでもこれを呼ぶと、アプリ内モーダルでPDFが開く */
-  openManual: (id: string, title: string) => void
+  /** どの画面からでもこれを呼ぶと、アプリ内モーダルでPDFが開く(pageで特定ページを直接表示) */
+  openManual: (id: string, title: string, page?: number | null) => void
 }
 
 const ManualViewerContext = createContext<ManualViewerContextValue | null>(null)
@@ -37,12 +37,14 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
     fetchPolicy: 'no-cache',
   })
 
-  const openManual = async (id: string, title: string) => {
+  const openManual = async (id: string, title: string, page?: number | null) => {
     setViewing({ id, title })
     setUrl(null) // 前のPDFが一瞬見えないようにリセット
     const { data, error } = await fetchDownloadUrl({ variables: { id } })
     if (data) {
-      setUrl(data.manualDownloadUrl)
+      // #page=N はブラウザ内蔵PDFビューアの機能。該当ページを直接表示する
+      // (URLフラグメントはサーバーに送られないので署名の検証にも影響しない)
+      setUrl(data.manualDownloadUrl + (page ? `#page=${page}` : ''))
     } else if (error) {
       setViewing(null)
       window.alert('このマニュアルは削除された可能性があり、開けませんでした')

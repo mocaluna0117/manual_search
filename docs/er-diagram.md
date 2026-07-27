@@ -38,6 +38,7 @@ erDiagram
         string id PK
         string manualId FK
         int chunkIndex "何番目の断片か"
+        int pageNumber "元PDFのページ(nullable)"
         string content "抽出テキスト"
         vector embedding "pgvector 1024次元"
         datetime createdAt

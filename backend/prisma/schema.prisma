@@ -93,6 +93,7 @@ model ManualChunk {
   manualId   String                       @map("manual_id")
   manual     Manual                       @relation(fields: [manualId], references: [id], onDelete: Cascade)
   chunkIndex Int                          @map("chunk_index")
+  pageNumber Int?                         @map("page_number") // 元PDFの何ページ目か(ピンポイント引用用)
   content    String
   embedding  Unsupported("vector(1024)")? // Titan Embeddings V2 = 1024次元
   createdAt  DateTime                     @default(now()) @map("created_at")
