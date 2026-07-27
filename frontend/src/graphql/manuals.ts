@@ -47,6 +47,9 @@ interface RegisterManualData {
   registerManual: {
     manual: Manual
     outcome: RegisterOutcome
+    // 判定に使った更新日時(nullは「不明で比較できなかった」)
+    existingFileLastModified: string | null
+    incomingFileLastModified: string | null
   }
 }
 
@@ -59,6 +62,7 @@ interface RegisterManualVars {
     categoryId?: string
     autoCategorize?: boolean
     fileLastModified?: string // ISO8601。同名アップロード時の新旧判定に使う
+    forceReplace?: boolean // スキップされた後に「それでも差し替える」で使う
   }
 }
 
@@ -69,6 +73,8 @@ export const REGISTER_MANUAL_MUTATION: TypedDocumentNode<
   mutation RegisterManual($input: RegisterManualInput!) {
     registerManual(input: $input) {
       outcome
+      existingFileLastModified
+      incomingFileLastModified
       manual {
         id
         title

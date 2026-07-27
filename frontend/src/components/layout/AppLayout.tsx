@@ -13,7 +13,7 @@ interface AppLayoutProps {
   onSearch: (keyword: string) => void
 }
 
-/** 画面全体の骨組み: 左サイドバー + メインエリア */
+/** 画面全体の骨組み: 左サイドバー(スマホではDrawer) + メインエリア */
 export function AppLayout({
   children,
   selectedCategoryId,
@@ -24,7 +24,9 @@ export function AppLayout({
   onSearch,
 }: AppLayoutProps) {
   return (
-    <Flex h="100vh">
+    // dvh(dynamic viewport height)を使う。vhだとスマホのソフトキーボードや
+    // アドレスバーで表示領域が縮んだときに下部の入力欄が隠れてしまう
+    <Flex h="100dvh">
       <Sidebar
         selectedCategoryId={selectedCategoryId}
         selectedConversationId={selectedConversationId}
@@ -33,7 +35,7 @@ export function AppLayout({
         onSelectUncategorized={onSelectUncategorized}
         onSearch={onSearch}
       />
-      <Box as="main" flex="1" overflowY="auto">
+      <Box as="main" flex="1" minW={0} overflowY="auto">
         {children}
       </Box>
     </Flex>

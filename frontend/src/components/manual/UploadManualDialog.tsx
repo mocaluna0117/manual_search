@@ -34,7 +34,17 @@ interface UploadItem {
   title: string
   status: 'pending' | 'uploading' | 'done' | 'error'
   outcome?: RegisterOutcome // 完了後: 新規追加 / 既存を更新 / 古いのでスキップ
+  // スキップされたときに判定根拠を画面で説明するための日時
+  existingDate?: string | null
+  incomingDate?: string | null
   error?: string
+}
+
+/** 日時を読みやすい形にする(不明ならその旨を返す) */
+function formatDate(iso?: string | null): string {
+  if (!iso) return '不明'
+  const d = new Date(iso)
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function StatusBadge({ item }: { item: UploadItem }) {
@@ -57,12 +67,16 @@ function StatusBadge({ item }: { item: UploadItem }) {
 }
 
 /** 完了後に「何が起きたか」を1行で説明する */
-function outcomeNote(outcome?: RegisterOutcome): string | null {
-  switch (outcome) {
+function outcomeNote(item: UploadItem): string | null {
+  switch (item.outcome) {
     case 'UPDATED':
       return '同名の既存マニュアルを、この新しいファイルで置き換えました'
     case 'SKIPPED_OLDER':
-      return '既存マニュアルの方が新しいため、取り込みませんでした'
+      // 判定の根拠になった日時を必ず見せる(なぜスキップされたか分かるように)
+      return (
+        `既存マニュアルの方が新しいため取り込みませんでした` +
+        `（既存: ${formatDate(item.existingDate)} / 今回: ${formatDate(item.incomingDate)}）`
+      )
     default:
       return null
   }
@@ -115,78 +129,92 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
     onClose()
   }
 
+  /** 指定した1件をアップロードして登録する(強制差し替えの再実行にも使う) */
+  const uploadOne = async (index: number, forceReplace = false) => {
+    const item = items[index]
+    if (!item) return
+    setItems((prev) =>
+      prev.map((it, idx) => (idx === index ? { ...it, status: 'uploading' } : it)),
+    )
+    try {
+      // 1) アップロード専用URLをもらう
+      const { data } = await createUploadUrl({
+        variables: { fileName: item.file.name },
+      })
+      if (!data) throw new Error('URLの発行に失敗しました')
+      const { uploadUrl, fileKey } = data.createManualUploadUrl
+
+      // 2) ストレージへ直接PUT
+      const putResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: item.file,
+      })
+      if (!putResponse.ok) {
+        throw new Error(`アップロードに失敗しました (HTTP ${putResponse.status})`)
+      }
+
+      // 3) メタデータをDBに登録(取り込みは自動で始まる)
+      const { data: registered } = await registerManual({
+        variables: {
+          input: {
+            title: item.title.trim() || item.file.name,
+            fileKey,
+            fileName: item.file.name,
+            size: item.file.size,
+            categoryId:
+              categoryId && categoryId !== '__auto' ? categoryId : undefined,
+            // 「AIにおまかせ」なら取り込み完了後に自動でカテゴリが付く
+            autoCategorize: categoryId === '__auto' || undefined,
+            // 同名マニュアルがある場合の新旧判定に使う(ブラウザが持つファイルの更新日時)
+            fileLastModified: new Date(item.file.lastModified).toISOString(),
+            forceReplace: forceReplace || undefined,
+          },
+        },
+      })
+      setItems((prev) =>
+        prev.map((it, idx) =>
+          idx === index
+            ? {
+                ...it,
+                status: 'done',
+                outcome: registered?.registerManual.outcome,
+                existingDate: registered?.registerManual.existingFileLastModified,
+                incomingDate: registered?.registerManual.incomingFileLastModified,
+              }
+            : it,
+        ),
+      )
+    } catch (e) {
+      setItems((prev) =>
+        prev.map((it, idx) =>
+          idx === index
+            ? {
+                ...it,
+                status: 'error',
+                error: e instanceof Error ? e.message : '不明なエラー',
+              }
+            : it,
+        ),
+      )
+    }
+  }
+
   /** 1件ずつ順番にアップロード。'done'はスキップするので失敗分の再試行も同じボタン */
   const handleUpload = async () => {
     if (items.length === 0) return
     setUploading(true)
-
     for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      if (item.status === 'done') continue
-      setItems((prev) =>
-        prev.map((it, idx) => (idx === i ? { ...it, status: 'uploading' } : it)),
-      )
-      try {
-        // 1) アップロード専用URLをもらう
-        const { data } = await createUploadUrl({
-          variables: { fileName: item.file.name },
-        })
-        if (!data) throw new Error('URLの発行に失敗しました')
-        const { uploadUrl, fileKey } = data.createManualUploadUrl
-
-        // 2) ストレージへ直接PUT
-        const putResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/pdf' },
-          body: item.file,
-        })
-        if (!putResponse.ok) {
-          throw new Error(`アップロードに失敗しました (HTTP ${putResponse.status})`)
-        }
-
-        // 3) メタデータをDBに登録(取り込みは自動で始まる)
-        const { data: registered } = await registerManual({
-          variables: {
-            input: {
-              title: item.title.trim() || item.file.name,
-              fileKey,
-              fileName: item.file.name,
-              size: item.file.size,
-              categoryId:
-                categoryId && categoryId !== '__auto' ? categoryId : undefined,
-              // 「AIにおまかせ」なら取り込み完了後に自動でカテゴリが付く
-              autoCategorize: categoryId === '__auto' || undefined,
-              // 同名マニュアルがある場合の新旧判定に使う(ブラウザが持つファイルの更新日時)
-              fileLastModified: new Date(item.file.lastModified).toISOString(),
-            },
-          },
-        })
-        setItems((prev) =>
-          prev.map((it, idx) =>
-            idx === i
-              ? {
-                  ...it,
-                  status: 'done',
-                  outcome: registered?.registerManual.outcome,
-                }
-              : it,
-          ),
-        )
-      } catch (e) {
-        setItems((prev) =>
-          prev.map((it, idx) =>
-            idx === i
-              ? {
-                  ...it,
-                  status: 'error',
-                  error: e instanceof Error ? e.message : '不明なエラー',
-                }
-              : it,
-          ),
-        )
-      }
+      if (items[i].status === 'done') continue
+      await uploadOne(i)
     }
+    setUploading(false)
+  }
 
+  /** スキップされた1件を、判定を無視して差し替える */
+  const handleForceReplace = async (index: number) => {
+    setUploading(true)
+    await uploadOne(index, true)
     setUploading(false)
   }
 
@@ -294,7 +322,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                           )}
 
                         {/* アップロード後: 何が起きたかの説明 */}
-                        {item.status === 'done' && outcomeNote(item.outcome) && (
+                        {item.status === 'done' && outcomeNote(item) && (
                           <Text
                             fontSize="xs"
                             color={
@@ -304,9 +332,24 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                             }
                             mt={1}
                           >
-                            {outcomeNote(item.outcome)}
+                            {outcomeNote(item)}
                           </Text>
                         )}
+
+                        {/* スキップされた場合の逃げ道: 判定を無視して差し替える */}
+                        {item.status === 'done' &&
+                          item.outcome === 'SKIPPED_OLDER' && (
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              colorPalette="orange"
+                              mt={1}
+                              loading={uploading}
+                              onClick={() => void handleForceReplace(i)}
+                            >
+                              それでも差し替える
+                            </Button>
+                          )}
 
                         {item.error && (
                           <Text fontSize="xs" color="fg.error" mt={1}>

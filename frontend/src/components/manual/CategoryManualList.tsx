@@ -8,6 +8,7 @@ import {
   HStack,
   NativeSelect,
   Spinner,
+  Stack,
   Text,
   VStack,
 } from '@chakra-ui/react'
@@ -183,7 +184,7 @@ export function CategoryManualList({
   }
 
   return (
-    <Box p={8} maxW="800px" mx="auto">
+    <Box p={{ base: 4, md: 8 }} pt={{ base: 14, md: 8 }} maxW="800px" mx="auto">
       <Heading size="lg" mb={6}>
         📁 {categoryName}
       </Heading>
@@ -196,7 +197,7 @@ export function CategoryManualList({
 
       {/* まとめて移動の操作バー(管理者のみ) */}
       {isAdmin && (data?.manuals.length ?? 0) > 0 && (
-        <HStack mb={4} gap={3}>
+        <HStack mb={4} gap={3} flexWrap="wrap">
           {/* 未分類ビューにだけ出る: AIによる一括自動分類 */}
           {uncategorized && (
             <Button
@@ -256,7 +257,12 @@ export function CategoryManualList({
         {data?.manuals.map((manual) => (
           <Card.Root key={manual.id} size="sm">
             <Card.Body>
-              <HStack justify="space-between" align="start">
+              <Stack
+                direction={{ base: 'column', md: 'row' }}
+                justify="space-between"
+                align={{ base: 'stretch', md: 'start' }}
+                gap={3}
+              >
                 {/* まとめて移動用のチェックボックス */}
                 {isAdmin && (
                   <input
@@ -336,7 +342,7 @@ export function CategoryManualList({
                     </Button>
                   )}
                 </HStack>
-              </HStack>
+              </Stack>
             </Card.Body>
           </Card.Root>
         ))}

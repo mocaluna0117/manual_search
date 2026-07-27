@@ -26,4 +26,8 @@ export class RegisterManualInput {
   // 元ファイルの最終更新日時。同名マニュアルがある場合の新旧判定に使う
   @Field(() => GraphQLISODateTime, { nullable: true })
   fileLastModified?: Date;
+
+  // trueなら新旧の判定を飛ばして既存を差し替える(スキップされた後の「それでも差し替える」用)
+  @Field(() => Boolean, { nullable: true })
+  forceReplace?: boolean;
 }

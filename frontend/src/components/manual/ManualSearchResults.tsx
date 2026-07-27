@@ -4,8 +4,8 @@ import {
   Button,
   Card,
   Heading,
-  HStack,
   Spinner,
+  Stack,
   Text,
   VStack,
 } from '@chakra-ui/react'
@@ -46,7 +46,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
   const { openManual } = useManualViewer()
 
   return (
-    <Box p={8} maxW="800px" mx="auto">
+    <Box p={{ base: 4, md: 8 }} pt={{ base: 14, md: 8 }} maxW="800px" mx="auto">
       <Heading size="lg" mb={2}>
         🔍 「{keyword}」の検索結果
       </Heading>
@@ -63,7 +63,12 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
         {data?.searchManuals.map(({ manual, snippet }) => (
           <Card.Root key={manual.id} size="sm">
             <Card.Body>
-              <HStack justify="space-between" align="start">
+              <Stack
+                direction={{ base: 'column', md: 'row' }}
+                justify="space-between"
+                align={{ base: 'stretch', md: 'start' }}
+                gap={3}
+              >
                 <Box>
                   <Card.Title>
                     <HighlightedText text={manual.title} keyword={keyword} />
@@ -87,7 +92,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
                 >
                   開く
                 </Button>
-              </HStack>
+              </Stack>
             </Card.Body>
           </Card.Root>
         ))}

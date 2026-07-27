@@ -82,6 +82,14 @@ export class RegisterManualResult {
 
   @Field(() => RegisterOutcome)
   outcome!: RegisterOutcome;
+
+  // 判定に使った2つの更新日時。スキップされた理由を画面で説明するために返す
+  // (nullは「その情報が無い」= 比較できなかったことを意味する)
+  @Field(() => Date, { nullable: true })
+  existingFileLastModified?: Date | null;
+
+  @Field(() => Date, { nullable: true })
+  incomingFileLastModified?: Date | null;
 }
 
 // AI自動分類の実行結果

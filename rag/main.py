@@ -81,6 +81,9 @@ TOP_K = 8  # Claudeに渡す抜粋の数
 def hybrid_search(cur, query_vec: str, terms: list[str]):
     """ベクトル検索とキーワード検索の結果をRRF(Reciprocal Rank Fusion)で融合する。
 
+    取り込みが完了していないマニュアル(差し替え直後・失敗)は検索対象から除く。
+    そうしないと「新しいPDFに差し替わったのに旧版の内容で回答する」状態になる。
+
     ベクトル検索は「意味の近さ」に強いが、電話番号・型番・固有名詞のような
     「文字通りの一致」に弱い。キーワード検索はその逆。2つの順位を
     score = Σ 1/(60+順位) で足し合わせ、両方の得意分野を活かす。
@@ -92,6 +95,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
         FROM "ManualChunk" mc
         JOIN "Manual" m ON m.id = mc.manual_id
         WHERE mc.embedding IS NOT NULL
+          AND m.ingest_status = 'COMPLETED'
         ORDER BY mc.embedding <=> %s::vector
         LIMIT 20
         """,
@@ -112,6 +116,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
             FROM "ManualChunk" mc
             JOIN "Manual" m ON m.id = mc.manual_id
             WHERE mc.embedding IS NOT NULL
+              AND m.ingest_status = 'COMPLETED'
             ORDER BY hits DESC
             LIMIT 20
             """,

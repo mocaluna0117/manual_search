@@ -2,9 +2,11 @@ import { useMutation, useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
+  Drawer,
   HStack,
   IconButton,
   Input,
+  Portal,
   Separator,
   Spinner,
   Text,
@@ -28,22 +30,26 @@ import { ME_QUERY } from '../../graphql/me'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 
-interface SidebarProps {
+export interface SidebarProps {
   selectedCategoryId: string | null
   selectedConversationId: string | null
   onSelectCategory: (category: Category | null) => void
   onSelectConversation: (conversationId: string) => void
   onSelectUncategorized: () => void
   onSearch: (keyword: string) => void
+  /** 項目を選んだ後に呼ばれる(スマホではDrawerを閉じるために使う) */
+  onNavigate?: () => void
 }
 
-export function Sidebar({
+/** サイドバーの中身。PC(常設)とスマホ(Drawer)の両方から使う */
+export function SidebarContent({
   selectedCategoryId,
   selectedConversationId,
   onSelectCategory,
   onSelectConversation,
   onSelectUncategorized,
   onSearch,
+  onNavigate,
 }: SidebarProps) {
   const auth = useAuth()
   const { data, loading } = useQuery(CATEGORIES_QUERY)
@@ -122,7 +128,9 @@ export function Sidebar({
   }
 
   const handleSearch = () => {
-    if (keyword.trim()) onSearch(keyword.trim())
+    if (!keyword.trim()) return
+    onSearch(keyword.trim())
+    onNavigate?.()
   }
 
   const handleDeleteConversation = async (id: string, title: string) => {
@@ -133,20 +141,7 @@ export function Sidebar({
   }
 
   return (
-    <VStack
-      as="nav"
-      w="260px"
-      h="100vh"
-      p={3}
-      gap={4}
-      align="stretch"
-      bg="bg.subtle"
-      color="fg"
-      borderRightWidth="1px"
-      borderColor="border"
-      // スマホでは非表示、md(768px)以上で表示
-      display={{ base: 'none', md: 'flex' }}
-    >
+    <VStack as="nav" h="100%" p={3} gap={4} align="stretch" color="fg">
       {/* 目立たせすぎず、下部の「マニュアルを追加」と同じ枠線スタイルに揃える */}
       <Button
         variant="outline"
@@ -154,7 +149,10 @@ export function Sidebar({
         color="fg"
         borderColor="border.emphasized"
         _hover={{ bg: 'bg.emphasized' }}
-        onClick={() => onSelectCategory(null)}
+        onClick={() => {
+          onSelectCategory(null)
+          onNavigate?.()
+        }}
       >
         ＋ 新しいチャット
       </Button>
@@ -204,7 +202,10 @@ export function Sidebar({
                 whiteSpace="nowrap"
                 display="block"
                 textAlign="left"
-                onClick={() => onSelectConversation(conversation.id)}
+                onClick={() => {
+                  onSelectConversation(conversation.id)
+                  onNavigate?.()
+                }}
               >
                 {conversation.title}
               </Button>
@@ -300,7 +301,10 @@ export function Sidebar({
                   color="fg"
                   bg={category.id === selectedCategoryId ? 'bg.emphasized' : undefined}
                   _hover={{ bg: 'bg.emphasized' }}
-                  onClick={() => onSelectCategory(category)}
+                  onClick={() => {
+                    onSelectCategory(category)
+                    onNavigate?.()
+                  }}
                 >
                   📁 {category.name}
                 </Button>
@@ -341,7 +345,10 @@ export function Sidebar({
             justifyContent="flex-start"
             color="fg.muted"
             _hover={{ bg: 'bg.emphasized' }}
-            onClick={onSelectUncategorized}
+            onClick={() => {
+              onSelectUncategorized()
+              onNavigate?.()
+            }}
           >
             📂 未分類
           </Button>
@@ -387,5 +394,80 @@ export function Sidebar({
         </HStack>
       </Box>
     </VStack>
+  )
+}
+
+/**
+ * サイドバーのガワ。
+ * - md以上: 画面左に常設
+ * - md未満: ハンバーガーボタン + Drawer(中身は同じSidebarContent)
+ *   スマホでもチャット履歴・キーワード検索・カテゴリ・ログアウトに到達できるようにする
+ */
+export function Sidebar(props: SidebarProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      {/* PC: 常設サイドバー */}
+      <Box
+        w="260px"
+        flexShrink={0}
+        h="100%"
+        bg="bg.subtle"
+        borderRightWidth="1px"
+        borderColor="border"
+        display={{ base: 'none', md: 'block' }}
+      >
+        <SidebarContent {...props} />
+      </Box>
+
+      {/* スマホ: 画面左上のハンバーガーボタン */}
+      <IconButton
+        aria-label="メニューを開く"
+        variant="ghost"
+        size="md"
+        position="fixed"
+        top={2}
+        left={2}
+        zIndex={10}
+        display={{ base: 'flex', md: 'none' }}
+        onClick={() => setOpen(true)}
+      >
+        ☰
+      </IconButton>
+
+      <Drawer.Root
+        open={open}
+        onOpenChange={(e) => setOpen(e.open)}
+        placement="start"
+        size="xs"
+      >
+        <Portal>
+          <Drawer.Backdrop />
+          <Drawer.Positioner>
+            <Drawer.Content bg="bg.subtle">
+              {/* 閉じるボタンは専用の行に置く。
+                  Drawer.CloseTriggerはChakraのレシピで絶対配置になり中身と重なるため、
+                  通常のボタンで自前に閉じる */}
+              <HStack justify="flex-end" px={2} pt={2} flexShrink={0}>
+                <IconButton
+                  aria-label="メニューを閉じる"
+                  variant="ghost"
+                  size="sm"
+                  color="fg.muted"
+                  onClick={() => setOpen(false)}
+                >
+                  ✕
+                </IconButton>
+              </HStack>
+              <Drawer.Body p={0} overflow="hidden">
+                {/* 項目を選んだらDrawerを閉じる */}
+                <SidebarContent {...props} onNavigate={() => setOpen(false)} />
+              </Drawer.Body>
+            </Drawer.Content>
+          </Drawer.Positioner>
+        </Portal>
+      </Drawer.Root>
+    </>
   )
 }

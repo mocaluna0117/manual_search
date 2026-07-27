@@ -84,8 +84,8 @@ export class ManualService {
    * 新しい方だけを残す(古いものをアップロードした場合は取り込まない)。
    */
   async register(input: RegisterManualInput) {
-    // autoCategorizeはDBの列ではないので分離する
-    const { autoCategorize, ...data } = input;
+    // autoCategorize/forceReplaceはDBの列ではないので分離する
+    const { autoCategorize, forceReplace, ...data } = input;
 
     const existing = await this.prisma.manual.findFirst({
       where: { fileName: data.fileName },
@@ -101,51 +101,67 @@ export class ManualService {
       return { manual, outcome: RegisterOutcome.CREATED };
     }
 
-    // 新旧の判定。既存の最終更新日が不明な場合は登録日時で代用する
-    const existingTime = (
-      existing.fileLastModified ?? existing.createdAt
-    ).getTime();
+    // 新旧の判定に使う「元ファイルの最終更新日」。
+    // 既存側がnullのケース(この機能より前に登録されたマニュアル)は「不明」として扱う。
+    // 登録日時(createdAt)で代用してはいけない: それはアップロードした時刻であって
+    // ファイルの更新日ではないため、必ず「既存の方が新しい」と誤判定してしまう
+    const existingTime = existing.fileLastModified?.getTime();
     const incomingTime = data.fileLastModified?.getTime();
+    const compared = {
+      existingFileLastModified: existing.fileLastModified,
+      incomingFileLastModified: data.fileLastModified ?? null,
+    };
 
-    // 送られてきた側の更新日が不明なときは比較できないので、
-    // 既存を壊さない安全側に倒して別マニュアルとして追加する
-    if (incomingTime === undefined) {
-      const manual = await this.prisma.manual.create({ data });
-      void this.runIngest(manual.id, autoCategorize ?? false);
-      return { manual, outcome: RegisterOutcome.CREATED };
+    // どちらかの更新日が不明なら比較できない。
+    // 利用者は「このファイルで更新したい」という意図でアップロードしているので、
+    // 判断できない場合は差し替える(重複を増やさない・意図を尊重する)
+    const canCompare = existingTime !== undefined && incomingTime !== undefined;
+
+    // 既存の方が新しい(または同時刻)なら取り込まない
+    if (!forceReplace && canCompare && incomingTime <= existingTime) {
+      // アップロード済みの実ファイルは迷子になるので消す。
+      // ただし既存と同じキーを送ってきた場合に本体を消さないよう必ず確認する
+      if (data.fileKey !== existing.fileKey) {
+        await this.storage.deleteObject(data.fileKey).catch(() => undefined);
+      }
+      return {
+        manual: existing,
+        outcome: RegisterOutcome.SKIPPED_OLDER,
+        ...compared,
+      };
     }
 
-    // 既存の方が新しい(または同時刻)なら取り込まない。
-    // アップロード済みの実ファイルは迷子になるので消しておく
-    if (incomingTime <= existingTime) {
-      await this.storage.deleteObject(data.fileKey).catch(() => undefined);
-      return { manual: existing, outcome: RegisterOutcome.SKIPPED_OLDER };
-    }
-
-    // 送られてきた方が新しい: 既存を同じIDのまま差し替える。
+    // 差し替える: 既存を同じIDのまま更新する。
     // IDを保つことで、過去の会話に残った引用リンクも生き続ける
     const oldFileKey = existing.fileKey;
-    const manual = await this.prisma.manual.update({
-      where: { id: existing.id },
-      data: {
-        title: data.title,
-        // カテゴリは未指定なら既存の設定を維持する
-        categoryId: data.categoryId ?? existing.categoryId,
-        fileKey: data.fileKey,
-        fileName: data.fileName,
-        fileLastModified: data.fileLastModified,
-        size: data.size,
-        // 中身が変わったので取り込みをやり直す
-        ingestStatus: IngestStatus.PENDING,
-        ingestError: null,
-        chunkCount: null,
-        ingestedAt: null,
-      },
+    const manual = await this.prisma.$transaction(async (tx) => {
+      // 旧版のチャンクは必ずここで消す。残すと取り込みが失敗した場合に
+      // 「新しいPDFに差し替わったのに、AIは旧版の内容で回答する」状態になる
+      await tx.manualChunk.deleteMany({ where: { manualId: existing.id } });
+      return tx.manual.update({
+        where: { id: existing.id },
+        data: {
+          title: data.title,
+          // カテゴリは未指定なら既存の設定を維持する
+          categoryId: data.categoryId ?? existing.categoryId,
+          fileKey: data.fileKey,
+          fileName: data.fileName,
+          fileLastModified: data.fileLastModified,
+          size: data.size,
+          // 中身が変わったので取り込みをやり直す
+          ingestStatus: IngestStatus.PENDING,
+          ingestError: null,
+          chunkCount: null,
+          ingestedAt: null,
+        },
+      });
     });
     // 旧ファイルはもう参照されないので削除(失敗しても登録は成功扱い)
-    await this.storage.deleteObject(oldFileKey).catch(() => undefined);
+    if (oldFileKey !== data.fileKey) {
+      await this.storage.deleteObject(oldFileKey).catch(() => undefined);
+    }
     void this.runIngest(manual.id, autoCategorize ?? false);
-    return { manual, outcome: RegisterOutcome.UPDATED };
+    return { manual, outcome: RegisterOutcome.UPDATED, ...compared };
   }
 
   /** 手動での(再)取り込み。FAILEDになったマニュアルのリトライ用 */

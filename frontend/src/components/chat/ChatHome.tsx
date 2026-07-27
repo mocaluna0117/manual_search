@@ -346,7 +346,7 @@ export function ChatHome({
   // 質問前(新規チャット): 中央に大きく検索欄(ChatGPT風の空状態)
   if (messages.length === 0 && !loadingHistory) {
     return (
-      <VStack h="100%" justify="center" gap={6} px={4}>
+      <VStack h="100%" justify="center" gap={6} px={4} pt={{ base: 12, md: 0 }}>
         <Heading size="2xl">社内マニュアル検索</Heading>
         <Text color="fg.muted">
           知りたいことを入力すると、AIが最適なマニュアルを案内します
@@ -359,7 +359,14 @@ export function ChatHome({
   // スレッド表示 + 下部に入力欄
   return (
     <VStack h="100%" gap={0}>
-      <Box flex="1" w="100%" overflowY="auto" px={4} py={6}>
+      <Box
+        flex="1"
+        w="100%"
+        overflowY="auto"
+        px={4}
+        py={6}
+        pt={{ base: 14, md: 6 }}
+      >
         <VStack maxW="800px" mx="auto" gap={4} align="stretch">
           {loadingHistory && <Spinner alignSelf="center" />}
 
