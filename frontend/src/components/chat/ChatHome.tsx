@@ -5,6 +5,7 @@ import {
   Heading,
   HStack,
   IconButton,
+  Input,
   Image,
   Spinner,
   Text,
@@ -60,6 +61,9 @@ export function ChatHome({
   // サーバーに保存済みのメッセージ + 送信中の楽観的な表示をまとめて持つ
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [attachedImage, setAttachedImage] = useState<File | null>(null)
+  // 選択肢の「その他」: その場に出るインライン入力欄の状態
+  const [otherOpen, setOtherOpen] = useState(false)
+  const [otherText, setOtherText] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -122,12 +126,14 @@ export function ChatHome({
     setAttachedImage(file)
   }
 
-  /** 質問を送る。入力欄からの送信と選択肢ボタンのクリックの両方から使う */
+  /** 質問を送る。入力欄からの送信・選択肢ボタン・その他入力のすべてから使う */
   const send = async (question: string) => {
     if (!question || loading) return
     const image = attachedImage
     setInput('')
     setAttachedImage(null)
+    setOtherOpen(false)
+    setOtherText('')
 
     // まず自分の発言を即表示(楽観的更新)。IDは仮でよい
     setMessages((prev) => [
@@ -328,18 +334,45 @@ export function ChatHome({
                       {option}
                     </Button>
                   ))}
-                  {/* どれにも当てはまらない人向け: 入力欄へ誘導(最新のメッセージにだけ表示) */}
-                  {index === messages.length - 1 && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      color="gray.600"
-                      justifyContent="flex-start"
-                      onClick={() => textareaRef.current?.focus()}
-                    >
-                      ✏️ その他（自由に入力する）
-                    </Button>
-                  )}
+                  {/* どれにも当てはまらない人向け: その場で直接書けるインライン入力
+                      (最新のメッセージにだけ表示) */}
+                  {index === messages.length - 1 &&
+                    (otherOpen ? (
+                      <HStack gap={2}>
+                        <Input
+                          size="sm"
+                          bg="white"
+                          autoFocus
+                          placeholder="自由に入力してEnterで送信（Escで閉じる）"
+                          value={otherText}
+                          onChange={(e) => setOtherText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                              void send(otherText.trim())
+                            }
+                            if (e.key === 'Escape') setOtherOpen(false)
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          colorPalette="blue"
+                          disabled={!otherText.trim() || loading}
+                          onClick={() => void send(otherText.trim())}
+                        >
+                          送信
+                        </Button>
+                      </HStack>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        color="gray.600"
+                        justifyContent="flex-start"
+                        onClick={() => setOtherOpen(true)}
+                      >
+                        ✏️ その他（自由に入力する）
+                      </Button>
+                    ))}
                 </VStack>
               )}
 
