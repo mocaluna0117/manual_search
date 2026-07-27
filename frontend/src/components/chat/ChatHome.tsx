@@ -259,7 +259,7 @@ export function ChatHome({
   const handleSubmit = () => void send(input.trim())
 
   const searchInput = (
-    <VStack w="100%" maxW="640px" gap={2} align="stretch">
+    <VStack w="100%" maxW="800px" gap={2} align="stretch">
       {/* 添付中の画像プレビュー */}
       {attachedImage && (
         <HStack
@@ -360,7 +360,7 @@ export function ChatHome({
   return (
     <VStack h="100%" gap={0}>
       <Box flex="1" w="100%" overflowY="auto" px={4} py={6}>
-        <VStack maxW="640px" mx="auto" gap={4} align="stretch">
+        <VStack maxW="800px" mx="auto" gap={4} align="stretch">
           {loadingHistory && <Spinner alignSelf="center" />}
 
           {messages.map((message, index) => (
