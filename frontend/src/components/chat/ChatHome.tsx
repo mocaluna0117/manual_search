@@ -62,6 +62,9 @@ export function ChatHome({
   const [attachedImage, setAttachedImage] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const lastMessageRef = useRef<HTMLDivElement>(null)
+  // 履歴を開いた直後かどうか(そのときだけ一番下へ即時ジャンプする)
+  const justLoadedHistoryRef = useRef(false)
 
   // 既存の会話を開いた場合は履歴をDBから読み込む
   const { data: conversationData, loading: loadingHistory } = useQuery(
@@ -74,6 +77,7 @@ export function ChatHome({
   )
   useEffect(() => {
     if (conversationData) {
+      justLoadedHistoryRef.current = true
       setMessages(conversationData.conversation.messages)
     }
   }, [conversationData])
@@ -86,9 +90,22 @@ export function ChatHome({
   // 引用カードからアプリ内ビューアでPDFを開く
   const { openManual } = useManualViewer()
 
-  // メッセージが増えたら一番下まで自動スクロール
+  // スクロール制御:
+  // - 履歴を開いた直後: 一番下へ即時ジャンプ(続きから読む位置)
+  // - AIの回答が届いた: 回答の「先頭」に合わせる(長い回答を頭から読めるように)
+  // - それ以外(自分の送信・考え中): 一番下へ
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (justLoadedHistoryRef.current) {
+      justLoadedHistoryRef.current = false
+      bottomRef.current?.scrollIntoView() // 履歴表示はアニメ無しで一気に
+      return
+    }
+    const last = messages[messages.length - 1]
+    if (!loading && last?.role === 'ASSISTANT') {
+      lastMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages, loading])
 
   const handleAttach = (file: File | null) => {
@@ -259,9 +276,11 @@ export function ChatHome({
         <VStack maxW="640px" mx="auto" gap={4} align="stretch">
           {loadingHistory && <Spinner alignSelf="center" />}
 
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <Box
               key={message.id}
+              ref={index === messages.length - 1 ? lastMessageRef : undefined}
+              style={{ scrollMarginTop: '12px' }} // 先頭に合わせた時に少し余白を残す
               alignSelf={message.role === 'USER' ? 'flex-end' : 'flex-start'}
               bg={message.role === 'USER' ? 'blue.500' : 'gray.100'}
               color={message.role === 'USER' ? 'white' : 'gray.900'}
