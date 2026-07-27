@@ -42,11 +42,25 @@ const ALLOWED_IMAGE_TYPES: Record<string, string> = {
 }
 
 // 引用をマニュアル単位にまとめる(同じマニュアルの複数ページを1カードに集約)
+interface PageLink {
+  page: number
+  label: string // ページの見出し(チャンク先頭から推定した短いラベル)
+  snippet: string // ホバー時のツールチップ用(もう少し長い抜粋)
+}
+
 interface CitationGroup {
   manualId: string
   title: string
   topPage: number | null // 最も関連度が高いページ(タイトルクリック時に開く)
-  pages: number[] // ページリンク一覧(昇順)
+  pages: PageLink[] // ページリンク一覧(昇順)
+}
+
+/** チャンク抜粋の先頭から「見出しらしき部分」を短く取り出す */
+function pageLabel(snippet: string): string {
+  const firstLine = snippet.split('\n')[0] ?? ''
+  // 先頭の章番号や記号(「3 」「1.2 」「【」など)を落として本文の言葉から始める
+  const cleaned = firstLine.replace(/^[\d\s.．)）\-【】#*]+/, '').trim()
+  return cleaned.length > 12 ? `${cleaned.slice(0, 12)}…` : cleaned
 }
 
 function groupCitations(
@@ -66,11 +80,18 @@ function groupCitations(
       byId.set(citation.manualId, group)
       groups.push(group)
     }
-    if (citation.pageNumber != null && !group.pages.includes(citation.pageNumber)) {
-      group.pages.push(citation.pageNumber)
+    if (
+      citation.pageNumber != null &&
+      !group.pages.some((p) => p.page === citation.pageNumber)
+    ) {
+      group.pages.push({
+        page: citation.pageNumber,
+        label: pageLabel(citation.snippet),
+        snippet: citation.snippet,
+      })
     }
   }
-  for (const group of groups) group.pages.sort((a, b) => a - b)
+  for (const group of groups) group.pages.sort((a, b) => a.page - b.page)
   return groups
 }
 
@@ -447,17 +468,23 @@ export function ChatHome({
                       </Text>
                       {group.pages.length > 0 && (
                         <HStack mt={1} gap={1} flexWrap="wrap">
-                          {group.pages.map((page) => (
+                          {group.pages.map(({ page, label, snippet }) => (
                             <Button
                               key={page}
                               size="2xs"
                               variant="outline"
                               colorPalette="blue"
+                              title={snippet} // ホバーで抜粋の続きが見える
                               onClick={() =>
                                 openManual(group.manualId, group.title, page)
                               }
                             >
                               p.{page}
+                              {label && (
+                                <Text as="span" fontWeight="normal" ms={1}>
+                                  {label}
+                                </Text>
+                              )}
                             </Button>
                           ))}
                         </HStack>
