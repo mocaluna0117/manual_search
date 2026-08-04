@@ -35,7 +35,7 @@
 ### フェーズ1: ECR（コンテナ置き場）
 - ECRリポジトリを2つ作成: `manual-search/backend`, `manual-search/rag`
 - ローカルでビルドしたイメージをタグ付けしてpush
-- 注意: Apple Silicon Macなので **`--platform linux/amd64`** でビルドし直す（Fargateの標準はamd64。arm64指定も可能だが、まずは定番で）
+- ビルドは **`--platform linux/arm64`**（下の進捗ログの決定を参照）
 - コスト: ~$0.1/GB/月。ほぼ無料
 
 ### フェーズ2: S3バケット
@@ -131,11 +131,24 @@
 pushしたイメージ(圧縮後): backend 287.5MB / rag 95.6MB
 ECRのストレージ代は $0.10/GB/月 なので月$0.04程度。
 
-### 次: フェーズ2(S3バケット)
+### ✅ フェーズ2: S3バケット(完了 2026-07-28)
 
-- `manuals` 用バケット(PDF本体。非公開・presigned URLでのみアクセス)
-- フロント配信用バケット(CloudFront経由でのみ公開: OAC)
-- どちらもほぼ無料。ここまでは固定費が発生しない
+作成したもの(東京リージョン):
+
+- `manual-search-manuals-271357390238` … PDF本体。署名付きURLでのみアクセス
+- `manual-search-frontend-271357390238` … フロントのビルド成果物。CloudFront(OAC)経由でのみ公開
+
+両バケットに設定したもの:
+
+- 公開アクセスを4項目すべてブロック(BlockPublicAcls / IgnorePublicAcls / BlockPublicPolicy / RestrictPublicBuckets)
+- 保管時暗号化 SSE-S3(AES256) + BucketKeyEnabled
+- 検証: 匿名GETは403、認証ありのアップロードは成功
+
+**CORSはフェーズ5で設定する**。ブラウザからの直接アップロードを許可する
+オリジンがCloudFrontのドメインで、その値がフェーズ5まで確定しないため。
+(フロントを配信するまでアップロードは使わないので順序上問題ない)
+
+### 次: フェーズ3(RDS) ← ここから固定費が発生する
 
 ## 6. 未決事項
 
