@@ -148,7 +148,49 @@ ECRのストレージ代は $0.10/GB/月 なので月$0.04程度。
 オリジンがCloudFrontのドメインで、その値がフェーズ5まで確定しないため。
 (フロントを配信するまでアップロードは使わないので順序上問題ない)
 
-### 次: フェーズ3(RDS) ← ここから固定費が発生する
+### ✅ フェーズ3: RDS(完了 2026-07-28) ← ここから固定費が発生
+
+作成したもの:
+
+| 種別 | 値 |
+| --- | --- |
+| DBインスタンス | `manual-search-db` / PostgreSQL **16.14** / **db.t4g.micro**(Graviton) |
+| ストレージ | gp3 20GB・保管時暗号化あり |
+| エンドポイント | `manual-search-db.cl648g46m6kn.ap-northeast-1.rds.amazonaws.com:5432` |
+| 認証情報 | **Secrets Manager** `manual-search/db`(環境変数に直書きしない) |
+| ネットワーク | デフォルトVPC・サブネットグループ`manual-search-subnets`(3AZ) |
+| セキュリティグループ | `manual-search-rds`(sg-0ce62d9c267cad40b) |
+| ECSタスク用SG | `manual-search-ecs`(sg-058aea10195085c48) ← フェーズ4で使う |
+
+**検証済み:**
+
+- pgvector **0.8.2** / pg_trgm 1.6 が有効(ローカルと同じバージョン)
+- `prisma migrate deploy` で全マイグレーション適用済み。テーブル6つ + _prisma_migrations
+- **HNSWインデックスとGIN(trgm)インデックスが正しく作成されている**
+  (RDSでHNSWが使えるかは事前にバージョンを確認: pgvector 0.8.0はPG16.5以降で提供)
+
+**学び: 無料プランにはリソース制限もある**
+
+クレジット上限だけでなく、リソースの構成にも制限がかかる。
+バックアップ保持期間を7日で作成しようとしたら `FreeTierRestrictionError` で拒否され、
+1日に下げて作成した。会社アカウント(有料プラン)へ移行する際は、
+保持期間やマルチAZなどを本番向けに見直す必要がある。
+
+**⚠️ 未処理の設定(フェーズ6で必ず閉じる)**
+
+デバッグとマイグレーションのため、現在RDSは以下の状態にしている:
+
+- `publicly-accessible: true`
+- セキュリティグループで **開発機のIP(114.146.77.12/32)からの5432のみ** 許可
+
+実際の防御はSGの1IP制限 + 48文字のパスワード + TLSだが、IPは変わるので
+フェーズ6の最後に「自分のIPのルール削除」と`--no-publicly-accessible`への変更を行う。
+
+### 次: フェーズ4(ECS Fargate + ALB)
+
+- ARM64のタスク定義2つ(backend / rag)。`runtimePlatform.cpuArchitecture: ARM64`
+- タスクロールでS3・Bedrock・Secrets Managerへの権限を付与(アクセスキーは渡さない)
+- ALBのヘルスチェック用にGETで叩けるエンドポイントが必要(未決事項を参照)
 
 ## 6. 未決事項
 
