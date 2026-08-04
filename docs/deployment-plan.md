@@ -102,8 +102,44 @@
 4. 実マニュアル投入・管理者ロールの割当ルール決定
 5. （推奨）ここまでのCLI手順を IaC（Terraform / CDK）に書き起こして再現性を確保
 
+## 進捗ログ
+
+### ✅ フェーズ1: ECR(完了 2026-07-28)
+
+作成したもの:
+
+- ECRリポジトリ 2つ(東京リージョン)
+  - `271357390238.dkr.ecr.ap-northeast-1.amazonaws.com/manual-search/backend`
+  - `271357390238.dkr.ecr.ap-northeast-1.amazonaws.com/manual-search/rag`
+- push時の脆弱性スキャン有効、ライフサイクルポリシー(直近5世代のみ保持)
+- 予算アラート `free-credit-usage`: $200上限・50/75/90%でメール通知
+  - **`IncludeCredit: false` が重要**。既定(true)だとクレジットで相殺された分が
+    $0として扱われ、クレジットの消費を検知できない
+
+**決定: Fargateは ARM64(Graviton) を使う**
+
+| 理由 | 内容 |
+| --- | --- |
+| コスト | x86_64より約20%安い。無料クレジットが長持ちする |
+| ビルド速度 | 開発機がApple Silicon(arm64)なのでエミュレーション無しでネイティブビルドできる |
+| 対応状況 | ベースイメージ(node:24-slim / python:3.13-slim / nginx:alpine)は全てarm64対応。
+  依存(pypdfium2, pillow, psycopg[binary])もarm64ホイールあり |
+
+→ フェーズ4のタスク定義で `runtimePlatform.cpuArchitecture: ARM64` を指定すること。
+   イメージのビルドは `docker build --platform linux/arm64` で行う。
+
+pushしたイメージ(圧縮後): backend 287.5MB / rag 95.6MB
+ECRのストレージ代は $0.10/GB/月 なので月$0.04程度。
+
+### 次: フェーズ2(S3バケット)
+
+- `manuals` 用バケット(PDF本体。非公開・presigned URLでのみアクセス)
+- フロント配信用バケット(CloudFront経由でのみ公開: OAC)
+- どちらもほぼ無料。ここまでは固定費が発生しない
+
 ## 6. 未決事項
 
-- [ ] 運用モード（常時起動 or 使うときだけ）→ フェーズ3着手前に決定
+- [x] 運用モード → 無料クレジット内(約3ヶ月)のお試しとして常時起動。クレジット消尽でアカウントが自動閉鎖されるため、10月末が実質の期限
+- [ ] 会社AWSアカウントへの移行(本番として継続するなら必須)
 - [ ] ALBヘルスチェック用エンドポイントの実装方式（フェーズ4で決定）
 - [ ] rag→backend間のサービスディスカバリ方式（Service Connect想定）
