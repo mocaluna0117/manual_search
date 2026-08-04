@@ -186,15 +186,138 @@ ECRのストレージ代は $0.10/GB/月 なので月$0.04程度。
 実際の防御はSGの1IP制限 + 48文字のパスワード + TLSだが、IPは変わるので
 フェーズ6の最後に「自分のIPのルール削除」と`--no-publicly-accessible`への変更を行う。
 
-### 次: フェーズ4(ECS Fargate + ALB)
+### ✅ フェーズ4: ECS Fargate + ALB(完了 2026-08-04)
 
-- ARM64のタスク定義2つ(backend / rag)。`runtimePlatform.cpuArchitecture: ARM64`
-- タスクロールでS3・Bedrock・Secrets Managerへの権限を付与(アクセスキーは渡さない)
-- ALBのヘルスチェック用にGETで叩けるエンドポイントが必要(未決事項を参照)
+作成したもの(構成ファイルは `infra/` に保存。会社アカウント移行時に再利用する):
+
+| 種別 | 値 |
+| --- | --- |
+| クラスター | `manual-search`(Service Connect名前空間 `manual-search` を既定に設定) |
+| サービス | `backend`(ALB配下・1タスク) / `rag`(非公開・1タスク) |
+| タスク定義 | backend 0.25vCPU/512MB、rag 0.5vCPU/1GB、migrate 0.25vCPU/512MB。全てARM64 |
+| ALB | `manual-search-alb-1421816805.ap-northeast-1.elb.amazonaws.com` |
+| ヘルスチェック | `GET /healthz`(30秒間隔・2回連続成功でhealthy) |
+| ログ | `/ecs/manual-search/{backend,rag}`(保持7日) |
+| シークレット | `manual-search/app`(DATABASE_URL / RAG_API_TOKEN) |
+| IAMロール | 実行ロール1つ + タスクロール2つ(下記) |
+
+**IAMは「ECSの権限」と「アプリの権限」を分ける**
+
+- `manual-search-ecs-execution`(実行ロール) … ECRからpull・ログ出力・シークレット注入
+- `manual-search-backend-task` … S3の`manuals`バケットのオブジェクトのみ
+- `manual-search-rag-task` … Bedrockの2モデルのみ(S3権限は**不要**。PDFは
+  backendが発行した署名付きURLで取得するため)
+
+アクセスキーはどこにも置いていない。`storage/service.ts`が「キーが設定されている
+ときだけcredentialsを渡す」実装になっているので、ECS上では自動的にタスクロールが使われる。
+
+**メモリはローカルで実測して決めた**
+
+推測でFargateのメモリを決めるとOOMの調査で時間を失う。実測値:
+アイドル時 backend 158MB / rag 99MB、PDF30ページの画像化のピークでも+20MB程度
+(測定時のピーク302MBの大半はテストPDFの生成側だった)。
+→ backend 512MB / rag 1GB で十分な余裕があると判断。
+
+**NAT Gatewayを使わない構成にした**
+
+デフォルトVPCのサブネットは全てパブリックなので、`assignPublicIp=ENABLED`で
+ECR/Bedrock/S3へ直接出る。NAT Gatewayを置くと月$33でALBより高くつく。
+タスクにパブリックIPは付くが、受信はセキュリティグループで塞いでいる
+(ALBからの3000のみ / rag宛8000は同一SG内のみ)。
+
+**ALBはCloudFront経由のみに絞った**
+
+AWS管理のプレフィックスリスト `com.amazonaws.global.cloudfront.origin-facing`
+を使うと、CloudFrontのIP範囲を自分で管理せずに済む(無料)。
+
+### 学び1: ALBのヘルスチェックには専用の公開エンドポイントが必要
+
+雛形の`GET /hello`は**401**を返した。グローバル認証ガード(`APP_GUARD`)はREST経路にも
+適用されるため。これをヘルスチェックに使うとALBが全タスクを異常判定し続ける。
+
+`@Public()`付きの`GET /healthz`を追加し、**DBやRAGは意図的に見ない**ようにした。
+依存先の障害でヘルスチェックを落とすと、ECSがタスクを次々に入れ替えるだけで
+復旧しない(DBが落ちているのはタスクの責任ではない)。
+
+E2Eテストも本番と同じくグローバルガードを有効にした状態で検証している。
+
+### 学び2: RDSのTLS証明書はNodeの標準信頼ストアに無い
+
+最初のデプロイは `P1011 TlsConnectionError: self-signed certificate in certificate chain`
+で起動できなかった。RDSの証明書はAmazon独自のCAで署名されているため。
+
+さらに厄介だったのが、**CAを渡しても効かなかった**こと。原因は
+`pg`が接続文字列を後から解釈して`ssl`設定を上書きすること。
+`sslmode=require`が残っていると`ssl:{}`に差し替えられ、渡したCAが捨てられる
+(pgは`require`を`verify-full`相当として扱うため、CA無しでは必ず失敗する)。
+
+対処:
+
+- CAはイメージのビルド時に取得(ベースイメージのnode/python自身でダウンロード。
+  リポジトリに証明書ファイルを置かない)
+- backend: `sslmode`をURLから除去し、`ssl:{ca, rejectUnauthorized:true}`だけを効かせる
+- rag(psycopg): `sslmode=verify-full` + `sslrootcert`をkwargsで指定
+  (psycopgの`require`は「暗号化するが相手を確認しない」なので不十分)
+
+`rejectUnauthorized:false`にすれば通るが、それでは中間者攻撃を検知できないため採用しない。
+
+**ECRにpushする前に実RDSに対して検証した**(1往復10分の無駄を避けるため):
+sslmode残す→再現、sslmode除去+CA→成功、**空のCA→失敗**(検証が実際に
+行われていることの対照実験)。
+
+### 検証結果: 本番環境で全経路が動作することを確認
+
+検証用の一時ユーザーとテストPDFで一通り流し、**終了後に全て削除済み**(DBは空):
+
+| 経路 | 結果 |
+| --- | --- |
+| ALB → backend `/healthz` | 200 |
+| 未認証のGraphQL | Unauthorized(認証が効いている) |
+| Cognito認証 → JWT検証 → 利用者の自動登録 | User行が自動生成された |
+| backend → RDS(証明書検証付きTLS) | 読み書き成功 |
+| backend → rag(Service Connect `http://rag:8000`) | `ragHealth: ok` |
+| タスクロールでのS3署名付きURL発行 | 成功(ホストがSSRF許可リストと一致) |
+| ブラウザ相当のS3への直接アップロード | 200・SSE-S3で暗号化 |
+| rag → S3ダウンロード → Bedrock埋め込み → pgvector保存 | 2チャンク取り込み成功 |
+| ハイブリッド検索 → Claude Haiku(jp.プロファイル)で回答 | 正しい電話番号を引用付きで回答 |
+
+### 次: フェーズ5(フロント配信 + Cognito更新)
+
+- `npm run build`(VITE_*は本番URL)→ S3へアップロード
+- CloudFront: オリジン2つ(S3 + ALB)、`/graphql`だけALBへ
+- S3のCORS設定(CloudFrontのドメインが確定してから)
+- Cognitoのコールバック/ログアウトURLにCloudFrontドメインを追加
+- backendの`FRONTEND_ORIGIN`をCloudFrontドメインに更新(タスク定義の新リビジョン)
 
 ## 6. 未決事項
 
 - [x] 運用モード → 無料クレジット内(約3ヶ月)のお試しとして常時起動。クレジット消尽でアカウントが自動閉鎖されるため、10月末が実質の期限
 - [ ] 会社AWSアカウントへの移行(本番として継続するなら必須)
-- [ ] ALBヘルスチェック用エンドポイントの実装方式（フェーズ4で決定）
-- [ ] rag→backend間のサービスディスカバリ方式（Service Connect想定）
+- [x] ALBヘルスチェック用エンドポイント → `@Public()`な`GET /healthz`(生存確認のみ)
+- [x] backend→rag間のサービスディスカバリ → ECS Service Connect。
+      クラスターの既定名前空間を`manual-search`にし、`http://rag:8000`で到達できる
+      (ローカルのcompose設定と同じ値のまま動く)
+
+## 7. 運用メモ
+
+**マイグレーションの流し方(フェーズ6でRDSを非公開に戻した後)**
+
+`manual-search-migrate`タスク定義を単発実行する。実行イメージには
+Prisma CLIが入っていないため、Dockerfileのbuildステージを
+`backend:migrate`タグとしてpushしてある。
+
+```
+aws ecs run-task --cluster manual-search --task-definition manual-search-migrate \
+  --launch-type FARGATE --network-configuration \
+  "awsvpcConfiguration={subnets=[subnet-0725bfdde0b078c0b],securityGroups=[sg-058aea10195085c48],assignPublicIp=ENABLED}"
+```
+
+**コンテナに入って調べる(ECS Exec)**
+
+タスクロールに`ecs-exec`ポリシーを付与し、backendサービスで有効化済み。
+利用には`session-manager-plugin`のインストールが必要(sudoが必要なため未導入)。
+
+```
+aws ecs execute-command --cluster manual-search --task <ARN> \
+  --container backend --interactive --command "/bin/sh"
+```
