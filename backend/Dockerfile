@@ -24,5 +24,13 @@ RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
 
+# RDSのTLS証明書を検証するためのAmazon RDS CA(全リージョン分の束)。
+# Nodeの標準信頼ストアには入っていないため自分で持たせる。
+# ベースイメージにcurlが無いのでNode自身で取得する。
+RUN mkdir -p /app/certs && node -e "\
+  fetch('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem') \
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }) \
+    .then(t => require('fs').writeFileSync('/app/certs/rds-ca.pem', t))"
+
 EXPOSE 3000
 CMD ["node", "dist/src/main"]

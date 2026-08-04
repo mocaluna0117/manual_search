@@ -21,6 +21,20 @@ load_dotenv()  # rag/.env を読み込む
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
+# RDSのTLS証明書を検証するためのCAの場所(本番のみ設定される)。
+# psycopgの sslmode=require は「暗号化するが相手が本物か確認しない」なので、
+# CAがあるときは verify-full にして中間者攻撃を検知できる状態にする。
+_DB_SSL_CA = os.environ.get("DATABASE_SSL_CA")
+_DB_SSL_ARGS = (
+    {"sslmode": "verify-full", "sslrootcert": _DB_SSL_CA} if _DB_SSL_CA else {}
+)
+
+
+def db_connect():
+    """DBに接続する。本番ではTLS証明書の検証付き。"""
+    return psycopg.connect(DATABASE_URL, **_DB_SSL_ARGS)
+
+
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Manual Search RAG Service")
@@ -260,7 +274,7 @@ def ingest(req: IngestRequest) -> IngestResponse:
     embeddings = embedder.embed_texts([c[0] for c in chunks])
 
     # 5) チャンクをDBへ保存(再取り込みに備え、同じマニュアルの既存チャンクは入れ替え)
-    with psycopg.connect(DATABASE_URL) as conn:
+    with db_connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 'DELETE FROM "ManualChunk" WHERE manual_id = %s',
@@ -357,7 +371,7 @@ def search(req: SearchRequest) -> SearchResponse:
 
     # 2) ハイブリッド検索: ベクトル(意味) + キーワード一致(数字や固有名詞に強い)
     terms = [t for t in re.split(r"\s+", retrieval_query) if len(t) >= 2][:10]
-    with psycopg.connect(DATABASE_URL) as conn:
+    with db_connect() as conn:
         with conn.cursor() as cur:
             rows = hybrid_search(cur, query_vec, terms)
 
