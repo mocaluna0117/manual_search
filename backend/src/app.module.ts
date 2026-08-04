@@ -3,12 +3,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { join } from 'path';
-import { AppController } from './app.controller';
 import { AppResolver } from './app.resolver';
-import { AppService } from './app.service';
 import { AuthModule } from './auth/module';
 import { CategoryModule } from './category/module';
 import { ChatModule } from './chat/module';
+import { HealthController } from './health/controller';
 import { ManualModule } from './manual/module';
 import { PrismaModule } from './prisma/module';
 import { RagModule } from './rag/module';
@@ -33,7 +32,7 @@ import { RagModule } from './rag/module';
     ManualModule,
     RagModule,
   ],
-  controllers: [AppController],
-  providers: [AppService, AppResolver],
+  controllers: [HealthController],
+  providers: [AppResolver],
 })
 export class AppModule {}
