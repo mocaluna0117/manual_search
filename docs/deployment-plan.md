@@ -402,6 +402,22 @@ aws ecs run-task --cluster manual-search --task-definition manual-search-migrate
   "awsvpcConfiguration={subnets=[subnet-0725bfdde0b078c0b],securityGroups=[sg-058aea10195085c48],assignPublicIp=ENABLED}"
 ```
 
+**管理者(ADMIN)ユーザーの用意**
+
+ログインはJITプロビジョニングで自動登録されるが、ロールは既定で`MEMBER`。
+ADMINにするには`User`テーブルの行を直接更新する。RDSは非公開なので、
+migrateタスクにコマンド上書きでSQLを流す(2026-08-05に実施済みの手順):
+
+- Cognitoのユーザーのsubを控える(`list-users`)
+- `containerOverrides`で `npx prisma db execute --stdin` にSQLをheredocで渡す
+  - `INSERT ... ON CONFLICT (cognito_sub) DO UPDATE SET role='ADMIN'` の形にすると
+    ログイン前(行なし)でもログイン後(行あり)でも同じコマンドで済む
+  - JITは`cognitoSub`で照合するので、事前に入れた行が初回ログインでそのまま使われる
+- 注意(実際に踏んだ):
+  - **Prisma 7では`db execute`の`--url`が廃止**。接続先は`prisma.config.ts`が
+    読む`DATABASE_URL`環境変数(タスク定義がシークレットとして注入)に任せる
+  - シェルに`set -e`を入れる。無いと失敗してもexit 0になり成功に見える
+
 **コンテナに入って調べる(ECS Exec)**
 
 タスクロールに`ecs-exec`ポリシーを付与し、backendサービスで有効化済み。
