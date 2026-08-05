@@ -24,7 +24,10 @@
         { "name": "COGNITO_REGION", "value": "ap-northeast-1" },
         { "name": "COGNITO_USER_POOL_ID", "value": "ap-northeast-1_FNDNz0jSk" },
         { "name": "COGNITO_CLIENT_ID", "value": "7lnm9n6l4rmnb5qol93ujiagi2" },
-        { "name": "FRONTEND_ORIGIN", "value": "http://localhost:5173" },
+        {
+          "name": "FRONTEND_ORIGIN",
+          "value": "https://d3r3bcg6d6aepn.cloudfront.net"
+        },
         { "name": "DATABASE_SSL_CA", "value": "/app/certs/rds-ca.pem" }
       ],
       "secrets": [

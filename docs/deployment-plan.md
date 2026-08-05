@@ -281,13 +281,57 @@ sslmode残す→再現、sslmode除去+CA→成功、**空のCA→失敗**(検�
 | rag → S3ダウンロード → Bedrock埋め込み → pgvector保存 | 2チャンク取り込み成功 |
 | ハイブリッド検索 → Claude Haiku(jp.プロファイル)で回答 | 正しい電話番号を引用付きで回答 |
 
-### 次: フェーズ5(フロント配信 + Cognito更新)
+### ✅ フェーズ5: フロント配信 + Cognito更新(完了 2026-08-05)
 
-- `npm run build`(VITE_*は本番URL)→ S3へアップロード
-- CloudFront: オリジン2つ(S3 + ALB)、`/graphql`だけALBへ
-- S3のCORS設定(CloudFrontのドメインが確定してから)
-- Cognitoのコールバック/ログアウトURLにCloudFrontドメインを追加
-- backendの`FRONTEND_ORIGIN`をCloudFrontドメインに更新(タスク定義の新リビジョン)
+**本番URL: https://d3r3bcg6d6aepn.cloudfront.net**
+
+作成したもの(構成は `infra/cloudfront/` `infra/s3/` に保存):
+
+| 種別 | 値 |
+| --- | --- |
+| ディストリビューション | `E1RJTGF8IYA944` / `d3r3bcg6d6aepn.cloudfront.net` |
+| OAC | `E3BSJZTFX2HJQN`(S3はこのCloudFrontからのGETのみ許可) |
+| オリジン | S3(フロント) + ALB(`/graphql`のみ・HTTP閉域) |
+| SPAフォールバック | 403/404 → `/index.html`(200) |
+| セキュリティヘッダ | マネージドの`SecurityHeadersPolicy`(HSTS等) |
+
+**設計のポイント**
+
+- フロントは `VITE_GRAPHQL_URL=/graphql`(相対パス)でビルドした。
+  CloudFrontがフロントとAPIを同一オリジンにまとめるので、**CORSがそもそも発生しない**。
+  `redirect_uri`も`window.location.origin`から自動決定なので、
+  CloudFrontのドメインが確定する前にビルドできた
+- キャッシュは役割で分ける:
+  - `index.html` → `no-cache`(JSのファイル名が変わっても古いHTMLを掴まないように)
+  - `assets/*` → `max-age=31536000, immutable`(ファイル名にハッシュが入るため安全)
+- `/graphql`ビヘイビアは `CachingDisabled` + `AllViewerExceptHostHeader`。
+  Hostヘッダを転送から除くのが定石(オリジンに`*.cloudfront.net`のHostが渡ると
+  ホスト名ベースの検証・ルーティングを持つオリジンで事故る)
+- マネージドポリシーのIDは推測せずCLIで実際に引いた(`list-cache-policies`等)
+- PDFバケットのCORSは`https://d3r3bcg6d6aepn.cloudfront.net`のみ許可
+  (署名付きURLでのブラウザ直PUT/GETに必要)
+- Cognitoのコールバック/ログアウトURLにCloudFrontドメインを追加。
+  あわせて`ALLOW_USER_PASSWORD_AUTH`を無効化した(検証で一時的に使っただけ。
+  本番はホストUI+PKCEのみにして総当たり攻撃の入口を減らす)
+- backendの`FRONTEND_ORIGIN`をCloudFrontドメインに更新(タスク定義 rev3)
+
+**検証済み**
+
+| 経路 | 結果 |
+| --- | --- |
+| HTTP → HTTPSリダイレクト | 301 |
+| SPA配信 + 存在しないパス(`/manuals`) | どちらも200でindex.html |
+| assets のキャッシュヘッダ + HSTS | 設定どおり |
+| `/graphql` → CloudFront → ALB → backend | `health: ok` |
+| Authorizationヘッダの転送 | 壊れたトークンでUnauthorized(=転送されている) |
+| CognitoホストUIが`redirect_uri`を受理 | 302→/login。未登録URIだと`redirect_mismatch`(対照実験) |
+
+### 次: フェーズ6(E2E検証 + 締めの設定 + 運用スクリプト)
+
+- 本番URLでブラウザからログイン→画面表示のE2E(データは空のまま)
+- **RDSを非公開に戻す**(開発機IPのSGルール削除 + `--no-publicly-accessible`)
+- ALBの一時ルール(開発機IPからの80)を削除
+- 停止/再開スクリプトと完全撤収(teardown)手順
 
 ## 6. 未決事項
 
