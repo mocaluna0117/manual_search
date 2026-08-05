@@ -326,12 +326,58 @@ sslmode残す→再現、sslmode除去+CA→成功、**空のCA→失敗**(検�
 | Authorizationヘッダの転送 | 壊れたトークンでUnauthorized(=転送されている) |
 | CognitoホストUIが`redirect_uri`を受理 | 302→/login。未登録URIだと`redirect_mismatch`(対照実験) |
 
-### 次: フェーズ6(E2E検証 + 締めの設定 + 運用スクリプト)
+### ✅ フェーズ6: E2E検証 + 締めの設定 + 運用スクリプト(完了 2026-08-05)
 
-- 本番URLでブラウザからログイン→画面表示のE2E(データは空のまま)
-- **RDSを非公開に戻す**(開発機IPのSGルール削除 + `--no-publicly-accessible`)
-- ALBの一時ルール(開発機IPからの80)を削除
-- 停止/再開スクリプトと完全撤収(teardown)手順
+**これで全フェーズ完了。本番URL: https://d3r3bcg6d6aepn.cloudfront.net**
+
+**ブラウザE2E(ヘッドレスChrome + CDPで自動化)**
+
+一時ユーザーで本番URLの実ブラウザ動線を検証し、終了後に削除した(DBは空のまま):
+
+1. SPAのログイン画面が表示される
+2. ログインボタン → CognitoホストUIへ遷移
+3. 認証情報を送信 → CloudFrontへ戻る → 認可コード交換
+4. アプリ本体が描画される(サイドバー・チャット欄・ユーザー表示をスクリーンショットで確認)
+
+**締めの設定(デバッグ用に開けていた入口を全て閉じた)**
+
+| 変更 | 対照実験 |
+| --- | --- |
+| RDSのSGから開発機IPのルールを削除 | — |
+| RDS `--no-publicly-accessible`(DNSも私有IPを指す) | ローカルからの5432接続がタイムアウト |
+| ALBのSGから開発機IPの一時ルールを削除 | ALB直アクセスがタイムアウト。CloudFront経由は200 |
+
+非公開化後にbackendを強制再デプロイし、新タスクが起動時のDBアクセス
+(bootstrap処理)を通ってhealthyになることを確認 → **ECSからの新規DB接続も問題なし**。
+
+なお `/healthz` をCloudFrontで叩くとSPAが返るのは正しい挙動
+(ALBへ行くのは`/graphql`だけ。ヘルスチェックはALB→ターゲットの直接経路で使われる)。
+
+**運用スクリプト**
+
+- `scripts/aws-stop.sh` … Fargate 0タスク + RDS停止(約$63/月 → 約$21/月)。
+  RDS停止は**7日で自動再開**されるAWS仕様に注意
+- `scripts/aws-start.sh` … RDS起動を待ってからECSを戻し、healthyまで見届ける
+
+## 8. 完全撤収(teardown)手順
+
+課金を完全に止める場合。**順序が大事**(依存の外側から):
+
+1. CloudFront: ディストリビューションを**無効化 → Deployed待ち → 削除**(無効化を挟まないと削除できない)
+2. ALB → ターゲットグループの順に削除(ALBが参照している間はTGを消せない)
+3. ECS: サービス2つを`desired-count 0` → 削除 → クラスター削除
+4. RDS: 最終スナップショットを取って削除(`--final-db-snapshot-identifier`)。
+   完全に捨てるなら`--skip-final-snapshot`
+5. S3: 2バケットを**空にしてから**削除(`aws s3 rm --recursive` → `delete-bucket`)
+6. ECR: リポジトリ2つを`--force`で削除(イメージごと)
+7. Secrets Manager: `manual-search/db` `manual-search/app` を削除
+   (既定で30日の復旧猶予。即時なら`--force-delete-without-recovery`)
+8. CloudWatch Logs: `/ecs/manual-search/*` を削除
+9. IAMロール3つ + インラインポリシー、セキュリティグループ3つを削除
+10. Cognito User Pool: 残してもほぼ無料。捨てるならドメイン → プールの順
+
+Cognitoとの紐付け(コールバックURL)やCLI手順は全てこの計画書と
+`infra/`に残っているので、会社アカウントでの再構築はフェーズ1から再実行すればよい。
 
 ## 6. 未決事項
 
