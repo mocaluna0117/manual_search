@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@apollo/client/react'
+import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
 import {
   Badge,
   Box,
@@ -65,21 +65,33 @@ export function CategoryManualList({
 }: CategoryManualListProps) {
   const { data, loading, startPolling, stopPolling } = useQuery(MANUALS_QUERY, {
     variables: { categoryId, uncategorized },
+    // 既定のcache-firstだと「以前開いたときのキャッシュ」で満足してネットワークに
+    // 行かないため、別画面でアップロードしたマニュアルがリロードまで表示されない。
+    // (refetchQueriesは「その瞬間マウントされているクエリ」しか取り直せず、
+    //  未表示のカテゴリ一覧のキャッシュは古いまま残る)
+    // cache-and-networkはキャッシュを即表示しつつ、開くたびに裏で必ず取り直す
+    fetchPolicy: 'cache-and-network',
   })
   const { data: meData } = useQuery(ME_QUERY)
   const isAdmin = meData?.me.role === 'ADMIN'
 
   // 取り込み中のものがある間だけ、3秒ごとに一覧を取り直して進行状況を反映する
+  const client = useApolloClient()
   const hasInFlight = data?.manuals.some(
     (m) => m.ingestStatus === 'PENDING' || m.ingestStatus === 'PROCESSING',
   )
   useEffect(() => {
     if (hasInFlight) {
       startPolling(3000)
-      return () => stopPolling()
+      return () => {
+        stopPolling()
+        // 取り込み完了と同時に「AIにおまかせ」が新カテゴリを作っていることがある。
+        // サイドバーのカテゴリ一覧は常時マウントで誰も取り直さないため、ここで反映する
+        void client.refetchQueries({ include: ['ManualCategories'] })
+      }
     }
     stopPolling()
-  }, [hasInFlight, startPolling, stopPolling])
+  }, [hasInFlight, startPolling, stopPolling, client])
 
   // アプリ内のPDFビューアを開く(共通のモーダル)
   const { openManual } = useManualViewer()
