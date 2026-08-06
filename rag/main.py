@@ -307,8 +307,23 @@ def ingest(req: IngestRequest) -> IngestResponse:
         for piece in split_text(text):
             chunks.append((piece, page_no))
 
-    # 4) 各チャンクをベクトル化
-    embeddings = embedder.embed_texts([c[0] for c in chunks])
+    # 4) 各チャンクを「タイトル\n本文」の形でベクトル化する。
+    #    本文に手がかりが無いチャンク(記入見本・表紙など)にも
+    #    「どの文書の断片か」という文脈が意味検索に効くようにするため。
+    #    DBに保存するcontentは本文のまま。タイトルを含めて保存すると、
+    #    引用スニペットにタイトルが重複表示され、さらに全チャンクが
+    #    タイトル語のILIKEにヒットしてキーワード検索が洪水を起こす
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT title FROM "Manual" WHERE id = %s',
+                (str(req.manual_id),),
+            )
+            row = cur.fetchone()
+    title = row[0] if row else ""
+    embeddings = embedder.embed_texts(
+        [f"{title}\n{content}" if title else content for content, _page in chunks]
+    )
 
     # 5) チャンクをDBへ保存(再取り込みに備え、同じマニュアルの既存チャンクは入れ替え)
     with db_connect() as conn:
