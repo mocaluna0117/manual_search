@@ -110,6 +110,12 @@ export class ManualService implements OnApplicationBootstrap {
     // autoCategorize/forceReplaceはDBの列ではないので分離する
     const { autoCategorize, forceReplace, ...data } = input;
 
+    // macOSではファイル名がNFD(濁点・半濁点が結合文字。「パ」=「ハ」+「゚」)で
+    // 届くため、そのまま保存すると検索側(NFCで入力される)の部分一致に当たらない。
+    // 入口でNFCに揃える。同名判定(fileName一致)が正しく効くためにも必要
+    data.title = data.title.normalize('NFC');
+    data.fileName = data.fileName.normalize('NFC');
+
     const existing = await this.prisma.manual.findFirst({
       where: { fileName: data.fileName },
       orderBy: { createdAt: 'desc' },

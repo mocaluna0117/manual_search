@@ -2,6 +2,7 @@ import base64
 import logging
 import os
 import re
+import unicodedata
 import urllib.request
 from io import BytesIO
 
@@ -301,6 +302,10 @@ def ingest(req: IngestRequest) -> IngestResponse:
                 # 1ページの失敗で取り込み全体を止めない(そのページだけ諦める)
                 continue
 
+    # 2.7) 表記をNFCに正規化する。PDFの内部表現によってはNFDで抽出されることが
+    #      あり、そのまま保存すると検索キーワード(NFC)のILIKEに当たらなくなる
+    pages = [unicodedata.normalize("NFC", text) for text in pages]
+
     # 3) ページごとにチャンク化する(どのページ由来かを記録し、引用をページ単位にするため)
     chunks: list[tuple[str, int]] = []  # (本文, ページ番号)
     for page_no, text in enumerate(pages, start=1):
@@ -320,7 +325,8 @@ def ingest(req: IngestRequest) -> IngestResponse:
                 (str(req.manual_id),),
             )
             row = cur.fetchone()
-    title = row[0] if row else ""
+    # タイトルもNFCに揃えてから埋め込みに使う(移行前のNFDデータへの保険)
+    title = unicodedata.normalize("NFC", row[0]) if row else ""
     embeddings = embedder.embed_texts(
         [f"{title}\n{content}" if title else content for content, _page in chunks]
     )
@@ -417,6 +423,10 @@ def search(req: SearchRequest) -> SearchResponse:
         description = transcriber.describe(image_bytes, image_format)
         if description:
             retrieval_query = f"{retrieval_query}\n{description}"
+
+    # 0.7) 表記ゆれをNFCに揃える。macOS由来のNFD(濁点・半濁点が結合文字)が
+    #      混ざると、DB側(NFCで保存)との部分一致・ベクトル化が微妙にずれる
+    retrieval_query = unicodedata.normalize("NFC", retrieval_query)
 
     # 1) 質問文(+画像の説明)を、チャンクと同じ方法でベクトル化
     query_vec = to_vector_literal(embedder.embed_texts([retrieval_query])[0])
