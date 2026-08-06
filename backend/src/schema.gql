@@ -75,9 +75,9 @@ type ManualUploadTarget {
 type Manual {
   id: ID!
   title: String!
-  description: String
   fileKey: String!
   fileName: String!
+  fileLastModified: DateTime
   mimeType: String!
   size: Int!
   categoryId: ID
@@ -94,6 +94,25 @@ enum IngestStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+type RegisterManualResult {
+  manual: Manual!
+  outcome: RegisterOutcome!
+  existingFileLastModified: DateTime
+  incomingFileLastModified: DateTime
+}
+
+"""登録結果(新規/既存を更新/古いためスキップ)"""
+enum RegisterOutcome {
+  CREATED
+  UPDATED
+  SKIPPED_OLDER
+}
+
+type AutoOrganizeResult {
+  movedCount: Int!
+  createdCategories: [String!]!
 }
 
 type ManualSearchResult {
@@ -117,20 +136,26 @@ type Query {
 
 type Mutation {
   createManualCategory(name: String!): ManualCategory!
+  updateManualCategory(id: ID!, name: String!): ManualCategory!
   deleteManualCategory(id: ID!): ManualCategory!
   askQuestion(question: String!, conversationId: ID, imageBase64: String, imageFormat: String): AskResult!
   deleteConversation(id: ID!): Conversation!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!
-  registerManual(input: RegisterManualInput!): Manual!
+  registerManual(input: RegisterManualInput!): RegisterManualResult!
+  moveManual(id: ID!, categoryId: ID): Manual!
+  autoOrganizeManuals: AutoOrganizeResult!
+  moveManuals(ids: [ID!]!, categoryId: ID): Int!
   deleteManual(id: ID!): Manual!
   ingestManual(id: ID!): Int!
 }
 
 input RegisterManualInput {
   title: String!
-  description: String
   fileKey: String!
   fileName: String!
   size: Int!
   categoryId: ID
+  autoCategorize: Boolean
+  fileLastModified: DateTime
+  forceReplace: Boolean
 }
