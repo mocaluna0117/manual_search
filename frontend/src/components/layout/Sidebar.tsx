@@ -27,7 +27,6 @@ import {
   DELETE_CONVERSATION_MUTATION,
 } from '../../graphql/chat'
 import { ME_QUERY } from '../../graphql/me'
-import { ConnectionStatus } from '../ConnectionStatus'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 
 export interface SidebarProps {
@@ -375,13 +374,12 @@ export function SidebarContent({
         </>
       )}
 
-      {/* 下部: ログインユーザーと疎通ステータス */}
+      {/* 下部: ログインユーザーとログアウト */}
       <Box>
         <Text fontSize="xs" color="fg.muted" mb={1} truncate>
           👤 {auth.user?.profile.email}
         </Text>
-        <HStack justify="space-between">
-          <ConnectionStatus />
+        <HStack justify="flex-end">
           <Button
             size="xs"
             variant="ghost"
