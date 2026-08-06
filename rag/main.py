@@ -97,14 +97,15 @@ TOP_K = 8  # Claudeに渡す抜粋の数
 
 
 def hybrid_search(cur, query_vec: str, terms: list[str]):
-    """ベクトル検索とキーワード検索の結果をRRF(Reciprocal Rank Fusion)で融合する。
+    """ベクトル・キーワード・タイトルの3ルートをRRF(Reciprocal Rank Fusion)で融合する。
 
     取り込みが完了していないマニュアル(差し替え直後・失敗)は検索対象から除く。
     そうしないと「新しいPDFに差し替わったのに旧版の内容で回答する」状態になる。
 
     ベクトル検索は「意味の近さ」に強いが、電話番号・型番・固有名詞のような
-    「文字通りの一致」に弱い。キーワード検索はその逆。2つの順位を
-    score = Σ 1/(60+順位) で足し合わせ、両方の得意分野を活かす。
+    「文字通りの一致」に弱い。キーワード検索はその逆。タイトル検索は、
+    本文に手がかりが無く文書名だけが頼りのマニュアル(記入見本など)を拾う。
+    各ルートの順位を score = Σ 1/(60+順位) で足し合わせ、得意分野を活かす。
     """
     # ルート1: ベクトル検索(意味の近さ)
     #
@@ -141,12 +142,14 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
     # ILIKEの条件をWHEREにも書くのが重要。SELECT句でhitsを数えるだけだと
     # 全チャンクを評価することになり、pg_trgmのインデックスが使われない
     keyword_rows = []
+    title_rows = []
     if terms:
+        patterns = [f"%{t}%" for t in terms]
+
         hit_expr = " + ".join(
             ["(CASE WHEN mc.content ILIKE %s THEN 1 ELSE 0 END)"] * len(terms)
         )
         any_match = " OR ".join(["mc.content ILIKE %s"] * len(terms))
-        patterns = [f"%{t}%" for t in terms]
         cur.execute(
             f"""
             SELECT mc.id, mc.manual_id, m.title, mc.content, mc.page_number,
@@ -162,13 +165,47 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
         )
         keyword_rows = [r for r in cur.fetchall() if r[5] > 0]
 
-    # RRFで融合(同じチャンクが両ルートに出たら得点が加算される)
+        # ルート3: タイトル一致(文書名そのものを探す質問に効く)
+        #
+        # ルート1・2は本文しか見ないため、本文に手がかりが無いマニュアル
+        # (例: 記入見本のスキャンPDF)はタイトルでしか見つけられない。
+        #
+        # DISTINCT ON でマニュアルごとに先頭チャンク1件だけを代表にするのが重要。
+        # 全チャンクを返すと、タイトルが一致したマニュアル1本が
+        # キーワード順位の上位を占拠し、他のマニュアルを押し出してしまう
+        title_hit_expr = " + ".join(
+            ["(CASE WHEN m.title ILIKE %s THEN 1 ELSE 0 END)"] * len(terms)
+        )
+        title_any_match = " OR ".join(["m.title ILIKE %s"] * len(terms))
+        cur.execute(
+            f"""
+            SELECT * FROM (
+                SELECT DISTINCT ON (m.id)
+                       mc.id, mc.manual_id, m.title, mc.content, mc.page_number,
+                       ({title_hit_expr}) AS hits
+                FROM "ManualChunk" mc
+                JOIN "Manual" m ON m.id = mc.manual_id
+                WHERE m.ingest_status = 'COMPLETED'
+                  AND ({title_any_match})
+                ORDER BY m.id, mc.chunk_index
+            ) t
+            ORDER BY hits DESC
+            LIMIT 20
+            """,
+            patterns + patterns,  # title_hit_expr用 と WHERE用
+        )
+        title_rows = cur.fetchall()
+
+    # RRFで融合(同じチャンクが複数ルートに出たら得点が加算される)
     scores: dict[str, float] = {}
     meta: dict[str, tuple] = {}
     for rank, row in enumerate(vector_rows, start=1):
         scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
         meta[row[0]] = row[1:5]
     for rank, row in enumerate(keyword_rows, start=1):
+        scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
+        meta.setdefault(row[0], row[1:5])
+    for rank, row in enumerate(title_rows, start=1):
         scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
         meta.setdefault(row[0], row[1:5])
 
