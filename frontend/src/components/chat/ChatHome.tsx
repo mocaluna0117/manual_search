@@ -138,6 +138,8 @@ export function ChatHome({
   const [attachedImage, setAttachedImage] = useState<File | null>(null)
   // 選択肢の下に常設する「その他」インライン入力欄の内容
   const [otherText, setOtherText] = useState('')
+  // コピー直後のフィードバック表示(✓)に使う。対象メッセージのIDを持つ
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 送信中のリクエストを「停止」ボタンから中断するためのコントローラ
@@ -264,7 +266,7 @@ export function ChatHome({
             id: `local-stop-${Date.now()}`,
             role: 'ASSISTANT',
             content:
-              '⏹️ 回答の受信を中断しました。(生成済みの回答は、会話を開き直すと表示されることがあります)',
+              '⏹️ 回答を停止しました。この質問は保存されていません。質問の ✏️ ボタンから編集して再送信できます。',
             citations: [],
             options: [],
           },
@@ -287,6 +289,27 @@ export function ChatHome({
   }
 
   const handleSubmit = () => void send(input.trim())
+
+  /** メッセージ本文をクリップボードへ(ドラッグ選択せずにコピーできるように) */
+  const copyMessage = async (message: LocalMessage) => {
+    try {
+      await navigator.clipboard.writeText(message.content)
+      setCopiedId(message.id)
+      setTimeout(
+        () => setCopiedId((prev) => (prev === message.id ? null : prev)),
+        1500,
+      )
+    } catch {
+      window.alert('コピーできませんでした')
+    }
+  }
+
+  /** 送信済みの質問を入力欄へ戻す(編集して再送信するため) */
+  const editMessage = (message: LocalMessage) => {
+    // DB保存時に付く画像添付の目印は編集対象から外す
+    setInput(message.content.replace(/\n\(📷 画像を添付\)$/, ''))
+    textareaRef.current?.focus()
+  }
 
   const searchInput = (
     <VStack w="100%" maxW="800px" gap={2} align="stretch">
@@ -553,6 +576,34 @@ export function ChatHome({
                   ))}
                 </VStack>
               )}
+
+              {/* メッセージ操作: コピー / (質問のみ)編集して再送信 */}
+              <HStack mt={1} gap={0} justify="flex-end">
+                <IconButton
+                  aria-label="コピー"
+                  title="コピー"
+                  size="2xs"
+                  variant="ghost"
+                  color={
+                    message.role === 'USER' ? 'blue.contrast' : 'fg.muted'
+                  }
+                  onClick={() => void copyMessage(message)}
+                >
+                  {copiedId === message.id ? '✓' : '📋'}
+                </IconButton>
+                {message.role === 'USER' && (
+                  <IconButton
+                    aria-label="編集して再送信"
+                    title="編集して再送信"
+                    size="2xs"
+                    variant="ghost"
+                    color="blue.contrast"
+                    onClick={() => editMessage(message)}
+                  >
+                    ✏️
+                  </IconButton>
+                )}
+              </HStack>
             </Box>
           ))}
 

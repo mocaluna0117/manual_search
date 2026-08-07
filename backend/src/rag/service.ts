@@ -40,6 +40,7 @@ export class RagService {
     path: string,
     timeoutMs: number,
     body?: unknown,
+    signal?: AbortSignal,
   ): Promise<Response> {
     try {
       return await fetch(`${this.baseUrl}${path}`, {
@@ -49,7 +50,10 @@ export class RagService {
           'X-Api-Token': this.apiToken,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        // タイムアウトに加えて、呼び出し元の中断(チャットの停止ボタン)でも打ち切る
+        signal: signal
+          ? AbortSignal.any([AbortSignal.timeout(timeoutMs), signal])
+          : AbortSignal.timeout(timeoutMs),
       });
     } catch (e) {
       // タイムアウトも通信断もここに来る。原因が分かる形で伝える
@@ -118,13 +122,19 @@ export class RagService {
     question: string,
     image?: { base64: string; format: string },
     history?: { role: 'user' | 'assistant'; content: string }[],
+    signal?: AbortSignal,
   ): Promise<RagAnswer> {
-    const res = await this.request('/search', TIMEOUT_MS.search, {
-      question,
-      image_base64: image?.base64,
-      image_format: image?.format,
-      history: history ?? [],
-    });
+    const res = await this.request(
+      '/search',
+      TIMEOUT_MS.search,
+      {
+        question,
+        image_base64: image?.base64,
+        image_format: image?.format,
+        history: history ?? [],
+      },
+      signal,
+    );
     if (!res.ok) {
       throw new ServiceUnavailableException(
         `RAGサービスがエラーを返しました (HTTP ${res.status})`,

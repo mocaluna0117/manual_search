@@ -22,8 +22,9 @@ import { RagModule } from './rag/module';
       autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
       playground: true,
       plugins: [],
-      // 認証ガードがHTTPリクエスト(のAuthorizationヘッダ)を読めるようにcontextへ渡す
-      context: ({ req }: { req: unknown }) => ({ req }),
+      // 認証ガードがHTTPリクエスト(のAuthorizationヘッダ)を読めるようにcontextへ渡す。
+      // resはクライアント切断の検知(チャットの停止ボタン)に使う
+      context: ({ req, res }: { req: unknown; res: unknown }) => ({ req, res }),
     }),
     AuthModule,
     PrismaModule,

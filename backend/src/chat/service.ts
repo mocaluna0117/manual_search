@@ -46,6 +46,7 @@ export class ChatService {
     userId: string,
     conversationId?: string | null,
     image?: { base64: string; format: string },
+    signal?: AbortSignal,
   ): Promise<AskResult> {
     // 1) 会話を用意(初回の質問なら新規作成し、タイトルは質問から自動生成)
     //    既存会話の場合は所有者チェックも兼ねる
@@ -80,7 +81,7 @@ export class ChatService {
     });
 
     // 3) 質問を保存(画像そのものは保存しない。添付があったことだけ履歴に残す)
-    await this.prisma.message.create({
+    const userMessage = await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: MessageRole.USER,
@@ -94,11 +95,26 @@ export class ChatService {
     let citations: RagCitation[] = [];
     let options: string[] = [];
     try {
-      const result = await this.rag.search(question, image, history);
+      const result = await this.rag.search(question, image, history, signal);
       answer = result.answer;
       citations = result.citations;
       options = result.options;
     } catch (e) {
+      // 「停止」ボタン(クライアント切断)による中断は、質問を無かったことにする。
+      // 回答を保存せず質問も消すことで、ユーザーが編集して再送信できる状態に戻す
+      if (signal?.aborted) {
+        if (conversationId) {
+          await this.prisma.message
+            .delete({ where: { id: userMessage.id } })
+            .catch(() => undefined);
+        } else {
+          // 新規会話ごと消す(メッセージはonDelete: Cascadeで一緒に消える)
+          await this.prisma.conversation
+            .delete({ where: { id: conversation.id } })
+            .catch(() => undefined);
+        }
+        throw e; // クライアントは既に切断済みなので、この例外が届くことはない
+      }
       answer = `エラーが発生しました: ${e instanceof Error ? e.message : '不明なエラー'}`;
     }
 

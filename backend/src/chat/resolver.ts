@@ -1,5 +1,6 @@
 import {
   Args,
+  Context,
   ID,
   Mutation,
   Parent,
@@ -7,6 +8,7 @@ import {
   ResolveField,
   Resolver,
 } from '@nestjs/graphql';
+import type { Response } from 'express';
 import type { AuthUser } from '../auth/current-user';
 import { CurrentUser } from '../auth/current-user';
 import { UserService } from '../user/service';
@@ -48,6 +50,7 @@ export class ChatResolver {
   async askQuestion(
     @Args('question') question: string,
     @CurrentUser() authUser: AuthUser,
+    @Context() ctx: { res?: Response },
     @Args('conversationId', { type: () => ID, nullable: true })
     conversationId?: string,
     @Args('imageBase64', { type: () => String, nullable: true })
@@ -59,7 +62,19 @@ export class ChatResolver {
     const image = imageBase64
       ? { base64: imageBase64, format: imageFormat ?? 'jpeg' }
       : undefined;
-    return this.chatService.ask(question, user.id, conversationId, image);
+    // フロントの「停止」ボタン(=接続の切断)をRAG呼び出しの中断につなげる。
+    // 正常終了でも'close'は発火するため、レスポンス送信済みかどうかで見分ける
+    const controller = new AbortController();
+    ctx.res?.on('close', () => {
+      if (!ctx.res?.writableEnded) controller.abort();
+    });
+    return this.chatService.ask(
+      question,
+      user.id,
+      conversationId,
+      image,
+      controller.signal,
+    );
   }
 
   @Mutation(() => Conversation)
