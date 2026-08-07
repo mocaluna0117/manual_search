@@ -18,6 +18,7 @@ import {
   CONVERSATION_QUERY,
   type ChatMessage,
 } from '../../graphql/chat'
+import { useSendKey } from '../../lib/settings'
 import { useManualViewer } from '../manual/ManualViewerProvider'
 import { MarkdownText } from './MarkdownText'
 
@@ -60,7 +61,8 @@ function pageLabel(snippet: string): string {
   const firstLine = snippet.split('\n')[0] ?? ''
   // 先頭の章番号や記号(「3 」「1.2 」「【」など)を落として本文の言葉から始める
   const cleaned = firstLine.replace(/^[\d\s.．)）\-【】#*]+/, '').trim()
-  return cleaned.length > 12 ? `${cleaned.slice(0, 12)}…` : cleaned
+  // 短すぎると「STEP5…」のように何の項目か分からないので、ある程度長めに見せる
+  return cleaned.length > 24 ? `${cleaned.slice(0, 24)}…` : cleaned
 }
 
 function groupCitations(
@@ -138,6 +140,11 @@ export function ChatHome({
   const [otherText, setOtherText] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // 送信中のリクエストを「停止」ボタンから中断するためのコントローラ
+  const abortRef = useRef<AbortController | null>(null)
+  // 設定: Enterで送信(既定) / Shift+Enterで送信
+  const sendKey = useSendKey()
+  const sendOnPlainEnter = sendKey === 'enter'
   const bottomRef = useRef<HTMLDivElement>(null)
   const lastMessageRef = useRef<HTMLDivElement>(null)
   // 履歴を開いた直後かどうか(そのときだけ一番下へ即時ジャンプする)
@@ -227,6 +234,8 @@ export function ChatHome({
       },
     ])
 
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
       const { data } = await ask({
         variables: {
@@ -235,6 +244,8 @@ export function ChatHome({
           imageBase64: image ? await fileToBase64(image) : undefined,
           imageFormat: image ? ALLOWED_IMAGE_TYPES[image.type] : undefined,
         },
+        // 「停止」ボタンでHTTPリクエストごと中断できるようにする
+        context: { fetchOptions: { signal: controller.signal } },
       })
       if (!data) return
       setMessages((prev) => [...prev, data.askQuestion.message])
@@ -243,6 +254,23 @@ export function ChatHome({
         onConversationCreated(data.askQuestion.conversationId)
       }
     } catch (e) {
+      // 停止ボタンによる中断はエラー扱いにしない。
+      // なおサーバー側の生成は止まらないため、回答自体は会話に保存され、
+      // 会話を開き直すと表示される(それを短い一文で案内する)
+      if (controller.signal.aborted) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `local-stop-${Date.now()}`,
+            role: 'ASSISTANT',
+            content:
+              '⏹️ 回答の受信を中断しました。(生成済みの回答は、会話を開き直すと表示されることがあります)',
+            citations: [],
+            options: [],
+          },
+        ])
+        return
+      }
       setMessages((prev) => [
         ...prev,
         {
@@ -253,6 +281,8 @@ export function ChatHome({
           options: [],
         },
       ])
+    } finally {
+      abortRef.current = null
     }
   }
 
@@ -319,26 +349,44 @@ export function ChatHome({
           rows={1}
           autoresize // 入力量に応じて高さが自動で伸びる
           maxH="10em" // 伸びすぎ防止(超えたら内部スクロール)
-          placeholder="例: 経費精算のやり方を教えて（Shift+Enterで改行）"
+          placeholder={
+            sendOnPlainEnter
+              ? '例: 経費精算のやり方を教えて（Shift+Enterで改行）'
+              : '例: 経費精算のやり方を教えて（Shift+Enterで送信）'
+          }
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            // Enter=送信 / Shift+Enter=改行 / 日本語変換の確定Enterは無視
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            // 日本語変換の確定Enterは無視。送信キーは設定で切り替え可能
+            if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+            const shouldSend = sendOnPlainEnter ? !e.shiftKey : e.shiftKey
+            if (shouldSend) {
               e.preventDefault() // 送信時に改行が入らないように
               handleSubmit()
             }
           }}
         />
-        <Button
-          size="lg"
-          colorPalette="blue"
-          onClick={handleSubmit}
-          loading={loading}
-          alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
-        >
-          検索
-        </Button>
+        {loading ? (
+          // 送信中は「停止」に切り替える(待たされ続けないための逃げ道)
+          <Button
+            size="lg"
+            colorPalette="red"
+            variant="outline"
+            onClick={() => abortRef.current?.abort()}
+            alignSelf="flex-end"
+          >
+            ⏹ 停止
+          </Button>
+        ) : (
+          <Button
+            size="lg"
+            colorPalette="blue"
+            onClick={handleSubmit}
+            alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
+          >
+            検索
+          </Button>
+        )}
       </HStack>
     </VStack>
   )
@@ -427,13 +475,18 @@ export function ChatHome({
                       <Input
                         size="sm"
                         bg="bg.panel"
-                        placeholder="✏️ その他（自由に入力してEnterで送信）"
+                        placeholder={
+                          sendOnPlainEnter
+                            ? '✏️ その他（自由に入力してEnterで送信）'
+                            : '✏️ その他（自由に入力してShift+Enterで送信）'
+                        }
                         value={otherText}
                         onChange={(e) => setOtherText(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                            void send(otherText.trim())
-                          }
+                          // 一行入力だが、送信キーの操作感はメイン入力欄と揃える
+                          if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+                          if (!sendOnPlainEnter && !e.shiftKey) return
+                          void send(otherText.trim())
                         }}
                       />
                       <Button

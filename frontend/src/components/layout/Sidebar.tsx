@@ -28,6 +28,7 @@ import {
 } from '../../graphql/chat'
 import { ME_QUERY } from '../../graphql/me'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
+import { SettingsDialog } from './SettingsDialog'
 
 export interface SidebarProps {
   selectedCategoryId: string | null
@@ -56,6 +57,7 @@ export function SidebarContent({
   const { data: meData } = useQuery(ME_QUERY)
   const isAdmin = meData?.me.role === 'ADMIN'
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
   const handleLogout = async () => {
@@ -379,7 +381,16 @@ export function SidebarContent({
         <Text fontSize="xs" color="fg.muted" mb={1} truncate>
           👤 {auth.user?.profile.email}
         </Text>
-        <HStack justify="flex-end">
+        <HStack justify="space-between">
+          <Button
+            size="xs"
+            variant="ghost"
+            color="fg.muted"
+            _hover={{ bg: 'bg.emphasized' }}
+            onClick={() => setSettingsOpen(true)}
+          >
+            ⚙️ 設定
+          </Button>
           <Button
             size="xs"
             variant="ghost"
@@ -390,6 +401,10 @@ export function SidebarContent({
             ログアウト
           </Button>
         </HStack>
+        <SettingsDialog
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+        />
       </Box>
     </VStack>
   )
