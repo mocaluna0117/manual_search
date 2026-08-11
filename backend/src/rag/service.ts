@@ -105,6 +105,7 @@ export class RagService {
     categories: string[],
     allowNew = true, // falseなら既存カテゴリだけに割り当てる(新カテゴリを作らせない)
     instruction?: string, // 管理者が指定した分類方針(例:「工種ごとに」)
+    rules?: string[], // 管理者が蓄積した分類ルール(最優先で適用)
   ): Promise<{ manualId: string; category: string }[]> {
     const res = await this.request('/organize', TIMEOUT_MS.organize, {
       manuals: manuals.map((m) => ({
@@ -115,6 +116,7 @@ export class RagService {
       categories,
       allow_new: allowNew,
       instruction: instruction ?? null,
+      rules: rules ?? [],
     });
     if (!res.ok) {
       throw new ServiceUnavailableException(

@@ -95,6 +95,53 @@ export class ChatService {
           );
         }
       }
+    } else if (isAdmin && /^分類ルールを?追加\s*[:：]\s*.+$/s.test(question)) {
+      // 1.6) 明示形式のルール操作はLLMを介さず確定的に処理する
+      //      (モデルの「実行したフリ」の影響を受けない確実な経路)
+      const text = question.replace(/^分類ルールを?追加\s*[:：]\s*/s, '').trim();
+      await this.prisma.classificationRule.create({ data: { text } });
+      return this.respond(
+        conversation.id,
+        question,
+        `📏 分類ルールを追加しました: 「${text}」\n今後のすべての自動分類(アップロード時・再分類)で適用されます。`,
+      );
+    } else if (
+      isAdmin &&
+      /^分類ルール(の一覧|一覧|を見せて|を教えて|見せて)$/.test(question.trim())
+    ) {
+      const rules = await this.prisma.classificationRule.findMany({
+        orderBy: { createdAt: 'asc' },
+      });
+      return this.respond(
+        conversation.id,
+        question,
+        rules.length === 0
+          ? '分類ルールはまだ登録されていません。「分類ルールを追加: 〜」のように伝えると登録できます。'
+          : '📏 現在の分類ルール:\n' +
+              rules.map((r, i) => `${i + 1}. ${r.text}`).join('\n'),
+      );
+    } else if (
+      isAdmin &&
+      /^分類ルール\s*\d+\s*(?:番目?)?\s*を?削除$/.test(question.trim())
+    ) {
+      const number = Number(question.match(/\d+/)?.[0]);
+      const rules = await this.prisma.classificationRule.findMany({
+        orderBy: { createdAt: 'asc' },
+      });
+      const target = rules[number - 1];
+      if (!target) {
+        return this.respond(
+          conversation.id,
+          question,
+          '⚠️ その番号の分類ルールはありません。「分類ルール一覧」で番号を確認してください。',
+        );
+      }
+      await this.prisma.classificationRule.delete({ where: { id: target.id } });
+      return this.respond(
+        conversation.id,
+        question,
+        `🗑 分類ルール「${target.text}」を削除しました。`,
+      );
     } else if (question === CONFIRM_RECLASSIFY) {
       // 確認待ちが無いのに確認の文言が届いた=履歴に残った古いボタンのクリック。
       // RAGに流すと意味不明な検索になるため、ここで案内して終える
@@ -121,11 +168,23 @@ export class ChatService {
         options.length > 0
           ? `\n選択肢: ${options.map((o, i) => `${i + 1}. ${o}`).join(' / ')}`
           : '';
+      let content = m.content;
+      if (m.role === MessageRole.ASSISTANT) {
+        // 管理操作の実行結果(システムが書いた📏/📁等の行)は履歴に入れない。
+        // 履歴に成功メッセージが並ぶと、モデルがツールを呼ばずに
+        // 「実行したフリ」の文章を真似して書く事故が起きるため
+        content =
+          content
+            .split('\n')
+            .filter((line) => !/^(📏|📁|🗑|⏳|⚠️|✅|\(再分類はまだ)/.test(line))
+            .join('\n')
+            .trim() || '(管理操作を実行しました)';
+      }
       return {
         role: (m.role === MessageRole.USER ? 'user' : 'assistant') as
           | 'user'
           | 'assistant',
-        content: m.content.slice(0, 500) + optionsText,
+        content: content.slice(0, 500) + optionsText,
       };
     });
 
@@ -182,37 +241,74 @@ export class ChatService {
       const lines: string[] = answer ? [answer] : [];
 
       for (const action of ragActions) {
-        if (action.name !== 'create_folder') continue;
-        const name = String(action.input.name ?? '').trim();
-        if (!name) continue;
-        try {
-          await this.categoryService.create(name);
-          lines.push(`📁 フォルダ「${name}」を作成しました。`);
-        } catch (e) {
-          // 重複などの失敗は会話として伝える(例外で全体を止めない)
+        if (action.name === 'create_folder') {
+          const name = String(action.input.name ?? '').trim();
+          if (!name) continue;
+          try {
+            await this.categoryService.create(name);
+            lines.push(`📁 フォルダ「${name}」を作成しました。`);
+          } catch (e) {
+            // 重複などの失敗は会話として伝える(例外で全体を止めない)
+            lines.push(
+              `⚠️ フォルダ「${name}」は作成できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+            );
+          }
+        } else if (action.name === 'add_classification_rule') {
+          const text = String(action.input.text ?? '').trim();
+          if (!text) continue;
+          await this.prisma.classificationRule.create({ data: { text } });
           lines.push(
-            `⚠️ フォルダ「${name}」は作成できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+            `📏 分類ルールを追加しました: 「${text}」\n今後のすべての自動分類(アップロード時・再分類)で適用されます。`,
           );
+        } else if (action.name === 'list_classification_rules') {
+          const rules = await this.prisma.classificationRule.findMany({
+            orderBy: { createdAt: 'asc' },
+          });
+          lines.push(
+            rules.length === 0
+              ? '分類ルールはまだ登録されていません。「分類ルールを追加: 〜」のように伝えると登録できます。'
+              : '📏 現在の分類ルール:\n' +
+                  rules.map((r, i) => `${i + 1}. ${r.text}`).join('\n'),
+          );
+        } else if (action.name === 'remove_classification_rule') {
+          const number = Number(action.input.number);
+          const rules = await this.prisma.classificationRule.findMany({
+            orderBy: { createdAt: 'asc' },
+          });
+          const target = Number.isInteger(number)
+            ? rules[number - 1]
+            : undefined;
+          if (!target) {
+            lines.push(
+              '⚠️ 指定された番号の分類ルールが見つかりませんでした。「分類ルールを見せて」で番号を確認してください。',
+            );
+          } else {
+            await this.prisma.classificationRule.delete({
+              where: { id: target.id },
+            });
+            lines.push(`🗑 分類ルール「${target.text}」を削除しました。`);
+          }
         }
       }
 
       const reclassify = ragActions.find(
         (a) => a.name === 'reclassify_all_manuals',
       );
-      // 安全網: モデルが本文で「再分類します」と宣言だけしてツールを呼ばなかった場合、
-      // 何も起きないまま放置されるのを防ぐため、次の一手をユーザーに案内する
-      if (!reclassify && /再分類/.test(answer ?? '')) {
-        lines.push(
-          '(再分類はまだ実行されていません。「全マニュアルを再分類して」と送ると、確認のうえ実行します)',
-        );
-      }
       if (reclassify) {
         // 管理者が依頼文で分類方針を指定していたら、確認を経て実行まで引き継ぐ
         const instruction =
           String(reclassify.input.instruction ?? '').trim() || undefined;
-        const manualCount = await this.prisma.manual.count({
-          where: { ingestStatus: IngestStatus.COMPLETED },
-        });
+        const [manualCount, pinnedCount] = await Promise.all([
+          this.prisma.manual.count({
+            where: {
+              ingestStatus: IngestStatus.COMPLETED,
+              categoryPinned: false,
+            },
+          }),
+          this.prisma.manual.count({
+            where: { ingestStatus: IngestStatus.COMPLETED, categoryPinned: true },
+          }),
+        ]);
         await this.prisma.conversation.update({
           where: { id: conversation.id },
           data: {
@@ -222,6 +318,7 @@ export class ChatService {
         lines.push(
           `全${manualCount}件のマニュアルを、AIが工種・業務分野ごとのフォルダへ再分類します` +
             '(足りないフォルダは新しく作られます)。' +
+            (pinnedCount > 0 ? `📌 ピン留めされた${pinnedCount}件は動かしません。` : '') +
             (instruction ? `分類方針:「${instruction}」。` : '') +
             '今の分類は上書きされます。実行してよいですか？',
         );
@@ -233,6 +330,32 @@ export class ChatService {
         lines.join('\n') ||
         '依頼された操作を実行できませんでした。もう一度具体的に指示してください。';
       // 引用はRAG側が管理操作時に空にして返すため、ここでは触らない
+    }
+
+    // 4.6) 安全網(管理者のみ): モデルが実行結果を装った文章だけ書いて
+    //      ツールを呼ばないことがある(履歴の成功メッセージの真似)。
+    //      宣言と実行の食い違いを検知して、正しい次の一手を案内する
+    if (isAdmin) {
+      const notes: string[] = [];
+      if (
+        !ragActions.some((a) => a.name === 'reclassify_all_manuals') &&
+        /再分類(を実行)?します/.test(answer)
+      ) {
+        notes.push(
+          '(再分類はまだ実行されていません。「全マニュアルを再分類して」と送ると、確認のうえ実行します)',
+        );
+      }
+      if (
+        !ragActions.some((a) => a.name === 'add_classification_rule') &&
+        /分類ルールを追加しました/.test(answer)
+      ) {
+        notes.push(
+          '⚠️ 実際にはルールは登録されていません。「分類ルールを追加: 〜」の形式で送ると確実に登録されます。',
+        );
+      }
+      if (notes.length > 0) {
+        answer = [answer, ...notes].join('\n');
+      }
     }
 
     // 5) 回答を保存し、会話の更新日時を進める(サイドバーで新しい順に並べるため)

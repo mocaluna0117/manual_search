@@ -375,6 +375,8 @@ class OrganizeRequest(BaseModel):
     allow_new: bool = True
     # 管理者が指定した分類方針(例:「工種ごとに」)。チャット経由の再分類で使う
     instruction: str | None = None
+    # 管理者が蓄積した分類ルール(最優先で適用)
+    rules: list[str] = []
 
 
 class OrganizeAssignment(BaseModel):
@@ -397,6 +399,7 @@ def organize(req: OrganizeRequest) -> OrganizeResponse:
             req.categories,
             allow_new=req.allow_new,
             instruction=req.instruction,
+            rules=req.rules,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"分類に失敗しました: {e}")

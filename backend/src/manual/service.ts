@@ -277,7 +277,8 @@ export class ManualService implements OnApplicationBootstrap {
     instruction?: string,
   ) {
     const manuals = await this.prisma.manual.findMany({
-      where: { ...where, ingestStatus: IngestStatus.COMPLETED },
+      // ピン留め(手動分類)されたものはAIの分類で動かさない
+      where: { ...where, ingestStatus: IngestStatus.COMPLETED, categoryPinned: false },
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
     if (manuals.length === 0) {
@@ -286,6 +287,9 @@ export class ManualService implements OnApplicationBootstrap {
 
     // 1回の呼び出し時間とレスポンスJSONのトークン量の両方に余裕を持たせる。
     // (80件だと応答が出力上限4000トークンに接近し、通信も1分を超えやすい)
+    // 管理者が蓄積した分類ルール(「〜は〜のフォルダへ」)を最優先で効かせる
+    const rules = await this.classificationRules();
+
     const BATCH_SIZE = 50;
     let movedCount = 0;
     const createdCategories: string[] = [];
@@ -302,6 +306,7 @@ export class ManualService implements OnApplicationBootstrap {
         categories.map((c) => c.name),
         allowNew,
         instruction,
+        rules,
       );
       const result = await this.applyAssignments(assignments, allowNew);
       movedCount += result.movedCount;
@@ -328,6 +333,9 @@ export class ManualService implements OnApplicationBootstrap {
           },
         ],
         categories.map((c) => c.name),
+        true,
+        undefined,
+        await this.classificationRules(),
       );
       await this.applyAssignments(assignments);
     } catch (e) {
@@ -335,6 +343,14 @@ export class ManualService implements OnApplicationBootstrap {
       const message = e instanceof Error ? e.message : '不明なエラー';
       this.logger.error(`自動分類失敗 manual=${manualId}: ${message}`);
     }
+  }
+
+  /** 管理者が蓄積した分類ルールを登録順で返す(分類プロンプトに注入する) */
+  private async classificationRules(): Promise<string[]> {
+    const rules = await this.prisma.classificationRule.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
+    return rules.map((r) => r.text);
   }
 
   /** AIの割り当て結果をDBに反映する(allowNew=trueならカテゴリが無ければ作る) */
@@ -383,7 +399,9 @@ export class ManualService implements OnApplicationBootstrap {
     }
     return this.prisma.manual.update({
       where: { id },
-      data: { categoryId },
+      // 手動でフォルダへ移動したものはピン留めし、AIの再分類で動かさない。
+      // 未分類へ戻すのは「分類し直したい」なのでピンを外す
+      data: { categoryId, categoryPinned: categoryId !== null },
     });
   }
 
@@ -400,9 +418,21 @@ export class ManualService implements OnApplicationBootstrap {
     }
     const result = await this.prisma.manual.updateMany({
       where: { id: { in: ids } },
-      data: { categoryId },
+      data: { categoryId, categoryPinned: categoryId !== null },
     });
     return result.count;
+  }
+
+  /** ピン留めの切り替え(ピン=AIの再分類で動かさない) */
+  async setPinned(id: string, pinned: boolean) {
+    const manual = await this.prisma.manual.findUnique({ where: { id } });
+    if (!manual) {
+      throw new NotFoundException('マニュアルが見つかりません');
+    }
+    return this.prisma.manual.update({
+      where: { id },
+      data: { categoryPinned: pinned },
+    });
   }
 
   async getDownloadUrl(id: string) {

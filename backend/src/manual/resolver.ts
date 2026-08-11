@@ -72,6 +72,16 @@ export class ManualResolver {
     return this.manualService.move(id, categoryId ?? null);
   }
 
+  // ピン留めの切り替え(ピン=AIの再分類で動かさない)
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Manual)
+  setManualPinned(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('pinned') pinned: boolean,
+  ) {
+    return this.manualService.setPinned(id, pinned);
+  }
+
   // 未分類のマニュアルをAIでまとめて自動分類(カテゴリが無ければAIが命名して作る)
   @Roles(UserRole.ADMIN)
   @Mutation(() => AutoOrganizeResult)

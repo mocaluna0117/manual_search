@@ -60,6 +60,53 @@ ADMIN_TOOLS = [
     },
     {
         "toolSpec": {
+            "name": "add_classification_rule",
+            "description": (
+                "分類ルールを追加する。管理者が「今後〜は〜のフォルダに分類して」のように、"
+                "以後の自動分類で守ってほしい方針・好みを伝えたときに使う。"
+                "保存されたルールは、アップロード時の自動分類や全件再分類のすべてで最優先適用される"
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "ルールの内容(自然文のまま。例:「床暖房関連はフローリング関連に入れる」)",
+                        }
+                    },
+                    "required": ["text"],
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "list_classification_rules",
+            "description": "登録済みの分類ルールを一覧表示する。「分類ルールを見せて」のような依頼で使う",
+            "inputSchema": {"json": {"type": "object", "properties": {}}},
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "remove_classification_rule",
+            "description": "分類ルールを削除する。番号は一覧表示(登録順)の1始まり",
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "number": {
+                            "type": "integer",
+                            "description": "削除するルールの番号(1始まり)",
+                        }
+                    },
+                    "required": ["number"],
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
             "name": "reclassify_all_manuals",
             "description": (
                 "登録済みの全マニュアルをAIがフォルダへ再分類し直す(必要なら新しい"
@@ -89,9 +136,12 @@ ADMIN_TOOLS = [
 # ツールを呼ばずに聞き返してしまうため、管理操作は別扱いだと明確に書く
 ADMIN_SYSTEM_ADDENDUM = """
 
-補足(管理者モード): あなたはツールでフォルダ(カテゴリ)の作成と全マニュアルの再分類ができます。
+補足(管理者モード): あなたはツールでフォルダ(カテゴリ)の作成・全マニュアルの再分類・分類ルールの管理ができます。
+- 管理者が分類の好みや方針(例:「床暖房はフローリング関連に入れて」「延長保証の資料は保険・延長保証にまとめて」)を伝えたら、add_classification_ruleで保存する。保存すれば以後の分類すべてに効くので、その場限りの対応で済ませない
 - 「〇〇というフォルダを作って」「マニュアルを再分類して」のような依頼は、マニュアルの内容に関する質問ではなく、この検索システム自体への操作依頼。マニュアル抜粋に根拠を求めず、絞り込み質問もせず、ためらわずに対応するツールを呼び出す
 - あなたの応答は1回で完結する。ツールの実行結果を見てから次のツールを呼ぶことはできない。複数の操作が必要な依頼(例:「フォルダを作って再分類して」)では、必要なツールをすべて同じ応答の中でまとめて呼ぶ
+- 会話履歴にある「📏 分類ルールを追加しました」「📁 フォルダを作成しました」等の実行結果はシステムが書いたもの。あなたがそれを真似て書いてはいけない。どの操作も、対応するツールをその応答で呼ばない限り実行されない
+- 「再分類して」と依頼されたら、分類の方針を聞き返さずにすぐreclassify_all_manualsを呼ぶ(方針が依頼文に書かれていた場合だけinstructionに渡す。実行前の確認はシステムが行う)
 - 本文で「再分類します」と宣言するだけでは何も実行されない。再分類する意図があるなら、必ずreclassify_all_manualsを同じ応答で呼ぶ(再分類はフォルダが足りなければ自動で作るので、フォルダ作成を先に済ませる必要はない)
 - フォルダ名が指定されていれば、その名前のままcreate_folderを呼ぶ(勝手に変えない)
 - マニュアルの内容を知りたい通常の質問には、これまで通り抜粋から回答する(ツールは使わない)
@@ -132,6 +182,7 @@ class AnswerGenerator(Protocol):
         categories: list[str],
         allow_new: bool = True,
         instruction: str | None = None,
+        rules: list[str] | None = None,
     ) -> list[dict]: ...
 
 
@@ -163,6 +214,7 @@ class StubAnswerGenerator:
         categories: list[str],
         allow_new: bool = True,
         instruction: str | None = None,
+        rules: list[str] | None = None,
     ) -> list[dict]:
         return []  # LLM無しでは分類できない(空=何も割り当てない)
 
@@ -270,12 +322,14 @@ class BedrockAnswerGenerator:
         categories: list[str],
         allow_new: bool = True,
         instruction: str | None = None,
+        rules: list[str] | None = None,
     ) -> list[dict]:
         """マニュアル一覧をカテゴリに割り当てる(全体を1回のリクエストで見せて
         一貫性のある分類にする)。戻り値: [{"manual_id":…, "category":…}]
 
         allow_new=False のときは既存カテゴリだけに割り当てる。
         instruction は管理者が指定した分類方針(例:「工種ごとに」)。
+        rules は管理者が蓄積した分類ルール(最優先で適用する)。
         """
         lines = "\n".join(
             f"- id={m['manual_id']} タイトル: {m['title']}\n  冒頭: {m['snippet'][:100]}"
@@ -302,12 +356,19 @@ class BedrockAnswerGenerator:
         instruction_text = (
             f"\n管理者が指定した分類方針(最優先で従う): {instruction}\n" if instruction else ""
         )
+        rules_text = (
+            "\n管理者が定めた分類ルール(どの判断よりも優先して必ず守る):\n"
+            + "\n".join(f"- {r}" for r in rules)
+            + "\n"
+            if rules
+            else ""
+        )
         prompt = (
             "あなたは社内マニュアルの整理係です。以下のマニュアル一覧を内容ごとにカテゴリ分けしてください。\n\n"
             "ルール:\n"
             f"{category_rules}"
             '- JSON配列のみを出力する: [{"manual_id": "...", "category": "カテゴリ名"}, ...]\n'
-            f"{instruction_text}\n"
+            f"{rules_text}{instruction_text}\n"
             f"既存カテゴリ: {existing}\n\nマニュアル一覧:\n{lines}"
         )
         res = self.client.converse(

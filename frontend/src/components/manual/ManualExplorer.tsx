@@ -20,6 +20,8 @@ import {
   LuFolderTree,
   LuLayoutGrid,
   LuList,
+  LuPin,
+  LuPinOff,
   LuRefreshCw,
   LuTrash2,
   LuTriangleAlert,
@@ -31,6 +33,7 @@ import {
   INGEST_MANUAL_MUTATION,
   MANUALS_QUERY,
   MOVE_MANUAL_MUTATION,
+  SET_MANUAL_PINNED_MUTATION,
   type Manual,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
@@ -212,6 +215,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     refetchQueries: ['Manuals'],
   })
   const [ingestManual] = useMutation(INGEST_MANUAL_MUTATION, {
+    refetchQueries: ['Manuals'],
+  })
+  const [setManualPinned] = useMutation(SET_MANUAL_PINNED_MUTATION, {
     refetchQueries: ['Manuals'],
   })
   const [autoOrganize, { loading: organizing }] = useMutation(
@@ -469,6 +475,15 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
                 <Text fontSize="sm" truncate>
                   {manual.title}
                 </Text>
+                {manual.categoryPinned && (
+                  <Box
+                    color="fg.muted"
+                    flexShrink={0}
+                    title="手動分類済み(AIの再分類では動きません)"
+                  >
+                    <LuPin size={12} />
+                  </Box>
+                )}
                 <StatusIcon manual={manual} />
               </HStack>
               <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
@@ -532,6 +547,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
               <Box position="absolute" top="1" right="4">
                 <StatusIcon manual={manual} />
               </Box>
+              {manual.categoryPinned && (
+                <Box
+                  position="absolute"
+                  top="1"
+                  left="4"
+                  color="fg.muted"
+                  title="手動分類済み(AIの再分類では動きません)"
+                >
+                  <LuPin size={14} />
+                </Box>
+              )}
               <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
                 {manual.title}
               </Text>
@@ -584,6 +610,32 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             >
               <LuBookOpen /> 開く
             </Button>
+            {isAdmin && (
+              <Button
+                size="sm"
+                variant="ghost"
+                w="100%"
+                justifyContent="flex-start"
+                onClick={() =>
+                  void setManualPinned({
+                    variables: {
+                      id: contextMenu.manual.id,
+                      pinned: !contextMenu.manual.categoryPinned,
+                    },
+                  })
+                }
+              >
+                {contextMenu.manual.categoryPinned ? (
+                  <>
+                    <LuPinOff /> ピン留めを解除
+                  </>
+                ) : (
+                  <>
+                    <LuPin /> ピン留め(再分類で動かさない)
+                  </>
+                )}
+              </Button>
+            )}
             {isAdmin && contextMenu.manual.ingestStatus === 'FAILED' && (
               <Button
                 size="sm"

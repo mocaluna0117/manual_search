@@ -39,6 +39,7 @@ export interface Manual {
   ingestError: string | null
   chunkCount: number | null
   updatedAt: string // 詳細表示の「更新日時」列に使う
+  categoryPinned: boolean // 手動分類済み(AIの再分類で動かない)
 }
 
 /** 同名ファイルをアップロードしたときの結果 */
@@ -110,6 +111,30 @@ export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
       ingestError
       chunkCount
       updatedAt
+      categoryPinned
+    }
+  }
+`
+
+// --- ピン留めの切り替え(ADMIN専用。ピン=AIの再分類で動かさない) ---
+
+interface SetManualPinnedData {
+  setManualPinned: { id: string; categoryPinned: boolean }
+}
+
+interface SetManualPinnedVars {
+  id: string
+  pinned: boolean
+}
+
+export const SET_MANUAL_PINNED_MUTATION: TypedDocumentNode<
+  SetManualPinnedData,
+  SetManualPinnedVars
+> = gql`
+  mutation SetManualPinned($id: ID!, $pinned: Boolean!) {
+    setManualPinned(id: $id, pinned: $pinned) {
+      id
+      categoryPinned
     }
   }
 `

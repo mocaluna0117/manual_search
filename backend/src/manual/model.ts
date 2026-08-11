@@ -47,6 +47,10 @@ export class Manual {
   @Field(() => ID, { nullable: true })
   categoryId!: string | null;
 
+  // trueなら手動で分類済み(ピン留め)。AIの再分類では動かさない
+  @Field()
+  categoryPinned!: boolean;
+
   @Field(() => IngestStatus)
   ingestStatus!: IngestStatus;
 

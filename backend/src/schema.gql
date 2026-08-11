@@ -61,6 +61,7 @@ type Manual {
   mimeType: String!
   size: Int!
   categoryId: ID
+  categoryPinned: Boolean!
   ingestStatus: IngestStatus!
   ingestError: String
   chunkCount: Int
@@ -155,6 +156,7 @@ type Mutation {
   createManualUploadUrl(fileName: String!): ManualUploadTarget!
   registerManual(input: RegisterManualInput!): RegisterManualResult!
   moveManual(id: ID!, categoryId: ID): Manual!
+  setManualPinned(id: ID!, pinned: Boolean!): Manual!
   autoOrganizeManuals: AutoOrganizeResult!
   moveManuals(ids: [ID!]!, categoryId: ID): Int!
   deleteManual(id: ID!): Manual!
