@@ -103,7 +103,11 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const isAdmin = meData?.me.role === 'ADMIN'
   const { openManual } = useManualViewer()
 
-  const { data: categoriesData } = useQuery(CATEGORIES_QUERY)
+  // フォルダ一覧も開くたびに取り直す。チャット経由の再分類などで
+  // 裏でフォルダが増えていても、古いキャッシュのまま表示しないため
+  const { data: categoriesData } = useQuery(CATEGORIES_QUERY, {
+    fetchPolicy: 'cache-and-network',
+  })
   // ルートと未分類ビューは「カテゴリ未設定」のマニュアルを表示する
   const { data, loading, startPolling, stopPolling } = useQuery(MANUALS_QUERY, {
     variables:

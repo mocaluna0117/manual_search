@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@apollo/client/react'
+import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
@@ -173,12 +173,22 @@ export function ChatHome({
     skip: !conversationId,
     fetchPolicy: 'cache-and-network',
   })
+  const apolloClient = useApolloClient()
   useEffect(() => {
     if (conversationData) {
       justLoadedHistoryRef.current = true
-      setMessages(conversationData.conversation.messages)
+      const messages = conversationData.conversation.messages
+      setMessages(messages)
+      // バックグラウンドの再分類が完了していたら、フォルダ/マニュアル一覧の
+      // キャッシュを取り直す(完了メッセージは会話を開いたときに届くため)
+      const last = messages[messages.length - 1]
+      if (last?.role === 'ASSISTANT' && last.content.includes('再分類が完了')) {
+        void apolloClient.refetchQueries({
+          include: ['ManualCategories', 'Manuals'],
+        })
+      }
     }
-  }, [conversationData])
+  }, [conversationData, apolloClient])
 
   // 会話が見つからない(削除済み等)ならホームに戻してもらう
   useEffect(() => {
