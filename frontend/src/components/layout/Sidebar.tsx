@@ -25,6 +25,8 @@ import {
   LuLogOut,
   LuMenu,
   LuMessageSquarePlus,
+  LuPanelLeft,
+  LuPanelRight,
   LuPencil,
   LuPlus,
   LuSettings,
@@ -731,8 +733,13 @@ const SIDEBAR_MAX = 480
  */
 export function SidebarPanel({
   side = 'left',
+  onToggleCollapse,
   ...props
-}: SidebarProps & { side?: 'left' | 'right' }) {
+}: SidebarProps & {
+  side?: 'left' | 'right'
+  /** パネルを閉じる(ChatGPT風の開閉ボタン) */
+  onToggleCollapse?: () => void
+}) {
   const storageKey = `${SIDEBAR_WIDTH_KEY}.${side}`
   const [width, setWidth] = useState(() => {
     try {
@@ -776,10 +783,34 @@ export function SidebarPanel({
       borderRightWidth={side === 'left' ? '1px' : undefined}
       borderLeftWidth={side === 'right' ? '1px' : undefined}
       borderColor="border"
-      display={{ base: 'none', md: 'block' }}
+      display={{ base: 'none', md: 'flex' }}
+      flexDirection="column"
       position="relative"
     >
-      <SidebarContent {...props} />
+      {/* 開閉ボタン(パネル上部。外側の端に寄せる) */}
+      {onToggleCollapse && (
+        <HStack
+          px={3}
+          pt={3}
+          flexShrink={0}
+          justify={side === 'left' ? 'flex-start' : 'flex-end'}
+        >
+          <IconButton
+            aria-label="サイドバーを閉じる"
+            title="サイドバーを閉じる"
+            size="sm"
+            variant="ghost"
+            color="fg.muted"
+            _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+            onClick={onToggleCollapse}
+          >
+            {side === 'left' ? <LuPanelLeft /> : <LuPanelRight />}
+          </IconButton>
+        </HStack>
+      )}
+      <Box flex="1" minH={0}>
+        <SidebarContent {...props} />
+      </Box>
       {/* 幅調整のつまみ(メイン画面側の端。ホバーで見えるようになる) */}
       <Box
         position="absolute"
