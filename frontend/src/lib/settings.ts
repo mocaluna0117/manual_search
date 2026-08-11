@@ -12,7 +12,16 @@ export type SendKey = 'enter' | 'shift-enter'
 /** 配色: system=端末の設定に追随 / light・dark=固定 */
 export type ThemeMode = 'system' | 'light' | 'dark'
 
+/**
+ * 画面の並び:
+ * - single: 1枚のサイドバーに両方(これまでの表示)
+ * - chat-left: チャットを左・マニュアルを右の2枚に分ける
+ * - chat-right: チャットを右・マニュアルを左
+ */
+export type LayoutMode = 'single' | 'chat-left' | 'chat-right'
+
 const SEND_KEY_STORAGE = 'manualSearch.settings.sendKey'
+const LAYOUT_STORAGE = 'manualSearch.settings.layout'
 // index.htmlの起動スクリプトも同じキーを読む(初期表示のちらつき防止)
 const THEME_STORAGE = 'manualSearch.settings.theme'
 const listeners = new Set<() => void>()
@@ -34,6 +43,29 @@ export function setSendKey(value: SendKey) {
     // ストレージが使えない環境では保存されないだけ(既定値のまま動く)
   }
   listeners.forEach((listener) => listener())
+}
+
+export function getLayoutMode(): LayoutMode {
+  try {
+    const saved = localStorage.getItem(LAYOUT_STORAGE)
+    if (saved === 'chat-left' || saved === 'chat-right') return saved
+  } catch {
+    // 読めなければ従来どおり1枚
+  }
+  return 'single'
+}
+
+export function setLayoutMode(mode: LayoutMode) {
+  try {
+    localStorage.setItem(LAYOUT_STORAGE, mode)
+  } catch {
+    // 保存できない環境では今回だけ有効
+  }
+  listeners.forEach((listener) => listener())
+}
+
+export function useLayoutMode(): LayoutMode {
+  return useSyncExternalStore(subscribe, getLayoutMode)
 }
 
 export function getThemeMode(): ThemeMode {

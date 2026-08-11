@@ -68,7 +68,14 @@ export interface SidebarProps {
   onSearch: (keyword: string) => void
   /** 項目を選んだ後に呼ばれる(スマホではDrawerを閉じるために使う) */
   onNavigate?: () => void
+  /** このパネルに表示する内容(レイアウト設定で左右に振り分ける) */
+  sections?: SidebarSections
+  /** アカウント欄(設定・ログアウト)を出すか。分割時は片方だけに出す */
+  showFooter?: boolean
 }
+
+/** サイドバーに出す内容の範囲 */
+export type SidebarSections = 'both' | 'chat' | 'manuals'
 
 /** サイドバーの中身。PC(常設)とスマホ(Drawer)の両方から使う */
 export function SidebarContent({
@@ -80,7 +87,11 @@ export function SidebarContent({
   onSelectManualsRoot,
   onSearch,
   onNavigate,
+  sections = 'both',
+  showFooter = true,
 }: SidebarProps) {
+  const showChat = sections === 'both' || sections === 'chat'
+  const showManuals = sections === 'both' || sections === 'manuals'
   const auth = useAuth()
   const { data, loading } = useQuery(CATEGORIES_QUERY)
   const { data: chatData, loading: loadingChats } = useQuery(CONVERSATIONS_QUERY)
@@ -263,36 +274,42 @@ export function SidebarContent({
   return (
     <VStack as="nav" h="100%" p={3} gap={4} align="stretch" color="fg">
       {/* 目立たせすぎず、下部の「マニュアルを追加」と同じ枠線スタイルに揃える */}
-      <Button
-        variant="outline"
-        size="sm"
-        color="fg"
-        borderColor="border.emphasized"
-        _hover={{ bg: 'bg.emphasized' }}
-        onClick={() => {
-          onSelectCategory(null)
-          onNavigate?.()
-        }}
-      >
-        <LuMessageSquarePlus /> 新しいチャット
-      </Button>
+      {showChat && (
+        <Button
+          variant="outline"
+          size="sm"
+          color="fg"
+          borderColor="border.emphasized"
+          _hover={{ bg: 'bg.emphasized' }}
+          onClick={() => {
+            onSelectCategory(null)
+            onNavigate?.()
+          }}
+        >
+          <LuMessageSquarePlus /> 新しいチャット
+        </Button>
+      )}
 
       {/* キーワード検索(AI検索と別の、従来型の検索) */}
-      <Input
-        size="sm"
-        placeholder="マニュアル名・内容で検索"
-        bg="bg.panel"
-        borderColor="border.emphasized"
-        _placeholder={{ color: 'fg.subtle' }}
-        value={keyword}
-        onChange={(e) => setKeyword(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSearch()
-        }}
-      />
+      {showManuals && (
+        <Input
+          size="sm"
+          placeholder="マニュアル名・内容で検索"
+          bg="bg.panel"
+          borderColor="border.emphasized"
+          _placeholder={{ color: 'fg.subtle' }}
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSearch()
+          }}
+        />
+      )}
 
       {/* チャット履歴(DBから取得) */}
       <Box flex="1" overflowY="auto">
+      {showChat && (
+        <>
         <Text fontSize="xs" color="fg.muted" mb={2}>
           チャット履歴
         </Text>
@@ -344,9 +361,13 @@ export function SidebarContent({
             </HStack>
           ))}
         </VStack>
+        </>
+      )}
 
-        <Separator my={4} borderColor="border" />
+      {showChat && showManuals && <Separator my={4} borderColor="border" />}
 
+      {showManuals && (
+        <>
         {/* カテゴリ別マニュアル(DBから取得) */}
         <HStack justify="space-between" mb={2}>
           {/* クリックでエクスプローラーのルート(全フォルダのアイコン表示)を開く */}
@@ -525,10 +546,12 @@ export function SidebarContent({
             未分類
           </Button>
         </VStack>
+        </>
+      )}
       </Box>
 
       {/* マニュアル追加(管理者のみ。本命の防御はバックエンドの@Roles) */}
-      {isAdmin && (
+      {isAdmin && showManuals && (
         <>
           <Button
             variant="outline"
@@ -540,29 +563,37 @@ export function SidebarContent({
           >
             <LuUpload /> マニュアルを追加
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            color="fg"
-            borderColor="border.emphasized"
-            _hover={{ bg: 'bg.emphasized' }}
-            onClick={() => setUsersOpen(true)}
-          >
-            <LuUsers /> ユーザー管理
-          </Button>
           <UploadManualDialog
             open={uploadOpen}
             onClose={() => setUploadOpen(false)}
           />
-          <UserManagementDialog
-            open={usersOpen}
-            onClose={() => setUsersOpen(false)}
-          />
         </>
       )}
 
-      {/* 下部: ログインユーザーとログアウト */}
+      {/* 下部: ユーザー管理・ログインユーザー・設定・ログアウト。
+          分割表示のときは片方のパネルにだけ出す */}
+      {showFooter && (
       <Box>
+        {isAdmin && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              w="100%"
+              mb={2}
+              color="fg"
+              borderColor="border.emphasized"
+              _hover={{ bg: 'bg.emphasized' }}
+              onClick={() => setUsersOpen(true)}
+            >
+              <LuUsers /> ユーザー管理
+            </Button>
+            <UserManagementDialog
+              open={usersOpen}
+              onClose={() => setUsersOpen(false)}
+            />
+          </>
+        )}
         <HStack gap={1} mb={1} color="fg.muted">
           <LuUser size={12} />
           <Text fontSize="xs" truncate>
@@ -594,27 +625,27 @@ export function SidebarContent({
           onClose={() => setSettingsOpen(false)}
         />
       </Box>
+      )}
     </VStack>
   )
 }
 
-/**
- * サイドバーのガワ。
- * - md以上: 画面左に常設
- * - md未満: ハンバーガーボタン + Drawer(中身は同じSidebarContent)
- *   スマホでもチャット履歴・キーワード検索・カテゴリ・ログアウトに到達できるようにする
- */
 const SIDEBAR_WIDTH_KEY = 'manualSearch.sidebarWidth'
 const SIDEBAR_MIN = 200
 const SIDEBAR_MAX = 480
 
-export function Sidebar(props: SidebarProps) {
-  const [open, setOpen] = useState(false)
-
-  // サイドバーの幅(右端をドラッグで調整し、次回のために保存する)
+/**
+ * PC用の常設パネル(md以上)。レイアウト設定に応じて左右どちらにも置ける。
+ * 幅はドラッグで調整でき、左右それぞれ別に記憶する
+ */
+export function SidebarPanel({
+  side = 'left',
+  ...props
+}: SidebarProps & { side?: 'left' | 'right' }) {
+  const storageKey = `${SIDEBAR_WIDTH_KEY}.${side}`
   const [width, setWidth] = useState(() => {
     try {
-      const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
+      const saved = Number(localStorage.getItem(storageKey))
       if (saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX) return saved
     } catch {
       // 読めなければ既定値
@@ -624,15 +655,17 @@ export function Sidebar(props: SidebarProps) {
   const startResize = (e: React.PointerEvent) => {
     e.preventDefault()
     const move = (ev: PointerEvent) => {
-      // サイドバーは画面左端に接しているので、マウスのX座標=そのまま幅になる
-      setWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX)))
+      // 左パネルはマウスのX座標がそのまま幅。右パネルは画面幅からの引き算
+      const next =
+        side === 'left' ? ev.clientX : window.innerWidth - ev.clientX
+      setWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, next)))
     }
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       setWidth((w) => {
         try {
-          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w))
+          localStorage.setItem(storageKey, String(w))
         } catch {
           // 保存できない環境では今回だけ有効
         }
@@ -644,34 +677,43 @@ export function Sidebar(props: SidebarProps) {
   }
 
   return (
-    <>
-      {/* PC: 常設サイドバー */}
+    <Box
+      w={`${width}px`}
+      flexShrink={0}
+      h="100%"
+      bg="bg.subtle"
+      borderRightWidth={side === 'left' ? '1px' : undefined}
+      borderLeftWidth={side === 'right' ? '1px' : undefined}
+      borderColor="border"
+      display={{ base: 'none', md: 'block' }}
+      position="relative"
+    >
+      <SidebarContent {...props} />
+      {/* 幅調整のつまみ(メイン画面側の端。ホバーで見えるようになる) */}
       <Box
-        w={`${width}px`}
-        flexShrink={0}
-        h="100%"
-        bg="bg.subtle"
-        borderRightWidth="1px"
-        borderColor="border"
-        display={{ base: 'none', md: 'block' }}
-        position="relative"
-      >
-        <SidebarContent {...props} />
-        {/* 幅調整のつまみ(右端。ホバーで見えるようになる) */}
-        <Box
-          position="absolute"
-          top={0}
-          right="-2px"
-          bottom={0}
-          w="5px"
-          cursor="col-resize"
-          zIndex={5}
-          _hover={{ bg: 'blue.muted' }}
-          onPointerDown={startResize}
-        />
-      </Box>
+        position="absolute"
+        top={0}
+        bottom={0}
+        {...(side === 'left' ? { right: '-2px' } : { left: '-2px' })}
+        w="5px"
+        cursor="col-resize"
+        zIndex={5}
+        _hover={{ bg: 'blue.muted' }}
+        onPointerDown={startResize}
+      />
+    </Box>
+  )
+}
 
-      {/* スマホ: 画面左上のハンバーガーボタン */}
+/**
+ * スマホ用(md未満)のハンバーガーボタン + Drawer。
+ * 画面が狭いので分割はせず、常に全項目を1枚にまとめて出す
+ */
+export function MobileSidebar(props: SidebarProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
       <IconButton
         aria-label="メニューを開く"
         variant="ghost"
@@ -712,7 +754,12 @@ export function Sidebar(props: SidebarProps) {
               </HStack>
               <Drawer.Body p={0} overflow="hidden">
                 {/* 項目を選んだらDrawerを閉じる */}
-                <SidebarContent {...props} onNavigate={() => setOpen(false)} />
+                <SidebarContent
+                  {...props}
+                  sections="both"
+                  showFooter
+                  onNavigate={() => setOpen(false)}
+                />
               </Drawer.Body>
             </Drawer.Content>
           </Drawer.Positioner>
