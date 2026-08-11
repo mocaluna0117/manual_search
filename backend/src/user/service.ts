@@ -1,10 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { UserRole } from '../../generated/prisma/client';
 import { AuthUser } from '../auth/current-user';
 import { PrismaService } from '../prisma/service';
+import { CognitoAdminService } from './cognito';
+import { ManagedUser } from './model';
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cognito: CognitoAdminService,
+  ) {}
 
   /**
    * JWTで認証されたユーザーをDBに確保する(JITプロビジョニング)。
@@ -17,5 +23,78 @@ export class UserService {
       update: { email: authUser.email },
       create: { cognitoSub: authUser.userId, email: authUser.email },
     });
+  }
+
+  /** 全ユーザーの一覧(アカウント=Cognito、権限=DBを合成) */
+  async listManaged(): Promise<ManagedUser[]> {
+    const [cognitoUsers, dbUsers] = await Promise.all([
+      this.cognito.listUsers(),
+      this.prisma.user.findMany({ select: { cognitoSub: true, role: true } }),
+    ]);
+    const roleBySub = new Map(dbUsers.map((u) => [u.cognitoSub, u.role]));
+    return cognitoUsers.map((c) => ({
+      cognitoSub: c.sub,
+      email: c.email,
+      // まだ一度もログインしていない(DB行が無い)ユーザーは既定のMEMBER扱い
+      role: roleBySub.get(c.sub) ?? UserRole.MEMBER,
+      passwordPending: c.passwordPending,
+      createdAt: c.createdAt,
+    }));
+  }
+
+  /** ユーザーを招待する(Cognito作成+権限をDBへ事前登録) */
+  async invite(email: string, role: UserRole): Promise<ManagedUser> {
+    const created = await this.cognito.createUser(email);
+    // ログイン前でも権限が決まっているように、DB行を先に作っておく。
+    // JITプロビジョニングはcognitoSubで照合するので、この行がそのまま使われる
+    await this.prisma.user.upsert({
+      where: { cognitoSub: created.sub },
+      update: { role },
+      create: { cognitoSub: created.sub, email, role },
+    });
+    return {
+      cognitoSub: created.sub,
+      email: created.email,
+      role,
+      passwordPending: created.passwordPending,
+      createdAt: created.createdAt,
+    };
+  }
+
+  /** 権限の変更。自分自身は変更不可(管理者が誰もいなくなる事故を防ぐ) */
+  async updateRole(
+    cognitoSub: string,
+    role: UserRole,
+    actor: AuthUser,
+  ): Promise<ManagedUser> {
+    if (cognitoSub === actor.userId) {
+      throw new BadRequestException('自分自身の権限は変更できません');
+    }
+    await this.prisma.user.upsert({
+      where: { cognitoSub },
+      update: { role },
+      create: { cognitoSub, role },
+    });
+    const users = await this.listManaged();
+    const updated = users.find((u) => u.cognitoSub === cognitoSub);
+    if (!updated) {
+      throw new BadRequestException('ユーザーが見つかりません');
+    }
+    return updated;
+  }
+
+  /**
+   * ユーザーの削除。自分自身は削除不可。
+   * DB行を消すと会話履歴もカスケード削除される(退職者の後始末を想定)
+   */
+  async remove(cognitoSub: string, actor: AuthUser): Promise<boolean> {
+    if (cognitoSub === actor.userId) {
+      throw new BadRequestException('自分自身は削除できません');
+    }
+    await this.cognito.deleteUser(cognitoSub);
+    await this.prisma.user
+      .delete({ where: { cognitoSub } })
+      .catch(() => undefined); // 一度もログインしていない人はDB行が無い
+    return true;
   }
 }

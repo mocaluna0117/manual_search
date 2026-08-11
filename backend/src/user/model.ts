@@ -1,4 +1,10 @@
-import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
+import {
+  Field,
+  GraphQLISODateTime,
+  ID,
+  ObjectType,
+  registerEnumType,
+} from '@nestjs/graphql';
 import { UserRole } from '../../generated/prisma/client';
 
 registerEnumType(UserRole, {
@@ -17,4 +23,25 @@ export class UserProfile {
 
   @Field(() => UserRole)
   role!: UserRole;
+}
+
+// 管理画面(ユーザー管理)に出す1ユーザー。
+// アカウントの実体はCognito、権限はDBが持つので両者を合成して返す
+@ObjectType()
+export class ManagedUser {
+  @Field(() => ID)
+  cognitoSub!: string;
+
+  @Field(() => String, { nullable: true })
+  email!: string | null;
+
+  @Field(() => UserRole)
+  role!: UserRole;
+
+  // 招待直後で仮パスワードのまま(=まだ一度もログインしていない)
+  @Field(() => Boolean)
+  passwordPending!: boolean;
+
+  @Field(() => GraphQLISODateTime, { nullable: true })
+  createdAt!: Date | null;
 }

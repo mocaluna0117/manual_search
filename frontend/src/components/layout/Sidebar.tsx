@@ -29,6 +29,7 @@ import {
 import { ME_QUERY } from '../../graphql/me'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { SettingsDialog } from './SettingsDialog'
+import { UserManagementDialog } from './UserManagementDialog'
 
 export interface SidebarProps {
   selectedCategoryId: string | null
@@ -58,6 +59,7 @@ export function SidebarContent({
   const isAdmin = meData?.me.role === 'ADMIN'
   const [uploadOpen, setUploadOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [usersOpen, setUsersOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
   const handleLogout = async () => {
@@ -369,9 +371,23 @@ export function SidebarContent({
           >
             📄 マニュアルを追加
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            color="fg"
+            borderColor="border.emphasized"
+            _hover={{ bg: 'bg.emphasized' }}
+            onClick={() => setUsersOpen(true)}
+          >
+            👥 ユーザー管理
+          </Button>
           <UploadManualDialog
             open={uploadOpen}
             onClose={() => setUploadOpen(false)}
+          />
+          <UserManagementDialog
+            open={usersOpen}
+            onClose={() => setUsersOpen(false)}
           />
         </>
       )}
