@@ -14,7 +14,7 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useRef, useState } from 'react'
-import { LuTriangleAlert, LuX } from 'react-icons/lu'
+import { LuBot, LuCheck, LuTriangleAlert, LuX } from 'react-icons/lu'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
 import {
   CREATE_UPLOAD_URL_MUTATION,
@@ -365,20 +365,43 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                   </VStack>
                 )}
 
-                {/* カテゴリ(全ファイル共通) */}
+                {/* カテゴリ(全ファイル共通)。
+                    おすすめの「AIにおまかせ」は<option>だと装飾できないので
+                    ドロップダウンの外に出して目立つボタンにする */}
                 <div>
                   <Text fontSize="sm" mb={1}>
                     カテゴリ（任意・全ファイルに適用）
                   </Text>
-                  <NativeSelect.Root disabled={uploading}>
+                  <Button
+                    w="100%"
+                    justifyContent="flex-start"
+                    colorPalette="purple"
+                    variant={categoryId === '__auto' ? 'solid' : 'outline'}
+                    disabled={uploading}
+                    mb={2}
+                    onClick={() =>
+                      setCategoryId(categoryId === '__auto' ? '' : '__auto')
+                    }
+                  >
+                    <LuBot />
+                    <Text>AIにおまかせ（内容から自動分類）</Text>
+                    <Box flex="1" />
+                    {categoryId === '__auto' ? (
+                      <LuCheck />
+                    ) : (
+                      <Badge colorPalette="purple" variant="surface">
+                        おすすめ
+                      </Badge>
+                    )}
+                  </Button>
+                  <NativeSelect.Root
+                    disabled={uploading || categoryId === '__auto'}
+                  >
                     <NativeSelect.Field
-                      value={categoryId}
+                      value={categoryId === '__auto' ? '' : categoryId}
                       onChange={(e) => setCategoryId(e.target.value)}
                     >
                       <option value="">未分類</option>
-                      <option value="__auto">
-                        AIにおまかせ（内容から自動分類）
-                      </option>
                       {categoriesData?.manualCategories.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
@@ -387,6 +410,12 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                     </NativeSelect.Field>
                     <NativeSelect.Indicator />
                   </NativeSelect.Root>
+                  {categoryId === '__auto' && (
+                    <Text fontSize="xs" color="fg.muted" mt={1}>
+                      内容を読んで自動で振り分けます（合うフォルダが無ければ作成）。
+                      フォルダを自分で選ぶ場合は、もう一度ボタンを押して解除してください。
+                    </Text>
+                  )}
                 </div>
 
                 {/* 進捗サマリ */}
