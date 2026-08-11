@@ -118,15 +118,16 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const dir = sortAsc ? 1 : -1
   const manuals = [...(data?.manuals ?? [])].sort((a, b) => {
     if (sortKey === 'size') return (a.size - b.size) * dir
-    if (sortKey === 'updatedAt')
-      return a.updatedAt.localeCompare(b.updatedAt) * dir
+    if (sortKey === 'createdAt')
+      // PDFの作成日が読めていないものは末尾へ寄せる
+      return (a.pdfCreatedAt ?? '').localeCompare(b.pdfCreatedAt ?? '') * dir
     return a.title.localeCompare(b.title, 'ja') * (sortKey ? dir : 1)
   })
   // フォルダは常にファイルより先(Windowsと同じ)。
   // 列で並べ替えていないときは、サーバーから来た順(管理者が決めた並び)のまま
   const categories = sortKey
     ? [...(categoriesData?.manualCategories ?? [])].sort((a, b) => {
-        if (sortKey === 'updatedAt')
+        if (sortKey === 'createdAt')
           return (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '') * dir
         return (
           a.name.localeCompare(b.name, 'ja') * (sortKey === 'size' ? 1 : dir)

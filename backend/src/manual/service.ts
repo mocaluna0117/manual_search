@@ -244,7 +244,10 @@ export class ManualService implements OnApplicationBootstrap {
         manual.fileKey,
         manual.fileName,
       );
-      const chunkCount = await this.rag.ingest(manual.id, downloadUrl);
+      const { chunkCount, pdfCreatedAt } = await this.rag.ingest(
+        manual.id,
+        downloadUrl,
+      );
 
       await this.prisma.manual.update({
         where: { id },
@@ -252,6 +255,8 @@ export class ManualService implements OnApplicationBootstrap {
           ingestStatus: IngestStatus.COMPLETED,
           chunkCount,
           ingestedAt: new Date(),
+          // 読み取れたときだけ更新する(既に入っている値を消さない)
+          ...(pdfCreatedAt ? { pdfCreatedAt } : {}),
         },
       });
 

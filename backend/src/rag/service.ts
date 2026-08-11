@@ -85,7 +85,10 @@ export class RagService {
   }
 
   /** PDFの取り込み(テキスト抽出→チャンク分割→DB保存)をPythonに依頼する */
-  async ingest(manualId: string, downloadUrl: string): Promise<number> {
+  async ingest(
+    manualId: string,
+    downloadUrl: string,
+  ): Promise<{ chunkCount: number; pdfCreatedAt: Date | null }> {
     const res = await this.request('/ingest', TIMEOUT_MS.ingest, {
       manual_id: manualId,
       download_url: downloadUrl,
@@ -95,8 +98,16 @@ export class RagService {
         `PDFの取り込みに失敗しました (HTTP ${res.status})`,
       );
     }
-    const body = (await res.json()) as { chunk_count: number };
-    return body.chunk_count;
+    const body = (await res.json()) as {
+      chunk_count: number;
+      pdf_created_at?: string | null;
+    };
+    // 日付が壊れているPDFもあるので、解釈できないものはnull扱いにする
+    const parsed = body.pdf_created_at ? new Date(body.pdf_created_at) : null;
+    return {
+      chunkCount: body.chunk_count,
+      pdfCreatedAt: parsed && !Number.isNaN(parsed.getTime()) ? parsed : null,
+    };
   }
 
   /** マニュアル一覧のカテゴリ分けをAIに依頼する(判断だけ返る。DB反映は呼び出し側) */

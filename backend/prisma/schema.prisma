@@ -63,6 +63,8 @@ model Manual {
   // trueなら管理者が手動で分類した(ピン留め)。AIの再分類では動かさない
   categoryPinned Boolean          @default(false) @map("category_pinned")
   chunks        ManualChunk[]
+  // PDF自体が持つ作成日(取り込み時に読み取る)。一覧の「作成日」列に使う
+  pdfCreatedAt  DateTime?         @map("pdf_created_at")
   ingestStatus  IngestStatus      @default(PENDING) @map("ingest_status")
   ingestError   String?           @map("ingest_error") // 失敗理由(FAILEDのとき)
   chunkCount    Int?              @map("chunk_count") // 作成されたチャンク数

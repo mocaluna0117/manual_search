@@ -38,6 +38,10 @@ export class Manual {
   @Field(() => Date, { nullable: true })
   fileLastModified!: Date | null;
 
+  // PDF自体が持つ作成日(取り込み時に読み取る)。一覧の「作成日」列に使う
+  @Field(() => Date, { nullable: true })
+  pdfCreatedAt!: Date | null;
+
   @Field()
   mimeType!: string;
 

@@ -268,6 +268,9 @@ class IngestResponse(BaseModel):
     page_count: int
     chunk_count: int
     transcribed_page_count: int = 0  # Claudeの画像認識で書き起こしたページ数
+    # PDF自体が持つ作成日(ISO8601)。一覧の「作成日」列に使う。
+    # 入っていないPDFもあるのでnullを許容する
+    pdf_created_at: str | None = None
 
 
 @app.get("/health")
@@ -293,6 +296,16 @@ def ingest(req: IngestRequest) -> IngestResponse:
     except Exception as e:
         logger.warning("PDFの解析に失敗 manual=%s: %s", req.manual_id, e)
         raise HTTPException(status_code=422, detail="PDFを解析できませんでした")
+
+    # 2.2) PDF自体が持つ作成日を読む(一覧の「作成日」列に使う)。
+    #      日付が壊れているPDFもあるので、取れなければ諦めて取り込みは続ける
+    pdf_created_at: str | None = None
+    try:
+        created = reader.metadata.creation_date if reader.metadata else None
+        if created:
+            pdf_created_at = created.isoformat()
+    except Exception:
+        pass
 
     # 2.5) テキストがほぼ取れないページ(スキャン・画像ページ)は
     #      Claudeの画像認識で書き起こす(上限ページ数まで)
@@ -359,6 +372,7 @@ def ingest(req: IngestRequest) -> IngestResponse:
         page_count=len(pages),
         chunk_count=len(chunks),
         transcribed_page_count=transcribed_count,
+        pdf_created_at=pdf_created_at,
     )
 
 

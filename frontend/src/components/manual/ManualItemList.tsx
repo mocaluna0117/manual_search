@@ -28,7 +28,7 @@ import { formatSize } from '../../lib/format'
 export type ViewMode = 'details' | 'icons'
 const VIEW_MODE_KEY = 'manualSearch.explorerViewMode'
 
-export type SortKey = 'name' | 'updatedAt' | 'size'
+export type SortKey = 'name' | 'createdAt' | 'size'
 
 /** 表示形式をlocalStorageに保存して共有する(一覧をどこで開いても同じ形式) */
 export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
@@ -52,7 +52,7 @@ export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
   return [viewMode, change]
 }
 
-/** 「2026/08/11 19:59」形式(Windowsの更新日時列と同じ見た目) */
+/** 「2026/08/11 19:59」形式(Windowsの日付列と同じ見た目) */
 export function formatDateTime(iso: string | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -271,7 +271,7 @@ export function ManualItemList({
             fontSize="xs"
           >
             {sortHeader('名前', 'name')}
-            {sortHeader('更新日時', 'updatedAt', '140px')}
+            {sortHeader('作成日', 'createdAt', '140px')}
             {sortHeader('サイズ', 'size', '80px')}
           </HStack>
 
@@ -330,7 +330,7 @@ export function ManualItemList({
                   <StatusIcon manual={manual} />
                 </HStack>
                 <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
-                  {formatDateTime(manual.updatedAt)}
+                  {formatDateTime(manual.pdfCreatedAt ?? undefined)}
                 </Text>
                 <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0}>
                   {formatSize(manual.size)}

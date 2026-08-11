@@ -38,7 +38,8 @@ export interface Manual {
   ingestStatus: IngestStatus
   ingestError: string | null
   chunkCount: number | null
-  updatedAt: string // 詳細表示の「更新日時」列に使う
+  updatedAt: string // DBの更新時刻(並べ替えの保険用)
+  pdfCreatedAt: string | null // PDF自体が持つ作成日(「作成日」列)
   categoryPinned: boolean // 手動分類済み(AIの再分類で動かない)
 }
 
@@ -111,6 +112,7 @@ export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
       ingestError
       chunkCount
       updatedAt
+      pdfCreatedAt
       categoryPinned
     }
   }
@@ -189,6 +191,7 @@ export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
         ingestError
         chunkCount
         updatedAt
+        pdfCreatedAt
         categoryPinned
       }
       snippet

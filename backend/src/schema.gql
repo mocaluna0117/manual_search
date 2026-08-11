@@ -58,6 +58,7 @@ type Manual {
   fileKey: String!
   fileName: String!
   fileLastModified: DateTime
+  pdfCreatedAt: DateTime
   mimeType: String!
   size: Int!
   categoryId: ID
