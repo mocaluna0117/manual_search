@@ -188,6 +188,8 @@ export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
         ingestStatus
         ingestError
         chunkCount
+        updatedAt
+        categoryPinned
       }
       snippet
     }

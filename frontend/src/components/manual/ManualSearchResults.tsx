@@ -1,17 +1,20 @@
-import { useQuery } from '@apollo/client/react'
-import {
-  Box,
-  Button,
-  Card,
-  Heading,
-  Spinner,
-  Stack,
-  Text,
-  VStack,
-} from '@chakra-ui/react'
-import { Fragment } from 'react'
+import { useMutation, useQuery } from '@apollo/client/react'
+import { Box, Heading, HStack, Spinner, Text } from '@chakra-ui/react'
+import { Fragment, useState } from 'react'
 import { LuSearch } from 'react-icons/lu'
-import { SEARCH_MANUALS_QUERY } from '../../graphql/manuals'
+import {
+  DELETE_MANUAL_MUTATION,
+  INGEST_MANUAL_MUTATION,
+  SEARCH_MANUALS_QUERY,
+  SET_MANUAL_PINNED_MUTATION,
+  type Manual,
+} from '../../graphql/manuals'
+import { ME_QUERY } from '../../graphql/me'
+import {
+  ManualItemList,
+  ViewModeSwitch,
+  useViewMode,
+} from './ManualItemList'
 import { useManualViewer } from './ManualViewerProvider'
 
 interface ManualSearchResultsProps {
@@ -38,62 +41,108 @@ function HighlightedText({ text, keyword }: { text: string; keyword: string }) {
   )
 }
 
+/**
+ * キーワード検索の結果一覧。
+ * 見た目と操作はフォルダ表示(ManualExplorer)と同じ共通部品を使い、
+ * 検索結果ならではの「キーワードのハイライト」と「本文の抜粋」を足す
+ */
 export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
   const { data, loading } = useQuery(SEARCH_MANUALS_QUERY, {
     variables: { keyword },
   })
-
+  const { data: meData } = useQuery(ME_QUERY)
+  const isAdmin = meData?.me.role === 'ADMIN'
   const { openManual } = useManualViewer()
+  const [viewMode, changeViewMode] = useViewMode()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const [deleteManual] = useMutation(DELETE_MANUAL_MUTATION, {
+    refetchQueries: ['SearchManuals', 'Manuals'],
+  })
+  const [ingestManual] = useMutation(INGEST_MANUAL_MUTATION, {
+    refetchQueries: ['SearchManuals', 'Manuals'],
+  })
+  const [setManualPinned] = useMutation(SET_MANUAL_PINNED_MUTATION, {
+    refetchQueries: ['SearchManuals', 'Manuals'],
+  })
+
+  const results = data?.searchManuals ?? []
+  const manuals = results.map((r) => r.manual)
+  // 本文ヒットの抜粋をマニュアルIDから引けるようにする
+  const snippets = new Map(
+    results.filter((r) => r.snippet).map((r) => [r.manual.id, r.snippet!]),
+  )
+
+  const handleDelete = async (manual: Manual) => {
+    if (!window.confirm(`「${manual.title}」を削除しますか？元に戻せません。`))
+      return
+    try {
+      await deleteManual({ variables: { id: manual.id } })
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+    }
+  }
 
   return (
-    <Box p={{ base: 4, md: 8 }} pt={{ base: 14, md: 8 }} maxW="800px" mx="auto">
-      <Heading size="lg" mb={2} display="flex" alignItems="center" gap={2}>
-        <LuSearch /> 「{keyword}」の検索結果
-      </Heading>
+    <Box
+      p={{ base: 4, md: 6 }}
+      pt={{ base: 14, md: 6 }}
+      h="100%"
+      overflowY="auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setSelectedId(null)
+      }}
+    >
+      <HStack mb={4} gap={2} flexWrap="wrap">
+        <Heading size="sm" display="flex" alignItems="center" gap={2}>
+          <LuSearch /> 「{keyword}」の検索結果
+        </Heading>
+        {data && (
+          <Text fontSize="sm" color="fg.muted">
+            {results.length}件
+          </Text>
+        )}
+        <Box flex="1" />
+        <ViewModeSwitch viewMode={viewMode} onChange={changeViewMode} />
+      </HStack>
 
-      {loading && <Spinner mt={4} />}
+      {loading && !data && <Spinner />}
 
-      {data && (
-        <Text color="fg.muted" mb={6}>
-          {data.searchManuals.length}件見つかりました
+      <ManualItemList
+        viewMode={viewMode}
+        manuals={manuals}
+        isAdmin={isAdmin}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onOpenManual={(manual) => openManual(manual.id, manual.title)}
+        onDeleteManual={(manual) => void handleDelete(manual)}
+        onIngestManual={(manual) =>
+          void ingestManual({ variables: { id: manual.id } })
+        }
+        onTogglePin={(manual) =>
+          void setManualPinned({
+            variables: { id: manual.id, pinned: !manual.categoryPinned },
+          })
+        }
+        renderTitle={(manual) => (
+          <HighlightedText text={manual.title} keyword={keyword} />
+        )}
+        renderSubtitle={(manual) => {
+          const snippet = snippets.get(manual.id)
+          if (!snippet || viewMode !== 'details') return null
+          return (
+            <Text fontSize="xs" color="fg.muted" pl={9} pb={1}>
+              <HighlightedText text={snippet} keyword={keyword} />
+            </Text>
+          )
+        }}
+      />
+
+      {!loading && results.length === 0 && (
+        <Text mt={6} color="fg.muted" fontSize="sm">
+          「{keyword}」に一致するマニュアルは見つかりませんでした
         </Text>
       )}
-
-      <VStack gap={3} align="stretch">
-        {data?.searchManuals.map(({ manual, snippet }) => (
-          <Card.Root key={manual.id} size="sm">
-            <Card.Body>
-              <Stack
-                direction={{ base: 'column', md: 'row' }}
-                justify="space-between"
-                align={{ base: 'stretch', md: 'start' }}
-                gap={3}
-              >
-                <Box>
-                  <Card.Title>
-                    <HighlightedText text={manual.title} keyword={keyword} />
-                  </Card.Title>
-                  {/* 本文ヒット時の抜粋 */}
-                  {snippet && (
-                    <Text fontSize="sm" color="fg.muted" mt={2}>
-                      <HighlightedText text={snippet} keyword={keyword} />
-                    </Text>
-                  )}
-                </Box>
-                <Button
-                  size="sm"
-                  colorPalette="blue"
-                  variant="outline"
-                  flexShrink={0}
-                  onClick={() => openManual(manual.id, manual.title)}
-                >
-                  開く
-                </Button>
-              </Stack>
-            </Card.Body>
-          </Card.Root>
-        ))}
-      </VStack>
     </Box>
   )
 }

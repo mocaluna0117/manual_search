@@ -1,32 +1,9 @@
 import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
-import {
-  Box,
-  Button,
-  HStack,
-  IconButton,
-  Portal,
-  Spinner,
-  Text,
-} from '@chakra-ui/react'
+import { Box, Button, HStack, Spinner, Text } from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
-import { FcFile, FcFolder, FcOpenedFolder } from 'react-icons/fc'
-import {
-  LuArrowLeft,
-  LuBookOpen,
-  LuBot,
-  LuChevronDown,
-  LuChevronUp,
-  LuClock,
-  LuFolderTree,
-  LuLayoutGrid,
-  LuList,
-  LuPin,
-  LuPinOff,
-  LuRefreshCw,
-  LuTrash2,
-  LuTriangleAlert,
-} from 'react-icons/lu'
-import { CATEGORIES_QUERY, type Category } from '../../graphql/categories'
+import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
+import { LuArrowLeft, LuBot, LuFolderTree } from 'react-icons/lu'
+import { CATEGORIES_QUERY } from '../../graphql/categories'
 import {
   AUTO_ORGANIZE_MUTATION,
   DELETE_MANUAL_MUTATION,
@@ -37,7 +14,12 @@ import {
   type Manual,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
-import { formatSize } from '../../lib/format'
+import {
+  ManualItemList,
+  ViewModeSwitch,
+  useViewMode,
+  type SortKey,
+} from './ManualItemList'
 import { useManualViewer } from './ManualViewerProvider'
 
 /** 表示中の場所。null=ルート(全フォルダ+未分類のマニュアル) */
@@ -51,52 +33,10 @@ interface ManualExplorerProps {
   onNavigate: (folder: ExplorerFolder) => void
 }
 
-/** エクスプローラーの表示形式(Windowsの「詳細」と「中アイコン」に相当) */
-type ViewMode = 'details' | 'icons'
-const VIEW_MODE_KEY = 'manualSearch.explorerViewMode'
-
-type SortKey = 'name' | 'updatedAt' | 'size'
-
-/** 「2026/08/11 19:59」形式(Windowsの更新日時列と同じ見た目) */
-function formatDateTime(iso: string | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-/** 取り込み状態の目印(色付きアイコン)。正常時は何も出さない */
-function StatusIcon({ manual }: { manual: Manual }) {
-  switch (manual.ingestStatus) {
-    case 'PENDING':
-    case 'PROCESSING':
-      return (
-        <Box color="orange.fg" title="取り込み中…" flexShrink={0}>
-          <LuClock size={14} />
-        </Box>
-      )
-    case 'FAILED':
-      return (
-        <Box
-          color="fg.error"
-          title={manual.ingestError ?? '取り込みに失敗しました'}
-          flexShrink={0}
-        >
-          <LuTriangleAlert size={14} />
-        </Box>
-      )
-    case 'COMPLETED':
-      return null
-  }
-}
-
 /**
  * Windowsのエクスプローラー風のマニュアル一覧。
- * - 既定は「詳細」表示(名前・更新日時・サイズの列)。アイコン表示にも切替可能
- * - シングルクリックで選択 / ダブルクリックで開く(フォルダ・マニュアル共通)
- * - 管理者はマニュアルをフォルダへドラッグ&ドロップで移動できる
- * - 右クリックでメニュー(開く・削除・再取り込み)
+ * 一覧の見た目と操作はManualItemList(検索結果と共通)に任せ、
+ * ここはフォルダの移動・取得と、フォルダ特有の操作(自動分類など)を担当する
  */
 export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const isRoot = folder === null
@@ -137,22 +77,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     stopPolling()
   }, [hasInFlight, startPolling, stopPolling, client])
 
-  // 表示形式(localStorageに保存して次回も同じ表示で開く)
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    try {
-      return localStorage.getItem(VIEW_MODE_KEY) === 'icons' ? 'icons' : 'details'
-    } catch {
-      return 'details'
-    }
-  })
-  const changeViewMode = (mode: ViewMode) => {
-    setViewMode(mode)
-    try {
-      localStorage.setItem(VIEW_MODE_KEY, mode)
-    } catch {
-      // 保存できない環境では今回だけ有効
-    }
-  }
+  const [viewMode, changeViewMode] = useViewMode()
 
   // 並べ替え(詳細表示のヘッダーをクリック。アイコン表示にも同じ順序を適用)
   const [sortKey, setSortKey] = useState<SortKey>('name')
@@ -181,32 +106,6 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   )
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<{
-    x: number
-    y: number
-    manual: Manual
-  } | null>(null)
-
-  // 右クリックメニューは画面のどこかをクリック/Escで閉じる(Windowsと同じ)。
-  // React 18ではクリック系イベント中のuseEffectが同期的に走るため、
-  // メニューを開いたイベント自身に反応して即閉じないよう、登録を1tick遅らせる
-  useEffect(() => {
-    if (!contextMenu) return
-    const close = () => setContextMenu(null)
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
-    const timer = window.setTimeout(() => {
-      window.addEventListener('click', close)
-      window.addEventListener('contextmenu', close)
-      window.addEventListener('keydown', onKey)
-    }, 0)
-    return () => {
-      window.clearTimeout(timer)
-      window.removeEventListener('click', close)
-      window.removeEventListener('contextmenu', close)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [contextMenu])
 
   const [moveManual] = useMutation(MOVE_MANUAL_MUTATION, {
     refetchQueries: ['Manuals'],
@@ -225,8 +124,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     { refetchQueries: ['Manuals', 'ManualCategories'] },
   )
 
-  const handleDrop = async (manualId: string, categoryId: string | null) => {
-    setDragOverFolderId(null)
+  const handleDrop = async (manualId: string, categoryId: string) => {
     const manual = manuals.find((m) => m.id === manualId)
     if (manual && manual.categoryId === categoryId) return // 同じ場所へは何もしない
     try {
@@ -268,76 +166,6 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       window.alert(e instanceof Error ? e.message : '自動分類に失敗しました')
     }
   }
-
-  // ---- フォルダ/マニュアルそれぞれの共通ハンドラ(詳細・アイコン両表示で使う) ----
-
-  const folderItemProps = (category: Category) => ({
-    onClick: () => setSelectedId(category.id),
-    onDoubleClick: () => onNavigate(category),
-    onDragOver: (e: React.DragEvent) => {
-      if (!isAdmin) return
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-      setDragOverFolderId(category.id)
-    },
-    onDragLeave: () => setDragOverFolderId(null),
-    onDrop: (e: React.DragEvent) => {
-      e.preventDefault()
-      const manualId = e.dataTransfer.getData('text/plain')
-      if (manualId) void handleDrop(manualId, category.id)
-    },
-  })
-
-  const manualItemProps = (manual: Manual) => ({
-    draggable: isAdmin,
-    onClick: () => setSelectedId(manual.id),
-    onDoubleClick: () => openManual(manual.id, manual.title),
-    onContextMenu: (e: React.MouseEvent) => {
-      e.preventDefault()
-      // このイベント自身がwindowの「閉じる」リスナーに届くと、
-      // 開いた瞬間に閉じてメニューが一度も表示されない
-      e.stopPropagation()
-      setSelectedId(manual.id)
-      setContextMenu({ x: e.clientX, y: e.clientY, manual })
-    },
-    onDragStart: (e: React.DragEvent) => {
-      e.dataTransfer.setData('text/plain', manual.id)
-      e.dataTransfer.effectAllowed = 'move'
-    },
-  })
-
-  /** 選択・ドロップ先のハイライト(Windows風の青) */
-  const highlight = (id: string, isDropTarget = false) => ({
-    borderWidth: '2px',
-    borderColor:
-      dragOverFolderId === id && isDropTarget
-        ? 'blue.solid'
-        : selectedId === id
-          ? 'blue.muted'
-          : 'transparent',
-    bg: selectedId === id ? 'blue.subtle' : undefined,
-    _hover: { bg: selectedId === id ? 'blue.subtle' : 'bg.muted' },
-    cursor: 'default',
-    userSelect: 'none' as const,
-  })
-
-  const showFolders = isRoot // フォルダが並ぶのはルートだけ
-
-  /** 詳細表示の列ヘッダー(クリックで並べ替え) */
-  const sortHeader = (label: string, key: SortKey, w?: string) => (
-    <HStack
-      w={w}
-      flex={w ? undefined : '1'}
-      gap={1}
-      cursor="pointer"
-      _hover={{ color: 'fg' }}
-      onClick={() => toggleSort(key)}
-    >
-      <Text>{label}</Text>
-      {sortKey === key &&
-        (sortAsc ? <LuChevronUp size={12} /> : <LuChevronDown size={12} />)}
-    </HStack>
-  )
 
   return (
     <Box
@@ -393,183 +221,36 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             <LuBot /> 未分類をAIで自動分類
           </Button>
         )}
-        {/* 表示切替(Windowsの「詳細」「中アイコン」) */}
-        <HStack gap={0} borderWidth="1px" borderRadius="md" overflow="hidden">
-          <IconButton
-            aria-label="詳細表示"
-            title="詳細"
-            size="xs"
-            borderRadius={0}
-            variant={viewMode === 'details' ? 'subtle' : 'ghost'}
-            onClick={() => changeViewMode('details')}
-          >
-            <LuList />
-          </IconButton>
-          <IconButton
-            aria-label="アイコン表示"
-            title="中アイコン"
-            size="xs"
-            borderRadius={0}
-            variant={viewMode === 'icons' ? 'subtle' : 'ghost'}
-            onClick={() => changeViewMode('icons')}
-          >
-            <LuLayoutGrid />
-          </IconButton>
-        </HStack>
+        <ViewModeSwitch viewMode={viewMode} onChange={changeViewMode} />
       </HStack>
 
       {loading && !data && <Spinner />}
 
-      {/* ===== 詳細表示(既定) ===== */}
-      {viewMode === 'details' && (
-        <Box>
-          <HStack
-            px={2}
-            py={1}
-            gap={2}
-            borderBottomWidth="1px"
-            color="fg.muted"
-            fontSize="xs"
-          >
-            {sortHeader('名前', 'name')}
-            {sortHeader('更新日時', 'updatedAt', '140px')}
-            {sortHeader('サイズ', 'size', '80px')}
-          </HStack>
-
-          {showFolders &&
-            categories.map((category) => (
-              <HStack
-                key={category.id}
-                px={2}
-                py={1}
-                gap={2}
-                borderRadius="sm"
-                {...highlight(category.id, true)}
-                {...folderItemProps(category)}
-              >
-                <HStack flex="1" gap={2} minW={0}>
-                  <Box flexShrink={0}>
-                    <FcFolder size={18} />
-                  </Box>
-                  <Text fontSize="sm" truncate>
-                    {category.name}
-                  </Text>
-                </HStack>
-                <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
-                  {formatDateTime(category.updatedAt)}
-                </Text>
-                <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0} />
-              </HStack>
-            ))}
-
-          {manuals.map((manual) => (
-            <HStack
-              key={manual.id}
-              px={2}
-              py={1}
-              gap={2}
-              borderRadius="sm"
-              {...highlight(manual.id)}
-              {...manualItemProps(manual)}
-              title={manual.title}
-            >
-              <HStack flex="1" gap={2} minW={0}>
-                <Box flexShrink={0}>
-                  <FcFile size={18} />
-                </Box>
-                <Text fontSize="sm" truncate>
-                  {manual.title}
-                </Text>
-                {manual.categoryPinned && (
-                  <Box
-                    color="fg.muted"
-                    flexShrink={0}
-                    title="手動分類済み(AIの再分類では動きません)"
-                  >
-                    <LuPin size={12} />
-                  </Box>
-                )}
-                <StatusIcon manual={manual} />
-              </HStack>
-              <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
-                {formatDateTime(manual.updatedAt)}
-              </Text>
-              <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0}>
-                {formatSize(manual.size)}
-              </Text>
-            </HStack>
-          ))}
-        </Box>
-      )}
-
-      {/* ===== アイコン表示 ===== */}
-      {viewMode === 'icons' && (
-        <Box
-          display="grid"
-          gridTemplateColumns="repeat(auto-fill, minmax(112px, 1fr))"
-          gap={1}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setSelectedId(null)
-          }}
-        >
-          {showFolders &&
-            categories.map((category) => (
-              <Box
-                key={category.id}
-                w="112px"
-                px={1}
-                py={2}
-                borderRadius="md"
-                textAlign="center"
-                {...highlight(category.id, true)}
-                {...folderItemProps(category)}
-              >
-                <Box display="flex" justifyContent="center">
-                  <FcFolder size={48} />
-                </Box>
-                <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
-                  {category.name}
-                </Text>
-              </Box>
-            ))}
-
-          {manuals.map((manual) => (
-            <Box
-              key={manual.id}
-              w="112px"
-              px={1}
-              py={2}
-              borderRadius="md"
-              textAlign="center"
-              position="relative"
-              {...highlight(manual.id)}
-              {...manualItemProps(manual)}
-              title={manual.title}
-            >
-              <Box display="flex" justifyContent="center">
-                <FcFile size={48} />
-              </Box>
-              <Box position="absolute" top="1" right="4">
-                <StatusIcon manual={manual} />
-              </Box>
-              {manual.categoryPinned && (
-                <Box
-                  position="absolute"
-                  top="1"
-                  left="4"
-                  color="fg.muted"
-                  title="手動分類済み(AIの再分類では動きません)"
-                >
-                  <LuPin size={14} />
-                </Box>
-              )}
-              <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
-                {manual.title}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-      )}
+      <ManualItemList
+        viewMode={viewMode}
+        folders={isRoot ? categories : []} // フォルダが並ぶのはルートだけ
+        manuals={manuals}
+        isAdmin={isAdmin}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onOpenManual={(manual) => openManual(manual.id, manual.title)}
+        onOpenFolder={(f) => onNavigate(f)}
+        onDropToFolder={(manualId, categoryId) =>
+          void handleDrop(manualId, categoryId)
+        }
+        onDeleteManual={(manual) => void handleDelete(manual)}
+        onIngestManual={(manual) =>
+          void ingestManual({ variables: { id: manual.id } })
+        }
+        onTogglePin={(manual) =>
+          void setManualPinned({
+            variables: { id: manual.id, pinned: !manual.categoryPinned },
+          })
+        }
+        sortKey={sortKey}
+        sortAsc={sortAsc}
+        onSort={toggleSort}
+      />
 
       {!loading && manuals.length === 0 && (isUncategorized || !isRoot) && (
         <Text mt={6} color="fg.muted" fontSize="sm">
@@ -587,89 +268,6 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           ダブルクリックで開く / ドラッグでフォルダへ移動 /
           右クリックでメニュー(サイドバーのフォルダにもドロップできます)
         </Text>
-      )}
-
-      {/* 右クリックメニュー(Windows風) */}
-      {contextMenu && (
-        <Portal>
-          <Box
-            position="fixed"
-            left={`${contextMenu.x}px`}
-            top={`${contextMenu.y}px`}
-            zIndex={2000}
-            bg="bg.panel"
-            borderWidth="1px"
-            borderRadius="md"
-            boxShadow="lg"
-            py={1}
-            minW="180px"
-          >
-            <Button
-              size="sm"
-              variant="ghost"
-              w="100%"
-              justifyContent="flex-start"
-              onClick={() =>
-                openManual(contextMenu.manual.id, contextMenu.manual.title)
-              }
-            >
-              <LuBookOpen /> 開く
-            </Button>
-            {isAdmin && (
-              <Button
-                size="sm"
-                variant="ghost"
-                w="100%"
-                justifyContent="flex-start"
-                onClick={() =>
-                  void setManualPinned({
-                    variables: {
-                      id: contextMenu.manual.id,
-                      pinned: !contextMenu.manual.categoryPinned,
-                    },
-                  })
-                }
-              >
-                {contextMenu.manual.categoryPinned ? (
-                  <>
-                    <LuPinOff /> ピン留めを解除
-                  </>
-                ) : (
-                  <>
-                    <LuPin /> ピン留め(再分類で動かさない)
-                  </>
-                )}
-              </Button>
-            )}
-            {isAdmin && contextMenu.manual.ingestStatus === 'FAILED' && (
-              <Button
-                size="sm"
-                variant="ghost"
-                w="100%"
-                justifyContent="flex-start"
-                onClick={() =>
-                  void ingestManual({
-                    variables: { id: contextMenu.manual.id },
-                  })
-                }
-              >
-                <LuRefreshCw /> 再取り込み
-              </Button>
-            )}
-            {isAdmin && (
-              <Button
-                size="sm"
-                variant="ghost"
-                w="100%"
-                justifyContent="flex-start"
-                color="fg.error"
-                onClick={() => void handleDelete(contextMenu.manual)}
-              >
-                <LuTrash2 /> 削除
-              </Button>
-            )}
-          </Box>
-        </Portal>
       )}
     </Box>
   )
