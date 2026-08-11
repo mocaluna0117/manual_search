@@ -459,8 +459,8 @@ export function ChatHome({
           maxH="10em" // 伸びすぎ防止(超えたら内部スクロール)
           placeholder={
             sendOnPlainEnter
-              ? '例: 経費精算のやり方を教えて（Shift+Enterで改行）'
-              : '例: 経費精算のやり方を教えて（Shift+Enterで送信）'
+              ? '例: クイックパーツマニュアルを見せて（Shift+Enterで改行）'
+              : '例: クイックパーツマニュアルを見せて（Shift+Enterで送信）'
           }
           value={input}
           onChange={(e) => setInput(e.target.value)}
