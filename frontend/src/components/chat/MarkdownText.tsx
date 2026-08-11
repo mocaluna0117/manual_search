@@ -1,9 +1,65 @@
-import { Box } from '@chakra-ui/react'
-import { Children, isValidElement, type ReactNode } from 'react'
+import { Box, Button } from '@chakra-ui/react'
+import { Children, isValidElement, useState, type ReactNode } from 'react'
+import { LuCheck, LuCopy } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
 import { IconLine, splitLeadingIcon, withInlineIcons } from './MessageIcons'
+
+/** 描画された要素から元の文字列だけを取り出す(コピー用) */
+function extractText(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractText).join('')
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return extractText(node.props.children)
+  }
+  return ''
+}
+
+/**
+ * コードブロック(```)にコピーボタンを付ける。
+ * メール文例やお客様への説明文など「そのまま使いたい文章」がここに入るので、
+ * 回答全体ではなくこの部分だけをコピーできるようにする
+ */
+function CopyableBlock({ children }: { children: ReactNode }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(extractText(children).trimEnd())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      window.alert('コピーできませんでした')
+    }
+  }
+
+  return (
+    <Box position="relative">
+      <Button
+        size="2xs"
+        variant="subtle"
+        position="absolute"
+        top={1}
+        right={1}
+        zIndex={1}
+        onClick={() => void copy()}
+      >
+        {copied ? (
+          <>
+            <LuCheck /> コピーしました
+          </>
+        ) : (
+          <>
+            <LuCopy /> コピー
+          </>
+        )}
+      </Button>
+      <pre>{children}</pre>
+    </Box>
+  )
+}
 
 /**
  * 段落の先頭にある管理操作の絵文字(📁⏳🗑など)をアイコンに差し替える。
@@ -91,6 +147,8 @@ export function MarkdownText({ children }: { children: string }) {
         '& pre': {
           background: 'bg.emphasized',
           padding: '8px 10px',
+          // 右上のコピーボタンに文字が潜り込まないよう空ける
+          paddingTop: '2rem',
           borderRadius: '6px',
           marginBottom: '0.6em',
           maxWidth: '100%',
@@ -119,6 +177,8 @@ export function MarkdownText({ children }: { children: string }) {
         components={{
           p: ({ children }) => <p>{renderWithIcons(children)}</p>,
           li: ({ children }) => <li>{renderWithIcons(children)}</li>,
+          // メール文例などをブロック単位でコピーできるようにする
+          pre: ({ children }) => <CopyableBlock>{children}</CopyableBlock>,
         }}
       >
         {children}
