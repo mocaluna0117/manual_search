@@ -71,14 +71,21 @@ export class ChatService {
     //      確認・キャンセル以外の発言が来たら、確認は流れたとみなして通常フローへ。
     //      権限が変わっていても古い確認は必ず破棄する(後から復活させない)
     if (conversation.pendingAction) {
-      const pending = conversation.pendingAction as { type?: string };
+      const pending = conversation.pendingAction as {
+        type?: string;
+        instruction?: string;
+      };
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: { pendingAction: Prisma.DbNull },
       });
       if (isAdmin && pending.type === 'reclassify_all') {
         if (question === CONFIRM_RECLASSIFY) {
-          return this.startReclassify(conversation.id, question);
+          return this.startReclassify(
+            conversation.id,
+            question,
+            pending.instruction,
+          );
         }
         if (question === CANCEL_RECLASSIFY) {
           return this.respond(
@@ -189,29 +196,29 @@ export class ChatService {
         }
       }
 
-      if (ragActions.some((a) => a.name === 'reclassify_all_manuals')) {
-        // フォルダ作成と同時依頼のケースがあるので、件数は作成後に数える
-        const [manualCount, categoryCount] = await Promise.all([
-          this.prisma.manual.count({
-            where: { ingestStatus: IngestStatus.COMPLETED },
-          }),
-          this.prisma.manualCategory.count(),
-        ]);
-        if (categoryCount === 0) {
-          lines.push(
-            'フォルダがまだ1つもありません。先に「〇〇というフォルダを作って」のように作成してから、再分類を依頼してください。',
-          );
-        } else {
-          await this.prisma.conversation.update({
-            where: { id: conversation.id },
-            data: { pendingAction: { type: 'reclassify_all' } },
-          });
-          lines.push(
-            `全${manualCount}件のマニュアルを、現在の${categoryCount}個のフォルダへAIが再分類します。` +
-              '今の分類は上書きされます。実行してよいですか？',
-          );
-          options = [CONFIRM_RECLASSIFY, CANCEL_RECLASSIFY];
-        }
+      const reclassify = ragActions.find(
+        (a) => a.name === 'reclassify_all_manuals',
+      );
+      if (reclassify) {
+        // 管理者が依頼文で分類方針を指定していたら、確認を経て実行まで引き継ぐ
+        const instruction =
+          String(reclassify.input.instruction ?? '').trim() || undefined;
+        const manualCount = await this.prisma.manual.count({
+          where: { ingestStatus: IngestStatus.COMPLETED },
+        });
+        await this.prisma.conversation.update({
+          where: { id: conversation.id },
+          data: {
+            pendingAction: { type: 'reclassify_all', instruction: instruction ?? null },
+          },
+        });
+        lines.push(
+          `全${manualCount}件のマニュアルを、AIが工種・業務分野ごとのフォルダへ再分類します` +
+            '(足りないフォルダは新しく作られます)。' +
+            (instruction ? `分類方針:「${instruction}」。` : '') +
+            '今の分類は上書きされます。実行してよいですか？',
+        );
+        options = [CONFIRM_RECLASSIFY, CANCEL_RECLASSIFY];
       }
 
       // ツール名が想定外だった等で1行も作れなかった場合の保険(空の吹き出しを出さない)
@@ -287,6 +294,7 @@ export class ChatService {
   private async startReclassify(
     conversationId: string,
     question: string,
+    instruction?: string,
   ): Promise<AskResult> {
     if (this.reclassifyRunning) {
       return this.respond(
@@ -297,11 +305,14 @@ export class ChatService {
     }
     this.reclassifyRunning = true;
     void this.manualService
-      .reclassifyAll()
-      .then(({ movedCount }) => {
-        const content =
-          `📁 全マニュアルの再分類が完了しました(${movedCount}件を割り当て)。` +
-          '\nサイドバーのフォルダを開いて結果を確認してください。';
+      .reclassifyAll(instruction)
+      .then(({ movedCount, createdCategories }) => {
+        let content = `📁 全マニュアルの再分類が完了しました(${movedCount}件を割り当て)。`;
+        if (createdCategories.length > 0) {
+          content += `\n新しく作られたフォルダ: ${createdCategories.join('、')}`;
+        }
+        content +=
+          '\nサイドバーのフォルダを開いて結果を確認してください。空になったフォルダは🗑から削除できます。';
         return this.appendAssistantMessage(conversationId, content);
       })
       .catch((e: unknown) =>

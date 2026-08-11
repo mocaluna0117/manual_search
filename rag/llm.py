@@ -62,11 +62,24 @@ ADMIN_TOOLS = [
         "toolSpec": {
             "name": "reclassify_all_manuals",
             "description": (
-                "登録済みの全マニュアルを、現在存在するフォルダへAIが再分類し直す。"
-                "フォルダ構成を作り直した後の一括整理に使う。"
+                "登録済みの全マニュアルをAIがフォルダへ再分類し直す(必要なら新しい"
+                "フォルダも作られる)。フォルダ構成の一括整理に使う。"
                 "実行前にシステムが管理者へ確認を取るので、このツールは提案として呼んでよい"
             ),
-            "inputSchema": {"json": {"type": "object", "properties": {}}},
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "instruction": {
+                            "type": "string",
+                            "description": (
+                                "分類の方針(任意)。管理者の依頼に方針が含まれていたら"
+                                "そのまま渡す。例:「工種ごとに」「部署ごとに」"
+                            ),
+                        }
+                    },
+                }
+            },
         }
     },
 ]
@@ -112,7 +125,11 @@ class AnswerGenerator(Protocol):
     def rewrite_query(self, question: str, history: list[HistoryMessage]) -> str: ...
 
     def classify_manuals(
-        self, manuals: list[dict], categories: list[str], allow_new: bool = True
+        self,
+        manuals: list[dict],
+        categories: list[str],
+        allow_new: bool = True,
+        instruction: str | None = None,
     ) -> list[dict]: ...
 
 
@@ -139,7 +156,11 @@ class StubAnswerGenerator:
         return f"{recent} {question}".strip()
 
     def classify_manuals(
-        self, manuals: list[dict], categories: list[str], allow_new: bool = True
+        self,
+        manuals: list[dict],
+        categories: list[str],
+        allow_new: bool = True,
+        instruction: str | None = None,
     ) -> list[dict]:
         return []  # LLM無しでは分類できない(空=何も割り当てない)
 
@@ -242,13 +263,17 @@ class BedrockAnswerGenerator:
         return res["output"]["message"]["content"][0]["text"].strip()
 
     def classify_manuals(
-        self, manuals: list[dict], categories: list[str], allow_new: bool = True
+        self,
+        manuals: list[dict],
+        categories: list[str],
+        allow_new: bool = True,
+        instruction: str | None = None,
     ) -> list[dict]:
         """マニュアル一覧をカテゴリに割り当てる(全体を1回のリクエストで見せて
         一貫性のある分類にする)。戻り値: [{"manual_id":…, "category":…}]
 
-        allow_new=False のときは既存カテゴリだけに割り当てる(全件再分類で
-        管理者が承認していないフォルダを勝手に増やさないため)。
+        allow_new=False のときは既存カテゴリだけに割り当てる。
+        instruction は管理者が指定した分類方針(例:「工種ごとに」)。
         """
         lines = "\n".join(
             f"- id={m['manual_id']} タイトル: {m['title']}\n  冒頭: {m['snippet'][:100]}"
@@ -256,21 +281,31 @@ class BedrockAnswerGenerator:
         )
         existing = "、".join(categories) if categories else "(まだ無い)"
         if allow_new:
+            # 「大雑把すぎる分類」を防ぐため、軸(工種・業務分野)と粒度の目安を明示する
             category_rules = (
-                "- できるだけ「既存カテゴリ」を使う。適切なものが無い場合だけ新しいカテゴリ名を作る\n"
+                "- 工種・業務分野ごとにカテゴリを分ける"
+                "(例: 漏水・水回り、床・フローリング、窓・ガラス、屋根・外壁、"
+                "定期点検、顛末書・決裁書類、電話・お客様対応、社内システム・入力ルール など。"
+                "例はあくまで参考にし、実際のマニュアルの内容に合わせて命名する)\n"
+                "- 既存カテゴリに合うものがあればそれを使い、無ければ新しいカテゴリ名を作る\n"
                 "- 新しいカテゴリ名は誰にでも分かる簡潔な日本語(2〜10文字程度)にする\n"
-                "- カテゴリを細かく増やしすぎない(マニュアル10件あたり2〜4カテゴリが目安)\n"
+                "- 粒度の目安: 1カテゴリに5〜15件程度。全体を2〜3個の大きなカテゴリに"
+                "まとめてしまう大雑把な分け方はしない(逆に1件だけのカテゴリを乱発しない)\n"
             )
         else:
             category_rules = (
                 "- 必ず「既存カテゴリ」のいずれかをそのままの名前で割り当てる。"
                 "新しいカテゴリ名を作ってはいけない\n"
             )
+        instruction_text = (
+            f"\n管理者が指定した分類方針(最優先で従う): {instruction}\n" if instruction else ""
+        )
         prompt = (
             "あなたは社内マニュアルの整理係です。以下のマニュアル一覧を内容ごとにカテゴリ分けしてください。\n\n"
             "ルール:\n"
             f"{category_rules}"
-            '- JSON配列のみを出力する: [{"manual_id": "...", "category": "カテゴリ名"}, ...]\n\n'
+            '- JSON配列のみを出力する: [{"manual_id": "...", "category": "カテゴリ名"}, ...]\n'
+            f"{instruction_text}\n"
             f"既存カテゴリ: {existing}\n\nマニュアル一覧:\n{lines}"
         )
         res = self.client.converse(

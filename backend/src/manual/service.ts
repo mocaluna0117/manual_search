@@ -258,12 +258,12 @@ export class ManualService implements OnApplicationBootstrap {
   }
 
   /**
-   * 全マニュアルを現在のフォルダ構成へ再分類し直す(チャットの管理操作用)。
-   * 既存の分類は上書きされるため、呼び出し側で必ず確認を挟むこと。
-   * allowNew=falseで、管理者が承認していない新フォルダは作らせない
+   * 全マニュアルを工種・業務分野ごとのフォルダへ再分類し直す(チャットの管理操作用)。
+   * 必要ならAIが新しいフォルダも作る。既存の分類は上書きされるため、
+   * 呼び出し側で必ず確認を挟むこと。instructionは管理者が指定した分類方針
    */
-  async reclassifyAll() {
-    return this.organizeManuals({}, false);
+  async reclassifyAll(instruction?: string) {
+    return this.organizeManuals({}, true, instruction);
   }
 
   /**
@@ -274,6 +274,7 @@ export class ManualService implements OnApplicationBootstrap {
   private async organizeManuals(
     where: Prisma.ManualWhereInput,
     allowNew: boolean,
+    instruction?: string,
   ) {
     const manuals = await this.prisma.manual.findMany({
       where: { ...where, ingestStatus: IngestStatus.COMPLETED },
@@ -298,6 +299,7 @@ export class ManualService implements OnApplicationBootstrap {
         })),
         categories.map((c) => c.name),
         allowNew,
+        instruction,
       );
       const result = await this.applyAssignments(assignments, allowNew);
       movedCount += result.movedCount;

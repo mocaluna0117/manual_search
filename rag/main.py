@@ -371,8 +371,10 @@ class OrganizeItem(BaseModel):
 class OrganizeRequest(BaseModel):
     manuals: list[OrganizeItem]
     categories: list[str]  # 既存カテゴリ名
-    # falseなら既存カテゴリだけに割り当てる(全件再分類など、勝手に増やしたくない場合)
+    # falseなら既存カテゴリだけに割り当てる(勝手に増やしたくない場合)
     allow_new: bool = True
+    # 管理者が指定した分類方針(例:「工種ごとに」)。チャット経由の再分類で使う
+    instruction: str | None = None
 
 
 class OrganizeAssignment(BaseModel):
@@ -394,6 +396,7 @@ def organize(req: OrganizeRequest) -> OrganizeResponse:
             [m.model_dump() for m in req.manuals],
             req.categories,
             allow_new=req.allow_new,
+            instruction=req.instruction,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"分類に失敗しました: {e}")
