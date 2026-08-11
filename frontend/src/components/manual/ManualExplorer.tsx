@@ -1,6 +1,6 @@
 import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
 import { Box, Button, HStack, Spinner, Text } from '@chakra-ui/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
 import { LuArrowLeft, LuBot, LuFolderTree } from 'react-icons/lu'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
@@ -62,9 +62,34 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
 
   // 取り込み中のものがある間だけ、3秒ごとに一覧を取り直して進行状況を反映する
   const client = useApolloClient()
-  const hasInFlight = (data?.manuals ?? []).some(
+  const inFlight = (data?.manuals ?? []).filter(
     (m) => m.ingestStatus === 'PENDING' || m.ingestStatus === 'PROCESSING',
   )
+  const hasInFlight = inFlight.length > 0
+
+  // 取り込みが終わった瞬間に結果を知らせる(押しただけでは終わりが分からないため)
+  const watchedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const manuals = data?.manuals ?? []
+    const nowInFlight = new Set(
+      manuals
+        .filter(
+          (m) => m.ingestStatus === 'PENDING' || m.ingestStatus === 'PROCESSING',
+        )
+        .map((m) => m.id),
+    )
+    for (const id of watchedRef.current) {
+      if (nowInFlight.has(id)) continue
+      const finished = manuals.find((m) => m.id === id)
+      if (!finished) continue // 一覧から消えた(削除・移動)ときは何も言わない
+      window.alert(
+        finished.ingestStatus === 'COMPLETED'
+          ? `「${finished.title}」の取り込みが完了しました（${finished.chunkCount ?? 0}件のチャンク）。AI検索で使えます。`
+          : `「${finished.title}」の取り込みに失敗しました。\n${finished.ingestError ?? ''}`,
+      )
+    }
+    watchedRef.current = nowInFlight
+  }, [data])
   useEffect(() => {
     if (hasInFlight) {
       startPolling(3000)
@@ -135,6 +160,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       await moveManual({ variables: { id: manualId, categoryId } })
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '移動できませんでした')
+    }
+  }
+
+  /** 再取り込みを開始する。完了は上のuseEffectが検知して知らせる */
+  const handleIngest = async (manual: Manual) => {
+    try {
+      await ingestManual({ variables: { id: manual.id } })
+    } catch (e) {
+      window.alert(
+        e instanceof Error ? e.message : '再取り込みを開始できませんでした',
+      )
     }
   }
 
@@ -230,6 +266,27 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
 
       {loading && !data && <Spinner />}
 
+      {/* 取り込み中の件数を上部にも出す(アイコンの⏳だけだと気づきにくい) */}
+      {hasInFlight && (
+        <HStack
+          mb={3}
+          px={3}
+          py={2}
+          gap={2}
+          borderWidth="1px"
+          borderRadius="md"
+          borderColor="orange.muted"
+          bg="orange.subtle"
+          fontSize="sm"
+        >
+          <Spinner size="xs" color="orange.fg" />
+          <Text>
+            {inFlight.length}件を取り込み中です（ページを離れても続きます。
+            完了するとお知らせします）
+          </Text>
+        </HStack>
+      )}
+
       <ManualItemList
         viewMode={viewMode}
         folders={isRoot ? categories : []} // フォルダが並ぶのはルートだけ
@@ -243,9 +300,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           void handleDrop(manualId, categoryId)
         }
         onDeleteManual={(manual) => void handleDelete(manual)}
-        onIngestManual={(manual) =>
-          void ingestManual({ variables: { id: manual.id } })
-        }
+        onIngestManual={(manual) => void handleIngest(manual)}
         onTogglePin={(manual) =>
           void setManualPinned({
             variables: { id: manual.id, pinned: !manual.categoryPinned },

@@ -142,7 +142,7 @@ export const SET_MANUAL_PINNED_MUTATION: TypedDocumentNode<
 // --- 取り込みの再試行(FAILEDになったとき用) ---
 
 interface IngestManualData {
-  ingestManual: number
+  ingestManual: boolean // 開始できたらtrue(完了は待たない)
 }
 
 interface IngestManualVars {

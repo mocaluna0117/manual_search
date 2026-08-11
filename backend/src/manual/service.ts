@@ -195,6 +195,7 @@ export class ManualService implements OnApplicationBootstrap {
   }
 
   /** 手動での(再)取り込み。FAILEDになったマニュアルのリトライ用 */
+  /** 取り込みを最後まで待つ(一括再取り込みスクリプト用) */
   async ingest(id: string) {
     const manual = await this.prisma.manual.findUnique({ where: { id } });
     if (!manual) {
@@ -205,6 +206,25 @@ export class ManualService implements OnApplicationBootstrap {
       where: { id },
     });
     return updated.chunkCount ?? 0;
+  }
+
+  /**
+   * 取り込みを裏で開始し、すぐ返す(画面から押す「再取り込み」用)。
+   * スキャンPDFの書き起こしがあると数分かかりALBのタイムアウトを超えるため、
+   * 待たせずに進行状況をDBのステータスで見せる。
+   * 先にPROCESSINGへ変えておくことで、呼び出し直後の一覧に「取り込み中」が出る
+   */
+  async startIngest(id: string) {
+    const manual = await this.prisma.manual.findUnique({ where: { id } });
+    if (!manual) {
+      throw new NotFoundException('マニュアルが見つかりません');
+    }
+    await this.prisma.manual.update({
+      where: { id },
+      data: { ingestStatus: IngestStatus.PROCESSING, ingestError: null },
+    });
+    void this.runIngest(id);
+    return true;
   }
 
   /** 取り込みの実行本体。結果(成功/失敗)は例外でなくDBのステータスに記録する */

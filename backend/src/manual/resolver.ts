@@ -134,10 +134,11 @@ export class ManualResolver {
     return this.manualService.delete(id);
   }
 
-  // PDFをRAGに取り込む(チャンク化)。戻り値は作成されたチャンク数
+  // PDFをRAGに取り込む(チャンク化)。開始したらすぐ返す
   @Roles(UserRole.ADMIN)
-  @Mutation(() => Int)
+  @Mutation(() => Boolean)
   ingestManual(@Args('id', { type: () => ID }) id: string) {
-    return this.manualService.ingest(id);
+    // 完了は待たない。進行状況はマニュアルのingestStatusで確認する
+    return this.manualService.startIngest(id);
   }
 }
