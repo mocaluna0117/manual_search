@@ -1,6 +1,7 @@
 import { Box } from '@chakra-ui/react'
 import { Children, isValidElement, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
 import { IconLine, splitLeadingIcon, withInlineIcons } from './MessageIcons'
 
@@ -34,7 +35,10 @@ function renderWithIcons(children: ReactNode): ReactNode {
 /**
  * AIの回答(Markdown)を整形して表示する。
  * 見出し・箇条書き・太字・表などが「記号のまま」ではなく読みやすい形になる。
- * remark-gfm = 表やチェックリストなどGitHub流の記法への対応
+ * - remark-gfm = 表やチェックリストなどGitHub流の記法への対応
+ * - remark-cjk-friendly = 日本語で太字が効かない問題への対応。
+ *   CommonMarkの規則では「**」の隣が全角記号だと強調と見なされず、
+ *   例えば **「太字」** や **手順:** がアスタリスクのまま表示されてしまう
  */
 export function MarkdownText({ children }: { children: string }) {
   return (
@@ -85,7 +89,7 @@ export function MarkdownText({ children }: { children: string }) {
       }}
     >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkCjkFriendly]}
         components={{
           p: ({ children }) => <p>{renderWithIcons(children)}</p>,
           li: ({ children }) => <li>{renderWithIcons(children)}</li>,
