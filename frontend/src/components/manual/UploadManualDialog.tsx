@@ -7,13 +7,14 @@ import {
   HStack,
   IconButton,
   Input,
-  NativeSelect,
   Portal,
+  Select,
+  createListCollection,
   Spinner,
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { LuBot, LuCheck, LuTriangleAlert, LuX } from 'react-icons/lu'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
 import {
@@ -90,6 +91,20 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: categoriesData } = useQuery(CATEGORIES_QUERY)
+  // Selectに渡す選択肢(先頭は「未分類」= 値なし)
+  const categoryCollection = useMemo(
+    () =>
+      createListCollection({
+        items: [
+          { label: '未分類', value: '' },
+          ...(categoriesData?.manualCategories ?? []).map((c) => ({
+            label: c.name,
+            value: c.id,
+          })),
+        ],
+      }),
+    [categoriesData],
+  )
   // 既存マニュアルのファイル名一覧(アップロード前に同名を知らせるため)
   const { data: existingData } = useQuery(MANUALS_QUERY, {
     fetchPolicy: 'cache-and-network',
@@ -394,22 +409,39 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                       </Badge>
                     )}
                   </Button>
-                  <NativeSelect.Root
+                  {/* ネイティブの<select>はフォルダが増えると上方向に開いて
+                      画面外へはみ出すため、位置を指定できるSelectを使う */}
+                  <Select.Root
+                    collection={categoryCollection}
                     disabled={uploading || categoryId === '__auto'}
+                    value={[categoryId === '__auto' ? '' : categoryId]}
+                    onValueChange={(e) => setCategoryId(e.value[0] ?? '')}
+                    positioning={{ placement: 'bottom-start', sameWidth: true }}
+                    size="sm"
                   >
-                    <NativeSelect.Field
-                      value={categoryId === '__auto' ? '' : categoryId}
-                      onChange={(e) => setCategoryId(e.target.value)}
-                    >
-                      <option value="">未分類</option>
-                      {categoriesData?.manualCategories.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
+                    <Select.HiddenSelect />
+                    <Select.Control>
+                      <Select.Trigger>
+                        <Select.ValueText placeholder="未分類" />
+                      </Select.Trigger>
+                      <Select.IndicatorGroup>
+                        <Select.Indicator />
+                      </Select.IndicatorGroup>
+                    </Select.Control>
+                    <Portal>
+                      <Select.Positioner>
+                        {/* 候補が多いときはこの中でスクロールさせる */}
+                        <Select.Content maxH="240px" overflowY="auto">
+                          {categoryCollection.items.map((item) => (
+                            <Select.Item item={item} key={item.value}>
+                              {item.label}
+                              <Select.ItemIndicator />
+                            </Select.Item>
+                          ))}
+                        </Select.Content>
+                      </Select.Positioner>
+                    </Portal>
+                  </Select.Root>
                   {categoryId === '__auto' && (
                     <Text fontSize="xs" color="fg.muted" mt={1}>
                       内容を読んで自動で振り分けます（合うフォルダが無ければ作成）。
