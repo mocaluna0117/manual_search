@@ -199,6 +199,13 @@ export class ChatService {
       const reclassify = ragActions.find(
         (a) => a.name === 'reclassify_all_manuals',
       );
+      // 安全網: モデルが本文で「再分類します」と宣言だけしてツールを呼ばなかった場合、
+      // 何も起きないまま放置されるのを防ぐため、次の一手をユーザーに案内する
+      if (!reclassify && /再分類/.test(answer ?? '')) {
+        lines.push(
+          '(再分類はまだ実行されていません。「全マニュアルを再分類して」と送ると、確認のうえ実行します)',
+        );
+      }
       if (reclassify) {
         // 管理者が依頼文で分類方針を指定していたら、確認を経て実行まで引き継ぐ
         const instruction =
