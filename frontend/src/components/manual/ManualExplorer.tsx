@@ -1,6 +1,17 @@
 import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
 import { Box, Button, HStack, Portal, Spinner, Text } from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
+import { FcFile, FcFolder, FcOpenedFolder } from 'react-icons/fc'
+import {
+  LuArrowLeft,
+  LuBookOpen,
+  LuBot,
+  LuClock,
+  LuFolderTree,
+  LuRefreshCw,
+  LuTrash2,
+  LuTriangleAlert,
+} from 'react-icons/lu'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
 import {
   AUTO_ORGANIZE_MUTATION,
@@ -25,16 +36,27 @@ interface ManualExplorerProps {
 }
 
 /** アイコンの右上に出す取り込み状態の目印 */
-function statusMark(manual: Manual): { mark: string; title: string } | null {
+function StatusMark({ manual }: { manual: Manual }) {
   switch (manual.ingestStatus) {
     case 'PENDING':
     case 'PROCESSING':
-      return { mark: '⏳', title: '取り込み中…' }
+      return (
+        <Box position="absolute" top="1" right="4" color="orange.fg" title="取り込み中…">
+          <LuClock size={14} />
+        </Box>
+      )
     case 'FAILED':
-      return {
-        mark: '⚠️',
-        title: manual.ingestError ?? '取り込みに失敗しました',
-      }
+      return (
+        <Box
+          position="absolute"
+          top="1"
+          right="4"
+          color="fg.error"
+          title={manual.ingestError ?? '取り込みに失敗しました'}
+        >
+          <LuTriangleAlert size={14} />
+        </Box>
+      )
     case 'COMPLETED':
       return null
   }
@@ -215,7 +237,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             onClick={() => onNavigate(null)}
             title="ひとつ上へ"
           >
-            ⬅
+            <LuArrowLeft />
           </Button>
         )}
         <Button
@@ -224,12 +246,14 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           fontWeight="bold"
           onClick={() => onNavigate(null)}
         >
-          🗂 マニュアル
+          <LuFolderTree /> マニュアル
         </Button>
         {!isRoot && (
-          <Text fontSize="sm" color="fg.muted">
-            {'>'} {isUncategorized ? '📂 未分類' : `📁 ${folder.name}`}
-          </Text>
+          <HStack gap={1} fontSize="sm" color="fg.muted">
+            <Text>{'>'}</Text>
+            {isUncategorized ? <FcOpenedFolder /> : <FcFolder />}
+            <Text>{isUncategorized ? '未分類' : folder.name}</Text>
+          </HStack>
         )}
         <Box flex="1" />
         {isAdmin && (isRoot || isUncategorized) && manuals.length > 0 && (
@@ -240,7 +264,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             loading={organizing}
             onClick={() => void handleAutoOrganize()}
           >
-            🤖 未分類をAIで自動分類
+            <LuBot /> 未分類をAIで自動分類
           </Button>
         )}
       </HStack>
@@ -276,15 +300,14 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
                 if (manualId) void handleDrop(manualId, category.id)
               }}
             >
-              <Text fontSize="44px" lineHeight="1">
-                📁
-              </Text>
+              <Box display="flex" justifyContent="center">
+                <FcFolder size={48} />
+              </Box>
               {label(category.name)}
             </Box>
           ))}
 
         {manuals.map((manual) => {
-          const mark = statusMark(manual)
           return (
             <Box
               key={manual.id}
@@ -302,22 +325,12 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
                 e.dataTransfer.setData('text/plain', manual.id)
                 e.dataTransfer.effectAllowed = 'move'
               }}
-              title={mark?.title ?? manual.title}
+              title={manual.title}
             >
-              <Text fontSize="44px" lineHeight="1">
-                📄
-              </Text>
-              {mark && (
-                <Text
-                  position="absolute"
-                  top="0"
-                  right="4"
-                  fontSize="md"
-                  title={mark.title}
-                >
-                  {mark.mark}
-                </Text>
-              )}
+              <Box display="flex" justifyContent="center">
+                <FcFile size={48} />
+              </Box>
+              <StatusMark manual={manual} />
               {label(manual.title)}
             </Box>
           )
@@ -366,7 +379,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
                 openManual(contextMenu.manual.id, contextMenu.manual.title)
               }
             >
-              📖 開く
+              <LuBookOpen /> 開く
             </Button>
             {isAdmin && contextMenu.manual.ingestStatus === 'FAILED' && (
               <Button
@@ -380,7 +393,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
                   })
                 }
               >
-                🔄 再取り込み
+                <LuRefreshCw /> 再取り込み
               </Button>
             )}
             {isAdmin && (
@@ -392,7 +405,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
                 color="fg.error"
                 onClick={() => void handleDelete(contextMenu.manual)}
               >
-                🗑 削除
+                <LuTrash2 /> 削除
               </Button>
             )}
           </Box>

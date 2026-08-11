@@ -10,6 +10,7 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { Fragment } from 'react'
+import { LuSearch } from 'react-icons/lu'
 import { SEARCH_MANUALS_QUERY } from '../../graphql/manuals'
 import { useManualViewer } from './ManualViewerProvider'
 
@@ -46,8 +47,8 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
 
   return (
     <Box p={{ base: 4, md: 8 }} pt={{ base: 14, md: 8 }} maxW="800px" mx="auto">
-      <Heading size="lg" mb={2}>
-        🔍 「{keyword}」の検索結果
+      <Heading size="lg" mb={2} display="flex" alignItems="center" gap={2}>
+        <LuSearch /> 「{keyword}」の検索結果
       </Heading>
 
       {loading && <Spinner mt={4} />}

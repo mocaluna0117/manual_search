@@ -14,6 +14,7 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useRef, useState } from 'react'
+import { LuTriangleAlert, LuX } from 'react-icons/lu'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
 import {
   CREATE_UPLOAD_URL_MUTATION,
@@ -55,7 +56,7 @@ function StatusBadge({ item }: { item: UploadItem }) {
       return <Spinner size="xs" />
     case 'done':
       if (item.outcome === 'UPDATED') {
-        return <Badge colorPalette="blue">🔄 更新</Badge>
+        return <Badge colorPalette="blue">更新</Badge>
       }
       if (item.outcome === 'SKIPPED_OLDER') {
         return <Badge colorPalette="orange">⏭ スキップ</Badge>
@@ -308,7 +309,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                                 )
                               }
                             >
-                              ✕
+                              <LuX />
                             </IconButton>
                           )}
                         </HStack>
@@ -316,9 +317,12 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                         {/* アップロード前: 同名マニュアルがある場合の予告 */}
                         {item.status === 'pending' &&
                           existingFileNames.has(item.file.name) && (
-                            <Text fontSize="xs" color="orange.fg" mt={1}>
-                              ⚠️ 同名のマニュアルが既にあります。ファイルの更新日が新しい方だけが残ります
-                            </Text>
+                            <HStack gap={1} fontSize="xs" color="orange.fg" mt={1} align="flex-start">
+                              <LuTriangleAlert size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+                              <Text fontSize="xs">
+                                同名のマニュアルが既にあります。ファイルの更新日が新しい方だけが残ります
+                              </Text>
+                            </HStack>
                           )}
 
                         {/* アップロード後: 何が起きたかの説明 */}
@@ -373,7 +377,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                     >
                       <option value="">未分類</option>
                       <option value="__auto">
-                        🤖 AIにおまかせ（内容から自動分類）
+                        AIにおまかせ（内容から自動分類）
                       </option>
                       {categoriesData?.manualCategories.map((c) => (
                         <option key={c.id} value={c.id}>

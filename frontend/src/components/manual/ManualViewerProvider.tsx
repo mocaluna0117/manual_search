@@ -8,6 +8,7 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { createContext, useContext, useState, type ReactNode } from 'react'
+import { LuExternalLink, LuX } from 'react-icons/lu'
 import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
 
 interface ManualViewerContextValue {
@@ -71,7 +72,7 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
             <Dialog.Content display="flex" flexDirection="column">
               <Dialog.Header py={3}>
                 <HStack justify="space-between" w="100%">
-                  <Dialog.Title truncate>📄 {viewing?.title}</Dialog.Title>
+                  <Dialog.Title truncate>{viewing?.title}</Dialog.Title>
                   <HStack gap={2} flexShrink={0}>
                     {url && (
                       <Button
@@ -79,11 +80,11 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
                         variant="outline"
                         onClick={() => window.open(url, '_blank')}
                       >
-                        別タブで開く ↗
+                        別タブで開く <LuExternalLink />
                       </Button>
                     )}
                     <Button size="sm" variant="ghost" onClick={close}>
-                      ✕ 閉じる
+                      <LuX /> 閉じる
                     </Button>
                   </HStack>
                 </HStack>

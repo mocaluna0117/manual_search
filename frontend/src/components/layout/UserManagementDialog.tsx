@@ -12,6 +12,7 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useState } from 'react'
+import { LuTrash2 } from 'react-icons/lu'
 import { ME_QUERY, type UserRole } from '../../graphql/me'
 import {
   DELETE_USER_MUTATION,
@@ -196,7 +197,7 @@ export function UserManagementDialog({
                         disabled={isSelf}
                         onClick={() => void handleDelete(user)}
                       >
-                        🗑
+                        <LuTrash2 />
                       </IconButton>
                     </HStack>
                   )

@@ -13,6 +13,16 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useEffect, useRef, useState } from 'react'
+import { FcFile } from 'react-icons/fc'
+import {
+  LuCheck,
+  LuCircleStop,
+  LuCopy,
+  LuExternalLink,
+  LuImagePlus,
+  LuPencil,
+  LuX,
+} from 'react-icons/lu'
 import {
   ASK_MUTATION,
   CONVERSATION_QUERY,
@@ -273,7 +283,7 @@ export function ChatHome({
             id: `local-stop-${Date.now()}`,
             role: 'ASSISTANT',
             content:
-              '⏹️ 回答を停止しました。この質問は保存されていません。質問の ✏️ ボタンから編集して再送信できます。',
+              '⏹ 回答を停止しました。この質問は保存されていません。質問の編集ボタン(鉛筆マーク)から編集して再送信できます。',
             citations: [],
             options: [],
           },
@@ -344,7 +354,7 @@ export function ChatHome({
             variant="ghost"
             onClick={() => setAttachedImage(null)}
           >
-            ✕
+            <LuX />
           </IconButton>
         </HStack>
       )}
@@ -371,7 +381,7 @@ export function ChatHome({
           alignSelf="flex-end" // 入力欄が伸びても下端に揃える
           onClick={() => fileInputRef.current?.click()}
         >
-          ＋
+          <LuImagePlus />
         </IconButton>
         <Textarea
           ref={textareaRef}
@@ -405,7 +415,7 @@ export function ChatHome({
             onClick={() => abortRef.current?.abort()}
             alignSelf="flex-end"
           >
-            ⏹ 停止
+            <LuCircleStop /> 停止
           </Button>
         ) : (
           <Button
@@ -507,8 +517,8 @@ export function ChatHome({
                         bg="bg.panel"
                         placeholder={
                           sendOnPlainEnter
-                            ? '✏️ その他（自由に入力してEnterで送信）'
-                            : '✏️ その他（自由に入力してShift+Enterで送信）'
+                            ? 'その他（自由に入力してEnterで送信）'
+                            : 'その他（自由に入力してShift+Enterで送信）'
                         }
                         value={otherText}
                         onChange={(e) => setOtherText(e.target.value)}
@@ -545,7 +555,8 @@ export function ChatHome({
                       px={3}
                       py={2}
                     >
-                      <Text
+                      <HStack
+                        gap={1}
                         fontWeight="medium"
                         color="blue.fg"
                         cursor="pointer"
@@ -554,8 +565,10 @@ export function ChatHome({
                           openManual(group.manualId, group.title, group.topPage)
                         }
                       >
-                        📄 {group.title} ↗
-                      </Text>
+                        <FcFile />
+                        <Text>{group.title}</Text>
+                        <LuExternalLink size={12} />
+                      </HStack>
                       {group.pages.length > 0 && (
                         <HStack mt={1} gap={1} flexWrap="wrap">
                           {group.pages.map(({ page, label, snippet }) => (
@@ -596,7 +609,7 @@ export function ChatHome({
                   }
                   onClick={() => void copyMessage(message)}
                 >
-                  {copiedId === message.id ? '✓' : '📋'}
+                  {copiedId === message.id ? <LuCheck /> : <LuCopy />}
                 </IconButton>
                 {message.role === 'USER' && (
                   <IconButton
@@ -607,7 +620,7 @@ export function ChatHome({
                     color="blue.contrast"
                     onClick={() => editMessage(message)}
                   >
-                    ✏️
+                    <LuPencil />
                   </IconButton>
                 )}
               </HStack>

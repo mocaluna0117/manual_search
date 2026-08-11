@@ -13,6 +13,21 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useState } from 'react'
+import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
+import {
+  LuFolderTree,
+  LuLogOut,
+  LuMenu,
+  LuMessageSquarePlus,
+  LuPencil,
+  LuPlus,
+  LuSettings,
+  LuTrash2,
+  LuUpload,
+  LuUser,
+  LuUsers,
+  LuX,
+} from 'react-icons/lu'
 import { useAuth } from 'react-oidc-context'
 import {
   CATEGORIES_QUERY,
@@ -180,13 +195,13 @@ export function SidebarContent({
           onNavigate?.()
         }}
       >
-        ＋ 新しいチャット
+        <LuMessageSquarePlus /> 新しいチャット
       </Button>
 
       {/* キーワード検索(AI検索と別の、従来型の検索) */}
       <Input
         size="sm"
-        placeholder="🔍 マニュアル名・内容で検索"
+        placeholder="マニュアル名・内容で検索"
         bg="bg.panel"
         borderColor="border.emphasized"
         _placeholder={{ color: 'fg.subtle' }}
@@ -245,7 +260,7 @@ export function SidebarContent({
                   handleDeleteConversation(conversation.id, conversation.title)
                 }
               >
-                🗑
+                <LuTrash2 />
               </IconButton>
             </HStack>
           ))}
@@ -268,7 +283,7 @@ export function SidebarContent({
               onNavigate?.()
             }}
           >
-            🗂 マニュアル
+            <LuFolderTree /> マニュアル
           </Button>
           {isAdmin && (
             <IconButton
@@ -279,12 +294,12 @@ export function SidebarContent({
               _hover={{ color: 'fg', bg: 'bg.emphasized' }}
               onClick={() => setAddingCategory((v) => !v)}
             >
-              ＋
+              <LuPlus />
             </IconButton>
           )}
         </HStack>
 
-        {/* カテゴリ追加フォーム(＋を押すと出る) */}
+        {/* カテゴリ追加フォーム(+ボタンを押すと出る) */}
         {addingCategory && (
           <Input
             size="sm"
@@ -356,7 +371,7 @@ export function SidebarContent({
                     onNavigate?.()
                   }}
                 >
-                  📁 {category.name}
+                  <FcFolder /> {category.name}
                 </Button>
                 {isAdmin && (
                   <>
@@ -371,7 +386,7 @@ export function SidebarContent({
                         setEditingName(category.name)
                       }}
                     >
-                      ✏️
+                      <LuPencil />
                     </IconButton>
                     <IconButton
                       aria-label="カテゴリを削除"
@@ -381,7 +396,7 @@ export function SidebarContent({
                       _hover={{ color: 'fg.error', bg: 'bg.emphasized' }}
                       onClick={() => void handleDeleteCategory(category)}
                     >
-                      🗑
+                      <LuTrash2 />
                     </IconButton>
                   </>
                 )}
@@ -411,7 +426,7 @@ export function SidebarContent({
               onNavigate?.()
             }}
           >
-            📂 未分類
+            <FcOpenedFolder /> 未分類
           </Button>
         </VStack>
       </Box>
@@ -427,7 +442,7 @@ export function SidebarContent({
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => setUploadOpen(true)}
           >
-            📄 マニュアルを追加
+            <LuUpload /> マニュアルを追加
           </Button>
           <Button
             variant="outline"
@@ -437,7 +452,7 @@ export function SidebarContent({
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => setUsersOpen(true)}
           >
-            👥 ユーザー管理
+            <LuUsers /> ユーザー管理
           </Button>
           <UploadManualDialog
             open={uploadOpen}
@@ -452,9 +467,12 @@ export function SidebarContent({
 
       {/* 下部: ログインユーザーとログアウト */}
       <Box>
-        <Text fontSize="xs" color="fg.muted" mb={1} truncate>
-          👤 {auth.user?.profile.email}
-        </Text>
+        <HStack gap={1} mb={1} color="fg.muted">
+          <LuUser size={12} />
+          <Text fontSize="xs" truncate>
+            {auth.user?.profile.email}
+          </Text>
+        </HStack>
         <HStack justify="space-between">
           <Button
             size="xs"
@@ -463,7 +481,7 @@ export function SidebarContent({
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => setSettingsOpen(true)}
           >
-            ⚙️ 設定
+            <LuSettings /> 設定
           </Button>
           <Button
             size="xs"
@@ -472,7 +490,7 @@ export function SidebarContent({
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => void handleLogout()}
           >
-            ログアウト
+            <LuLogOut /> ログアウト
           </Button>
         </HStack>
         <SettingsDialog
@@ -520,7 +538,7 @@ export function Sidebar(props: SidebarProps) {
         display={{ base: 'flex', md: 'none' }}
         onClick={() => setOpen(true)}
       >
-        ☰
+        <LuMenu />
       </IconButton>
 
       <Drawer.Root
@@ -544,7 +562,7 @@ export function Sidebar(props: SidebarProps) {
                   color="fg.muted"
                   onClick={() => setOpen(false)}
                 >
-                  ✕
+                  <LuX />
                 </IconButton>
               </HStack>
               <Drawer.Body p={0} overflow="hidden">
