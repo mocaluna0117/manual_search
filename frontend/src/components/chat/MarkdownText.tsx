@@ -43,6 +43,9 @@ function renderWithIcons(children: ReactNode): ReactNode {
 export function MarkdownText({ children }: { children: string }) {
   return (
     <Box
+      // 区切りの無い長い文章(日本語のマニュアル本文やURL・型番など)でも
+      // 吹き出しの外へはみ出さないよう、全体に折り返しを効かせる
+      overflowWrap="anywhere"
       css={{
         '& p': { marginBottom: '0.6em' },
         '& > *:last-child': { marginBottom: 0 },
@@ -60,10 +63,15 @@ export function MarkdownText({ children }: { children: string }) {
           marginTop: 0,
         },
         '& strong': { fontWeight: 700 },
+        // 表は縮まないので、はみ出す場合は表の中だけ横スクロールさせる
         '& table': {
           borderCollapse: 'collapse',
           marginBottom: '0.6em',
           fontSize: '0.95em',
+          display: 'block',
+          width: 'max-content',
+          maxWidth: '100%',
+          overflowX: 'auto',
         },
         '& th, & td': {
           border: '1px solid',
@@ -76,6 +84,24 @@ export function MarkdownText({ children }: { children: string }) {
           padding: '0 4px',
           borderRadius: '4px',
           fontSize: '0.9em',
+          overflowWrap: 'anywhere',
+        },
+        // コードブロック(```)は既定のwhite-space:preで折り返されず、
+        // メール文例のような長文がそのまま横へ突き抜けるので折り返す
+        '& pre': {
+          background: 'bg.emphasized',
+          padding: '8px 10px',
+          borderRadius: '6px',
+          marginBottom: '0.6em',
+          maxWidth: '100%',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        },
+        // 中のcodeは背景が二重になるので消す(折り返しはpre側に任せる)
+        '& pre code': {
+          background: 'transparent',
+          padding: 0,
+          borderRadius: 0,
         },
         '& blockquote': {
           borderLeft: '3px solid',

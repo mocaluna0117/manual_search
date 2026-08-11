@@ -521,6 +521,9 @@ export function ChatHome({
         flex="1"
         w="100%"
         overflowY="auto"
+        // 縦だけautoにすると横は自動でautoになり、はみ出した瞬間に
+        // スレッド全体が横スクロールしてしまうので明示的に抑える
+        overflowX="hidden"
         px={4}
         py={6}
         pt={{ base: 14, md: 6 }}
@@ -540,6 +543,10 @@ export function ChatHome({
               py={2}
               borderRadius="lg"
               maxW="85%"
+              minW={0}
+              // 区切りの無い長文でも吹き出しの外へ出さない
+              // (継承されるので中の本文・選択肢・引用にも効く)
+              overflowWrap="anywhere"
             >
               {/* 送信時に添付した画像(このセッション中のみ表示) */}
               {message.imageUrl && (
@@ -555,7 +562,7 @@ export function ChatHome({
               {message.role === 'ASSISTANT' ? (
                 <MarkdownText>{message.content}</MarkdownText>
               ) : (
-                <Text whiteSpace="pre-wrap">
+                <Text whiteSpace="pre-wrap" overflowWrap="anywhere">
                   {withInlineIcons(message.content)}
                 </Text>
               )}
@@ -649,9 +656,17 @@ export function ChatHome({
                           openManual(group.manualId, group.title, group.topPage)
                         }
                       >
-                        <FcFile />
-                        <Text>{group.title}</Text>
-                        <LuExternalLink size={12} />
+                        {/* 長いマニュアル名でもカードからはみ出さないよう、
+                            アイコンは縮めず名前側だけを折り返す */}
+                        <Box flexShrink={0} display="inline-flex">
+                          <FcFile />
+                        </Box>
+                        <Text minW={0} overflowWrap="anywhere">
+                          {group.title}
+                        </Text>
+                        <Box flexShrink={0} display="inline-flex">
+                          <LuExternalLink size={12} />
+                        </Box>
                       </HStack>
                       {group.pages.length > 0 && (
                         <HStack mt={1} gap={1} flexWrap="wrap">

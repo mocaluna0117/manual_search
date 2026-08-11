@@ -579,7 +579,13 @@ export function SidebarContent({
                     onNavigate?.()
                   }}
                 >
-                  <FcFolder /> {category.name}
+                  {/* 長いフォルダ名はサイドバーの幅で省略する */}
+                  <Box flexShrink={0} display="inline-flex">
+                    <FcFolder />
+                  </Box>
+                  <Text as="span" minW={0} truncate>
+                    {category.name}
+                  </Text>
                 </Button>
                 {isAdmin && (
                   <>

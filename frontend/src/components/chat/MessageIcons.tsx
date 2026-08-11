@@ -84,8 +84,11 @@ export function IconLine({
 }) {
   return (
     <HStack gap={2} align="flex-start">
-      <Box pt="2px">{icon}</Box>
-      <Box flex="1" minW={0}>
+      <Box pt="2px" flexShrink={0}>
+        {icon}
+      </Box>
+      {/* minW=0とセットで、長いフォルダ名などをこの列の中で折り返させる */}
+      <Box flex="1" minW={0} overflowWrap="anywhere">
         {children}
       </Box>
     </HStack>

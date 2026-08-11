@@ -77,6 +77,8 @@ export function AppLayout({ children, ...props }: AppLayoutProps) {
         flex="1"
         minW={0}
         overflowY="auto"
+        // 縦だけautoにすると横も自動でautoになるため、明示して横漏れを止める
+        overflowX="hidden"
         // 閉じているときは、浮いている開くボタンと中身が重ならないよう余白を空ける
         pl={leftCollapsed ? { base: 0, md: '48px' } : undefined}
         pr={hasRight && rightCollapsed ? { base: 0, md: '48px' } : undefined}
