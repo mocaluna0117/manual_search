@@ -32,6 +32,7 @@ import { ME_QUERY } from '../../graphql/me'
 import { useSendKey } from '../../lib/settings'
 import { useManualViewer } from '../manual/ManualViewerProvider'
 import { MarkdownText } from './MarkdownText'
+import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -512,7 +513,9 @@ export function ChatHome({
               {message.role === 'ASSISTANT' ? (
                 <MarkdownText>{message.content}</MarkdownText>
               ) : (
-                <Text whiteSpace="pre-wrap">{message.content}</Text>
+                <Text whiteSpace="pre-wrap">
+                  {withInlineIcons(message.content)}
+                </Text>
               )}
 
               {/* 絞り込み質問の選択肢。クリックがそのまま回答になる */}
@@ -532,7 +535,19 @@ export function ChatHome({
                       disabled={loading}
                       onClick={() => void send(option)}
                     >
-                      {option}
+                      {/* 「✅ はい」のような先頭の絵文字はアイコンで見せる。
+                          送信する値(option)は変えない(サーバー側が文字列で照合するため) */}
+                      {(() => {
+                        const split = splitLeadingIcon(option)
+                        return split ? (
+                          <>
+                            {split.icon}
+                            {split.rest}
+                          </>
+                        ) : (
+                          option
+                        )
+                      })()}
                     </Button>
                   ))}
                   {/* どれにも当てはまらない人向け: 常設のインライン入力欄

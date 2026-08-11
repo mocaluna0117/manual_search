@@ -1,6 +1,35 @@
 import { Box } from '@chakra-ui/react'
+import { Children, isValidElement, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { IconLine, splitLeadingIcon, withInlineIcons } from './MessageIcons'
+
+/**
+ * 段落の先頭にある管理操作の絵文字(📁⏳🗑など)をアイコンに差し替える。
+ * 先頭以外に紛れている絵文字(📌など)もインラインで置き換える
+ */
+function renderWithIcons(children: ReactNode): ReactNode {
+  const nodes = Children.toArray(children)
+  const first = nodes[0]
+
+  if (typeof first === 'string') {
+    const split = splitLeadingIcon(first)
+    if (split) {
+      const rest = [withInlineIcons(split.rest), ...nodes.slice(1)]
+      return <IconLine icon={split.icon}>{rest}</IconLine>
+    }
+  }
+  // 先頭が絵文字でなければ、文字列部分だけインライン置換する
+  return nodes.map((node, i) =>
+    typeof node === 'string' ? (
+      <span key={i}>{withInlineIcons(node)}</span>
+    ) : isValidElement(node) ? (
+      node
+    ) : (
+      node
+    ),
+  )
+}
 
 /**
  * AIの回答(Markdown)を整形して表示する。
@@ -55,7 +84,15 @@ export function MarkdownText({ children }: { children: string }) {
         '& a': { color: 'blue.fg', textDecoration: 'underline' },
       }}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p>{renderWithIcons(children)}</p>,
+          li: ({ children }) => <li>{renderWithIcons(children)}</li>,
+        }}
+      >
+        {children}
+      </ReactMarkdown>
     </Box>
   )
 }
