@@ -284,7 +284,9 @@ export class ManualService implements OnApplicationBootstrap {
       return { movedCount: 0, createdCategories: [] };
     }
 
-    const BATCH_SIZE = 80;
+    // 1回の呼び出し時間とレスポンスJSONのトークン量の両方に余裕を持たせる。
+    // (80件だと応答が出力上限4000トークンに接近し、通信も1分を超えやすい)
+    const BATCH_SIZE = 50;
     let movedCount = 0;
     const createdCategories: string[] = [];
     for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
