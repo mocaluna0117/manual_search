@@ -106,6 +106,36 @@ export class AutoOrganizeResult {
   createdCategories!: string[];
 }
 
+// 全件再分類の進行状況。数分かかるためリクエストは待たせず、
+// フロントはこの状態をポーリングして完了を知る
+@ObjectType()
+export class ReclassifyStatus {
+  @Field()
+  running!: boolean;
+
+  @Field(() => Int)
+  movedCount!: number;
+
+  @Field(() => [String])
+  createdCategories!: string[];
+
+  @Field(() => String, { nullable: true })
+  error!: string | null;
+
+  @Field(() => Date, { nullable: true })
+  finishedAt!: Date | null;
+}
+
+// 再分類の確認ダイアログに出す件数
+@ObjectType()
+export class ReclassifyCounts {
+  @Field(() => Int)
+  target!: number; // 再分類の対象(ピン留めを除く)
+
+  @Field(() => Int)
+  pinned!: number; // ピン留めされていて動かさない件数
+}
+
 // キーワード検索の1件分。マニュアル本体と、本文がヒットした場合はその抜粋を返す
 @ObjectType()
 export class ManualSearchResult {

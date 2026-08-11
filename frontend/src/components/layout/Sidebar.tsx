@@ -1,4 +1,9 @@
-import { useMutation, useQuery } from '@apollo/client/react'
+import {
+  useApolloClient,
+  useLazyQuery,
+  useMutation,
+  useQuery,
+} from '@apollo/client/react'
 import {
   Box,
   Button,
@@ -12,9 +17,10 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
 import {
+  LuBot,
   LuFolderTree,
   LuLogOut,
   LuMenu,
@@ -41,7 +47,12 @@ import {
   CONVERSATIONS_QUERY,
   DELETE_CONVERSATION_MUTATION,
 } from '../../graphql/chat'
-import { MOVE_MANUAL_MUTATION } from '../../graphql/manuals'
+import {
+  MOVE_MANUAL_MUTATION,
+  RECLASSIFY_COUNTS_QUERY,
+  RECLASSIFY_STATUS_QUERY,
+  START_RECLASSIFY_MUTATION,
+} from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { SettingsDialog } from './SettingsDialog'
@@ -125,6 +136,74 @@ export function SidebarContent({
   // カテゴリ名のインライン編集
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [editingName, setEditingName] = useState('')
+
+  // 全件再分類(サイドバーのボタン)。数分かかるので開始だけして進捗はポーリングで見る
+  const client = useApolloClient()
+  const [startReclassify] = useMutation(START_RECLASSIFY_MUTATION)
+  const [reclassifying, setReclassifying] = useState(false)
+  const { data: statusData } = useQuery(RECLASSIFY_STATUS_QUERY, {
+    skip: !isAdmin,
+    pollInterval: reclassifying ? 3000 : 0,
+    fetchPolicy: 'network-only',
+  })
+  const [fetchCounts] = useLazyQuery(RECLASSIFY_COUNTS_QUERY, {
+    fetchPolicy: 'network-only',
+  })
+
+  // 再読み込みしても実行中なら進捗表示を復元する
+  const running = statusData?.reclassifyStatus.running ?? false
+  useEffect(() => {
+    if (running) setReclassifying(true)
+  }, [running])
+
+  // 実行中→完了に変わったら結果を知らせ、一覧を最新化する
+  const wasRunningRef = useRef(false)
+  useEffect(() => {
+    if (wasRunningRef.current && !running) {
+      const status = statusData?.reclassifyStatus
+      setReclassifying(false)
+      void client.refetchQueries({ include: ['ManualCategories', 'Manuals'] })
+      if (status) {
+        window.alert(
+          status.error
+            ? `再分類に失敗しました: ${status.error}`
+            : `再分類が完了しました（${status.movedCount}件を割り当て）` +
+                (status.createdCategories.length > 0
+                  ? `\n新しく作られたフォルダ: ${status.createdCategories.join('、')}`
+                  : ''),
+        )
+      }
+    }
+    wasRunningRef.current = running
+  }, [running, statusData, client])
+
+  const handleReclassify = async () => {
+    const { data: counts } = await fetchCounts()
+    const target = counts?.reclassifyCounts.target ?? 0
+    const pinned = counts?.reclassifyCounts.pinned ?? 0
+    if (target === 0) {
+      window.alert('再分類できるマニュアルがありません。')
+      return
+    }
+    if (
+      !window.confirm(
+        `全${target}件のマニュアルを、AIが工種・業務分野ごとのフォルダへ再分類します（足りないフォルダは新しく作られます）。\n` +
+          (pinned > 0 ? `ピン留めされた${pinned}件は動かしません。\n` : '') +
+          '今の分類は上書きされます。実行しますか？',
+      )
+    )
+      return
+    try {
+      const { data } = await startReclassify()
+      if (data?.startReclassifyAll === false) {
+        window.alert('再分類は既に実行中です。完了までお待ちください。')
+        return
+      }
+      setReclassifying(true)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '再分類を開始できませんでした')
+    }
+  }
 
   // エクスプローラーからマニュアルをドラッグしてフォルダへ移動できるようにする
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
@@ -286,16 +365,31 @@ export function SidebarContent({
             <LuFolderTree /> マニュアル
           </Button>
           {isAdmin && (
-            <IconButton
-              aria-label="カテゴリを追加"
-              size="2xs"
-              variant="ghost"
-              color="fg.muted"
-              _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-              onClick={() => setAddingCategory((v) => !v)}
-            >
-              <LuPlus />
-            </IconButton>
+            <HStack gap={0}>
+              <IconButton
+                aria-label="AIで全マニュアルを再分類"
+                title="AIで全マニュアルを再分類"
+                size="2xs"
+                variant="ghost"
+                color={reclassifying ? 'purple.fg' : 'fg.muted'}
+                _hover={{ color: 'purple.fg', bg: 'bg.emphasized' }}
+                loading={reclassifying}
+                onClick={() => void handleReclassify()}
+              >
+                <LuBot />
+              </IconButton>
+              <IconButton
+                aria-label="フォルダを追加"
+                title="フォルダを追加"
+                size="2xs"
+                variant="ghost"
+                color="fg.muted"
+                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                onClick={() => setAddingCategory((v) => !v)}
+              >
+                <LuPlus />
+              </IconButton>
+            </HStack>
           )}
         </HStack>
 

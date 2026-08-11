@@ -298,17 +298,8 @@ export class ChatService {
         // 管理者が依頼文で分類方針を指定していたら、確認を経て実行まで引き継ぐ
         const instruction =
           String(reclassify.input.instruction ?? '').trim() || undefined;
-        const [manualCount, pinnedCount] = await Promise.all([
-          this.prisma.manual.count({
-            where: {
-              ingestStatus: IngestStatus.COMPLETED,
-              categoryPinned: false,
-            },
-          }),
-          this.prisma.manual.count({
-            where: { ingestStatus: IngestStatus.COMPLETED, categoryPinned: true },
-          }),
-        ]);
+        const { target: manualCount, pinned: pinnedCount } =
+          await this.manualService.reclassifyCounts();
         await this.prisma.conversation.update({
           where: { id: conversation.id },
           data: {
@@ -413,47 +404,39 @@ export class ChatService {
     return { conversationId, message: this.toChatMessage(message) };
   }
 
-  // 再分類の多重実行を防ぐ簡易ガード(バックエンドは1コンテナ前提)
-  private reclassifyRunning = false;
-
   /**
    * 確認済みの全マニュアル再分類を開始する。
    * 数分かかりALB/CloudFrontのタイムアウトを超えうるため、リクエストは待たせず
-   * 裏で実行し、結果は会話に書き込む(取り込みと同じ「結果はデータ」方針)
+   * 裏で実行し、結果は会話に書き込む(取り込みと同じ「結果はデータ」方針)。
+   * ジョブ管理はManualServiceが持ち、サイドバーのボタン経由と共有する
    */
   private async startReclassify(
     conversationId: string,
     question: string,
     instruction?: string,
   ): Promise<AskResult> {
-    if (this.reclassifyRunning) {
+    const started = this.manualService.startReclassifyAll(
+      instruction,
+      (result) => {
+        const content = result.ok
+          ? `📁 全マニュアルの再分類が完了しました(${result.movedCount}件を割り当て)。` +
+            (result.createdCategories.length > 0
+              ? `\n新しく作られたフォルダ: ${result.createdCategories.join('、')}`
+              : '') +
+            '\nサイドバーのフォルダを開いて結果を確認してください。空になったフォルダは🗑から削除できます。'
+          : `再分類に失敗しました: ${result.error ?? '不明なエラー'}`;
+        void this.appendAssistantMessage(conversationId, content).catch(
+          () => undefined,
+        );
+      },
+    );
+    if (!started) {
       return this.respond(
         conversationId,
         question,
         '再分類は現在実行中です。完了までしばらくお待ちください。',
       );
     }
-    this.reclassifyRunning = true;
-    void this.manualService
-      .reclassifyAll(instruction)
-      .then(({ movedCount, createdCategories }) => {
-        let content = `📁 全マニュアルの再分類が完了しました(${movedCount}件を割り当て)。`;
-        if (createdCategories.length > 0) {
-          content += `\n新しく作られたフォルダ: ${createdCategories.join('、')}`;
-        }
-        content +=
-          '\nサイドバーのフォルダを開いて結果を確認してください。空になったフォルダは🗑から削除できます。';
-        return this.appendAssistantMessage(conversationId, content);
-      })
-      .catch((e: unknown) =>
-        this.appendAssistantMessage(
-          conversationId,
-          `再分類に失敗しました: ${e instanceof Error ? e.message : '不明なエラー'}`,
-        ).catch(() => undefined),
-      )
-      .finally(() => {
-        this.reclassifyRunning = false;
-      });
     return this.respond(
       conversationId,
       question,

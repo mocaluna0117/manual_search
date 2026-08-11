@@ -254,6 +254,55 @@ export const AUTO_ORGANIZE_MUTATION: TypedDocumentNode<AutoOrganizeData> = gql`
   }
 `
 
+// --- 全件再分類(ADMIN専用)。数分かかるので開始と進捗確認を分ける ---
+
+interface StartReclassifyData {
+  startReclassifyAll: boolean // falseなら既に実行中
+}
+
+export const START_RECLASSIFY_MUTATION: TypedDocumentNode<StartReclassifyData> = gql`
+  mutation StartReclassifyAll {
+    startReclassifyAll
+  }
+`
+
+export interface ReclassifyStatus {
+  running: boolean
+  movedCount: number
+  createdCategories: string[]
+  error: string | null
+  finishedAt: string | null
+}
+
+interface ReclassifyStatusData {
+  reclassifyStatus: ReclassifyStatus
+}
+
+export const RECLASSIFY_STATUS_QUERY: TypedDocumentNode<ReclassifyStatusData> = gql`
+  query ReclassifyStatus {
+    reclassifyStatus {
+      running
+      movedCount
+      createdCategories
+      error
+      finishedAt
+    }
+  }
+`
+
+interface ReclassifyCountsData {
+  reclassifyCounts: { target: number; pinned: number }
+}
+
+export const RECLASSIFY_COUNTS_QUERY: TypedDocumentNode<ReclassifyCountsData> = gql`
+  query ReclassifyCounts {
+    reclassifyCounts {
+      target
+      pinned
+    }
+  }
+`
+
 // --- まとめて移動(ADMIN専用) ---
 
 interface MoveManualsData {

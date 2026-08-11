@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
-import { IngestStatus, RegisterOutcome } from './model';
+import { IngestStatus, ReclassifyStatus, RegisterOutcome } from './model';
 
 @Injectable()
 export class ManualService implements OnApplicationBootstrap {
@@ -264,6 +264,82 @@ export class ManualService implements OnApplicationBootstrap {
    */
   async reclassifyAll(instruction?: string) {
     return this.organizeManuals({}, true, instruction);
+  }
+
+  // 再分類の進行状況。数分かかる処理をリクエストで待たせないため、
+  // 裏で走らせて状態だけを持つ(単一コンテナ前提の簡易ジョブ管理)
+  private reclassifyJob: ReclassifyStatus = {
+    running: false,
+    movedCount: 0,
+    createdCategories: [],
+    error: null,
+    finishedAt: null,
+  };
+
+  get reclassifyStatus(): ReclassifyStatus {
+    return this.reclassifyJob;
+  }
+
+  /**
+   * 全件再分類をバックグラウンドで開始する。既に実行中ならfalseを返す。
+   * onFinishは完了/失敗時に呼ばれる(チャット経路が会話へ結果を書くために使う)
+   */
+  startReclassifyAll(
+    instruction?: string,
+    onFinish?: (result: {
+      ok: boolean;
+      movedCount: number;
+      createdCategories: string[];
+      error?: string;
+    }) => void,
+  ): boolean {
+    if (this.reclassifyJob.running) return false;
+    this.reclassifyJob = {
+      running: true,
+      movedCount: 0,
+      createdCategories: [],
+      error: null,
+      finishedAt: null,
+    };
+    void this.reclassifyAll(instruction)
+      .then(({ movedCount, createdCategories }) => {
+        this.reclassifyJob = {
+          running: false,
+          movedCount,
+          createdCategories,
+          error: null,
+          finishedAt: new Date(),
+        };
+        onFinish?.({ ok: true, movedCount, createdCategories });
+      })
+      .catch((e: unknown) => {
+        const error = e instanceof Error ? e.message : '不明なエラー';
+        this.reclassifyJob = {
+          running: false,
+          movedCount: 0,
+          createdCategories: [],
+          error,
+          finishedAt: new Date(),
+        };
+        onFinish?.({ ok: false, movedCount: 0, createdCategories: [], error });
+      });
+    return true;
+  }
+
+  /** 再分類の対象件数(ピン留めを除く)とピン留め件数 */
+  async reclassifyCounts() {
+    const [target, pinned] = await Promise.all([
+      this.prisma.manual.count({
+        where: {
+          ingestStatus: IngestStatus.COMPLETED,
+          categoryPinned: false,
+        },
+      }),
+      this.prisma.manual.count({
+        where: { ingestStatus: IngestStatus.COMPLETED, categoryPinned: true },
+      }),
+    ]);
+    return { target, pinned };
   }
 
   /**

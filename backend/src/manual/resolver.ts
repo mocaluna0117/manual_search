@@ -8,6 +8,8 @@ import {
   Manual,
   ManualSearchResult,
   ManualUploadTarget,
+  ReclassifyCounts,
+  ReclassifyStatus,
   RegisterManualResult,
 } from './model';
 import { ManualService } from './service';
@@ -70,6 +72,31 @@ export class ManualResolver {
     categoryId?: string,
   ) {
     return this.manualService.move(id, categoryId ?? null);
+  }
+
+  // 全マニュアルの再分類を開始する(数分かかるため裏で実行し、すぐ返す)。
+  // 実行中だった場合はfalseを返す
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Boolean)
+  startReclassifyAll(
+    @Args('instruction', { type: () => String, nullable: true })
+    instruction?: string,
+  ) {
+    return this.manualService.startReclassifyAll(instruction);
+  }
+
+  // 再分類の進行状況(フロントがポーリングして完了を知る)
+  @Roles(UserRole.ADMIN)
+  @Query(() => ReclassifyStatus)
+  reclassifyStatus() {
+    return this.manualService.reclassifyStatus;
+  }
+
+  // 再分類の対象件数(確認ダイアログの表示用)
+  @Roles(UserRole.ADMIN)
+  @Query(() => ReclassifyCounts)
+  reclassifyCounts() {
+    return this.manualService.reclassifyCounts();
   }
 
   // ピン留めの切り替え(ピン=AIの再分類で動かさない)
