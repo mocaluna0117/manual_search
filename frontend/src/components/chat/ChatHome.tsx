@@ -258,7 +258,11 @@ export function ChatHome({
   }
 
   /** 質問を送る。入力欄からの送信・選択肢ボタン・その他入力のすべてから使う */
-  const send = async (question: string) => {
+  const send = async (rawQuestion: string) => {
+    // 画像だけでも送れるようにする(質問文が無いときは既定の問いかけを補う。
+    // 履歴が空欄にならず、AIにも「画像について聞かれている」と伝わる)
+    const question =
+      rawQuestion || (attachedImage ? 'この画像について教えてください' : '')
     if (!question || loading) return
     const image = attachedImage
     setInput('')
@@ -450,6 +454,8 @@ export function ChatHome({
             size="lg"
             colorPalette="blue"
             onClick={handleSubmit}
+            // 文章が無くても画像が添付されていれば送れる
+            disabled={!input.trim() && !attachedImage}
             alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
           >
             検索
