@@ -21,6 +21,18 @@ model ManualCategory {
   @@index([sortOrder, name])
 }
 
+// チャット入力欄から挿し込める定型文。管理者が運用しながら育てる
+model PromptTemplate {
+  id        String   @id @default(uuid())
+  title     String // 一覧に出す短い名前
+  body      String // 入力欄に挿入される本文
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder, createdAt])
+}
+
 // 管理者がAIに教える分類ルール(自然文)。
 // 「床暖房関連はフローリング関連へ」のような微妙な判断の感覚を蓄積し、
 // すべての自動分類(アップロード時・自動分類ボタン・チャット再分類)で最優先適用する

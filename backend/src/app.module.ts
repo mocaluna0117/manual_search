@@ -11,6 +11,7 @@ import { HealthController } from './health/controller';
 import { ManualModule } from './manual/module';
 import { PrismaModule } from './prisma/module';
 import { RagModule } from './rag/module';
+import { TemplateModule } from './template/module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RagModule } from './rag/module';
     ChatModule,
     ManualModule,
     RagModule,
+    TemplateModule,
   ],
   controllers: [HealthController],
   providers: [AppResolver],

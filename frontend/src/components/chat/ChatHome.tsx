@@ -20,6 +20,7 @@ import {
   LuCopy,
   LuExternalLink,
   LuImagePlus,
+  LuMessageSquareText,
   LuPencil,
   LuX,
 } from 'react-icons/lu'
@@ -33,6 +34,7 @@ import { useSendKey } from '../../lib/settings'
 import { useManualViewer } from '../manual/ManualViewerProvider'
 import { MarkdownText } from './MarkdownText'
 import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
+import { PromptTemplateMenu } from './PromptTemplateMenu'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -353,6 +355,26 @@ export function ChatHome({
     }
   }
 
+  /**
+   * テンプレートを入力欄に差し込む。
+   * 「〇〇」が含まれていればそこを選択状態にして、すぐ書き換えられるようにする
+   */
+  const insertTemplate = (body: string) => {
+    setInput(body)
+    const placeholder = body.indexOf('〇〇')
+    // stateの反映後にカーソルを動かす必要があるので次のフレームで実行する
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current
+      if (!textarea) return
+      textarea.focus()
+      if (placeholder >= 0) {
+        textarea.setSelectionRange(placeholder, placeholder + 2)
+      } else {
+        textarea.setSelectionRange(body.length, body.length)
+      }
+    })
+  }
+
   /** 送信済みの質問を入力欄へ戻す(編集して再送信するため) */
   const editMessage = (message: LocalMessage) => {
     // DB保存時に付く画像添付の目印は編集対象から外す
@@ -403,6 +425,20 @@ export function ChatHome({
             e.target.value = '' // 同じファイルを選び直せるように
           }}
         />
+        {/* 定型文(テンプレート)。選ぶと入力欄に入り、〇〇が選択状態になる */}
+        <PromptTemplateMenu onSelect={insertTemplate}>
+          <IconButton
+            aria-label="よく使う質問から選ぶ"
+            title="よく使う質問から選ぶ"
+            size="lg"
+            variant="outline"
+            borderRadius="full"
+            color="fg.muted"
+            alignSelf="flex-end"
+          >
+            <LuMessageSquareText />
+          </IconButton>
+        </PromptTemplateMenu>
         <IconButton
           aria-label="画像を添付"
           size="lg"
