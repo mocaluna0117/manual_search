@@ -10,6 +10,7 @@ interface AppLayoutProps {
   onSelectCategory: (category: Category | null) => void
   onSelectConversation: (conversationId: string) => void
   onSelectUncategorized: () => void
+  onSelectManualsRoot: () => void // エクスプローラーのルート(全フォルダ)を開く
   onSearch: (keyword: string) => void
 }
 
@@ -21,6 +22,7 @@ export function AppLayout({
   onSelectCategory,
   onSelectConversation,
   onSelectUncategorized,
+  onSelectManualsRoot,
   onSearch,
 }: AppLayoutProps) {
   return (
@@ -33,6 +35,7 @@ export function AppLayout({
         onSelectCategory={onSelectCategory}
         onSelectConversation={onSelectConversation}
         onSelectUncategorized={onSelectUncategorized}
+        onSelectManualsRoot={onSelectManualsRoot}
         onSearch={onSearch}
       />
       <Box as="main" flex="1" minW={0} overflowY="auto">

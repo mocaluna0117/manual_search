@@ -4,7 +4,10 @@ import { useAuth } from 'react-oidc-context'
 import { LoginScreen } from './components/auth/LoginScreen'
 import { ChatHome } from './components/chat/ChatHome'
 import { AppLayout } from './components/layout/AppLayout'
-import { CategoryManualList } from './components/manual/CategoryManualList'
+import {
+  ManualExplorer,
+  type ExplorerFolder,
+} from './components/manual/ManualExplorer'
 import { ManualSearchResults } from './components/manual/ManualSearchResults'
 import { ManualViewerProvider } from './components/manual/ManualViewerProvider'
 import type { Category } from './graphql/categories'
@@ -13,6 +16,7 @@ import type { Category } from './graphql/categories'
 type View =
   | { type: 'home' } // 新規チャット
   | { type: 'chat'; conversationId: string } // 既存の会話
+  | { type: 'manuals' } // エクスプローラーのルート(全フォルダ)
   | { type: 'category'; category: Category }
   | { type: 'uncategorized' } // カテゴリ未設定のマニュアル一覧
   | { type: 'search'; keyword: string }
@@ -70,17 +74,30 @@ function App() {
         setView({ type: 'chat', conversationId })
       }
       onSelectUncategorized={() => setView({ type: 'uncategorized' })}
+      onSelectManualsRoot={() => setView({ type: 'manuals' })}
       onSearch={(keyword) => setView({ type: 'search', keyword })}
     >
-      {view.type === 'category' && (
-        <CategoryManualList
-          key={view.category.id}
-          categoryId={view.category.id}
-          categoryName={view.category.name}
+      {(view.type === 'manuals' ||
+        view.type === 'category' ||
+        view.type === 'uncategorized') && (
+        <ManualExplorer
+          folder={
+            view.type === 'category'
+              ? view.category
+              : view.type === 'uncategorized'
+                ? 'uncategorized'
+                : null
+          }
+          onNavigate={(folder: ExplorerFolder) =>
+            setView(
+              folder === null
+                ? { type: 'manuals' }
+                : folder === 'uncategorized'
+                  ? { type: 'uncategorized' }
+                  : { type: 'category', category: folder },
+            )
+          }
         />
-      )}
-      {view.type === 'uncategorized' && (
-        <CategoryManualList key="uncategorized" uncategorized categoryName="未分類" />
       )}
       {view.type === 'search' && (
         <ManualSearchResults key={view.keyword} keyword={view.keyword} />

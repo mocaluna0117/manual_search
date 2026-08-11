@@ -26,6 +26,7 @@ import {
   CONVERSATIONS_QUERY,
   DELETE_CONVERSATION_MUTATION,
 } from '../../graphql/chat'
+import { MOVE_MANUAL_MUTATION } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { SettingsDialog } from './SettingsDialog'
@@ -37,6 +38,7 @@ export interface SidebarProps {
   onSelectCategory: (category: Category | null) => void
   onSelectConversation: (conversationId: string) => void
   onSelectUncategorized: () => void
+  onSelectManualsRoot: () => void // エクスプローラーのルート(全フォルダ)を開く
   onSearch: (keyword: string) => void
   /** 項目を選んだ後に呼ばれる(スマホではDrawerを閉じるために使う) */
   onNavigate?: () => void
@@ -49,6 +51,7 @@ export function SidebarContent({
   onSelectCategory,
   onSelectConversation,
   onSelectUncategorized,
+  onSelectManualsRoot,
   onSearch,
   onNavigate,
 }: SidebarProps) {
@@ -107,6 +110,26 @@ export function SidebarContent({
   // カテゴリ名のインライン編集
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [editingName, setEditingName] = useState('')
+
+  // エクスプローラーからマニュアルをドラッグしてフォルダへ移動できるようにする
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+  const [moveManual] = useMutation(MOVE_MANUAL_MUTATION, {
+    refetchQueries: ['Manuals'],
+  })
+  const handleManualDrop = async (
+    e: React.DragEvent,
+    categoryId: string | null,
+  ) => {
+    e.preventDefault()
+    setDropTargetId(null)
+    const manualId = e.dataTransfer.getData('text/plain')
+    if (!manualId) return
+    try {
+      await moveManual({ variables: { id: manualId, categoryId } })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : '移動できませんでした')
+    }
+  }
   const [updateCategory] = useMutation(UPDATE_CATEGORY_MUTATION, {
     refetchQueries: ['ManualCategories'],
   })
@@ -232,9 +255,21 @@ export function SidebarContent({
 
         {/* カテゴリ別マニュアル(DBから取得) */}
         <HStack justify="space-between" mb={2}>
-          <Text fontSize="xs" color="fg.muted">
-            マニュアル（カテゴリ別）
-          </Text>
+          {/* クリックでエクスプローラーのルート(全フォルダのアイコン表示)を開く */}
+          <Button
+            variant="ghost"
+            size="xs"
+            px={1}
+            color="fg.muted"
+            fontWeight="normal"
+            _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+            onClick={() => {
+              onSelectManualsRoot()
+              onNavigate?.()
+            }}
+          >
+            🗂 マニュアル
+          </Button>
           {isAdmin && (
             <IconButton
               aria-label="カテゴリを追加"
@@ -304,6 +339,18 @@ export function SidebarContent({
                   color="fg"
                   bg={category.id === selectedCategoryId ? 'bg.emphasized' : undefined}
                   _hover={{ bg: 'bg.emphasized' }}
+                  // エクスプローラーからのドロップ先(マニュアルの移動)
+                  borderWidth="1px"
+                  borderColor={
+                    dropTargetId === category.id ? 'blue.solid' : 'transparent'
+                  }
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setDropTargetId(category.id)
+                  }}
+                  onDragLeave={() => setDropTargetId(null)}
+                  onDrop={(e) => void handleManualDrop(e, category.id)}
                   onClick={() => {
                     onSelectCategory(category)
                     onNavigate?.()
@@ -341,13 +388,24 @@ export function SidebarContent({
               </HStack>
             ),
           )}
-          {/* カテゴリ未設定のマニュアル置き場 */}
+          {/* カテゴリ未設定のマニュアル置き場(ドロップで未分類へ戻せる) */}
           <Button
             variant="ghost"
             size="sm"
             justifyContent="flex-start"
             color="fg.muted"
             _hover={{ bg: 'bg.emphasized' }}
+            borderWidth="1px"
+            borderColor={
+              dropTargetId === 'uncategorized' ? 'blue.solid' : 'transparent'
+            }
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
+              setDropTargetId('uncategorized')
+            }}
+            onDragLeave={() => setDropTargetId(null)}
+            onDrop={(e) => void handleManualDrop(e, null)}
             onClick={() => {
               onSelectUncategorized()
               onNavigate?.()
