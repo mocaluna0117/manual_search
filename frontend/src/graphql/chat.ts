@@ -9,6 +9,7 @@ export interface ChatMessage {
   content: string
   citations: RagCitation[]
   options: string[] // 絞り込み質問の選択肢(ボタン表示)
+  createdAt: string // 発言時刻(吹き出しの下に表示)
 }
 
 export interface Conversation {
@@ -60,6 +61,7 @@ export const CONVERSATION_QUERY: TypedDocumentNode<
           pageNumber
         }
         options
+        createdAt
       }
     }
   }
@@ -106,6 +108,7 @@ export const ASK_MUTATION: TypedDocumentNode<AskData, AskVars> = gql`
           pageNumber
         }
         options
+        createdAt
       }
     }
   }

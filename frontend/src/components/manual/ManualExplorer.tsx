@@ -185,15 +185,20 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     manual: Manual
   } | null>(null)
 
-  // 右クリックメニューは画面のどこかをクリック/Escで閉じる(Windowsと同じ)
+  // 右クリックメニューは画面のどこかをクリック/Escで閉じる(Windowsと同じ)。
+  // React 18ではクリック系イベント中のuseEffectが同期的に走るため、
+  // メニューを開いたイベント自身に反応して即閉じないよう、登録を1tick遅らせる
   useEffect(() => {
     if (!contextMenu) return
     const close = () => setContextMenu(null)
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
-    window.addEventListener('click', close)
-    window.addEventListener('contextmenu', close)
-    window.addEventListener('keydown', onKey)
+    const timer = window.setTimeout(() => {
+      window.addEventListener('click', close)
+      window.addEventListener('contextmenu', close)
+      window.addEventListener('keydown', onKey)
+    }, 0)
     return () => {
+      window.clearTimeout(timer)
       window.removeEventListener('click', close)
       window.removeEventListener('contextmenu', close)
       window.removeEventListener('keydown', onKey)
@@ -283,6 +288,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     onDoubleClick: () => openManual(manual.id, manual.title),
     onContextMenu: (e: React.MouseEvent) => {
       e.preventDefault()
+      // このイベント自身がwindowの「閉じる」リスナーに届くと、
+      // 開いた瞬間に閉じてメニューが一度も表示されない
+      e.stopPropagation()
       setSelectedId(manual.id)
       setContextMenu({ x: e.clientX, y: e.clientY, manual })
     },

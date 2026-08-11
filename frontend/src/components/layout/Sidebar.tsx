@@ -508,22 +508,71 @@ export function SidebarContent({
  * - md未満: ハンバーガーボタン + Drawer(中身は同じSidebarContent)
  *   スマホでもチャット履歴・キーワード検索・カテゴリ・ログアウトに到達できるようにする
  */
+const SIDEBAR_WIDTH_KEY = 'manualSearch.sidebarWidth'
+const SIDEBAR_MIN = 200
+const SIDEBAR_MAX = 480
+
 export function Sidebar(props: SidebarProps) {
   const [open, setOpen] = useState(false)
+
+  // サイドバーの幅(右端をドラッグで調整し、次回のために保存する)
+  const [width, setWidth] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
+      if (saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX) return saved
+    } catch {
+      // 読めなければ既定値
+    }
+    return 260
+  })
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const move = (ev: PointerEvent) => {
+      // サイドバーは画面左端に接しているので、マウスのX座標=そのまま幅になる
+      setWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX)))
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setWidth((w) => {
+        try {
+          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w))
+        } catch {
+          // 保存できない環境では今回だけ有効
+        }
+        return w
+      })
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
 
   return (
     <>
       {/* PC: 常設サイドバー */}
       <Box
-        w="260px"
+        w={`${width}px`}
         flexShrink={0}
         h="100%"
         bg="bg.subtle"
         borderRightWidth="1px"
         borderColor="border"
         display={{ base: 'none', md: 'block' }}
+        position="relative"
       >
         <SidebarContent {...props} />
+        {/* 幅調整のつまみ(右端。ホバーで見えるようになる) */}
+        <Box
+          position="absolute"
+          top={0}
+          right="-2px"
+          bottom={0}
+          w="5px"
+          cursor="col-resize"
+          zIndex={5}
+          _hover={{ bg: 'blue.muted' }}
+          onPointerDown={startResize}
+        />
       </Box>
 
       {/* スマホ: 画面左上のハンバーガーボタン */}

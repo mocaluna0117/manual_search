@@ -108,6 +108,20 @@ function groupCitations(
   return groups
 }
 
+/** 発言時刻の表示。今日なら「14:32」、それ以外は「8/12 14:32」 */
+function formatChatTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  return sameDay ? time : `${d.getMonth() + 1}/${d.getDate()} ${time}`
+}
+
 /** File → base64文字列(data:プレフィックスを除いた本体) */
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -259,6 +273,7 @@ export function ChatHome({
         content: question,
         citations: [],
         options: [],
+        createdAt: new Date().toISOString(),
         imageUrl: image ? URL.createObjectURL(image) : undefined,
       },
     ])
@@ -296,6 +311,7 @@ export function ChatHome({
               '⏹ 回答を停止しました。この質問は保存されていません。質問の編集ボタン(鉛筆マーク)から編集して再送信できます。',
             citations: [],
             options: [],
+            createdAt: new Date().toISOString(),
           },
         ])
         return
@@ -308,6 +324,7 @@ export function ChatHome({
           content: `エラーが発生しました: ${e instanceof Error ? e.message : '不明なエラー'}`,
           citations: [],
           options: [],
+          createdAt: new Date().toISOString(),
         },
       ])
     } finally {
@@ -607,8 +624,17 @@ export function ChatHome({
                 </VStack>
               )}
 
-              {/* メッセージ操作: コピー / (質問のみ)編集して再送信 */}
-              <HStack mt={1} gap={0} justify="flex-end">
+              {/* メッセージ操作: 発言時刻 + コピー / (質問のみ)編集して再送信 */}
+              <HStack mt={1} gap={0} justify="flex-end" align="center">
+                <Text
+                  fontSize="2xs"
+                  me="auto"
+                  pe={3}
+                  opacity={0.75}
+                  color={message.role === 'USER' ? 'blue.contrast' : 'fg.muted'}
+                >
+                  {formatChatTime(message.createdAt)}
+                </Text>
                 <IconButton
                   aria-label="コピー"
                   title="コピー"
