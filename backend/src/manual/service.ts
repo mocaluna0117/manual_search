@@ -5,6 +5,7 @@ import {
   NotFoundException,
   type OnApplicationBootstrap,
 } from '@nestjs/common';
+import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
 import { StorageService } from '../storage/service';
@@ -251,25 +252,58 @@ export class ManualService implements OnApplicationBootstrap {
   }
 
   /** 未分類(かつ取り込み済み)のマニュアルをAIでまとめて自動分類する */
+  /** 未分類のマニュアルをAIで分類する(必要なら新カテゴリも作る) */
   async autoOrganize() {
+    return this.organizeManuals({ categoryId: null }, true);
+  }
+
+  /**
+   * 全マニュアルを現在のフォルダ構成へ再分類し直す(チャットの管理操作用)。
+   * 既存の分類は上書きされるため、呼び出し側で必ず確認を挟むこと。
+   * allowNew=falseで、管理者が承認していない新フォルダは作らせない
+   */
+  async reclassifyAll() {
+    return this.organizeManuals({}, false);
+  }
+
+  /**
+   * 対象マニュアルをAIで分類してDBへ反映する共通処理。
+   * 1回のLLM呼び出しに全件を入れると応答JSONが出力上限(4000トークン)で
+   * 途中で切れるため、バッチに分けて呼ぶ
+   */
+  private async organizeManuals(
+    where: Prisma.ManualWhereInput,
+    allowNew: boolean,
+  ) {
     const manuals = await this.prisma.manual.findMany({
-      where: { categoryId: null, ingestStatus: IngestStatus.COMPLETED },
+      where: { ...where, ingestStatus: IngestStatus.COMPLETED },
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
     if (manuals.length === 0) {
       return { movedCount: 0, createdCategories: [] };
     }
-    const categories = await this.prisma.manualCategory.findMany();
-    // 全マニュアルを1回のAI呼び出しで見せることで、一貫性のある分類にする
-    const assignments = await this.rag.organize(
-      manuals.map((m) => ({
-        manualId: m.id,
-        title: m.title,
-        snippet: m.chunks[0]?.content.slice(0, 120) ?? '',
-      })),
-      categories.map((c) => c.name),
-    );
-    return this.applyAssignments(assignments);
+
+    const BATCH_SIZE = 80;
+    let movedCount = 0;
+    const createdCategories: string[] = [];
+    for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
+      const batch = manuals.slice(i, i + BATCH_SIZE);
+      // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)
+      const categories = await this.prisma.manualCategory.findMany();
+      const assignments = await this.rag.organize(
+        batch.map((m) => ({
+          manualId: m.id,
+          title: m.title,
+          snippet: m.chunks[0]?.content.slice(0, 120) ?? '',
+        })),
+        categories.map((c) => c.name),
+        allowNew,
+      );
+      const result = await this.applyAssignments(assignments, allowNew);
+      movedCount += result.movedCount;
+      createdCategories.push(...result.createdCategories);
+    }
+    return { movedCount, createdCategories };
   }
 
   /** 1件だけAIで分類する(アップロード時の「AIにおまかせ」用)。失敗しても取り込みは成功扱い */
@@ -299,9 +333,10 @@ export class ManualService implements OnApplicationBootstrap {
     }
   }
 
-  /** AIの割り当て結果をDBに反映する(カテゴリが無ければ作る) */
+  /** AIの割り当て結果をDBに反映する(allowNew=trueならカテゴリが無ければ作る) */
   private async applyAssignments(
     assignments: { manualId: string; category: string }[],
+    allowNew = true,
   ) {
     const createdCategories: string[] = [];
     let movedCount = 0;
@@ -312,6 +347,8 @@ export class ManualService implements OnApplicationBootstrap {
         where: { name },
       });
       if (!category) {
+        // 既存カテゴリ限定モードでは、AIが指示を破って作った未知の名前は無視する
+        if (!allowNew) continue;
         category = await this.prisma.manualCategory.create({
           data: { name },
         });

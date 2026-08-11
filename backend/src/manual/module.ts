@@ -7,5 +7,6 @@ import { ManualService } from './service';
 @Module({
   imports: [StorageModule, RagModule],
   providers: [ManualResolver, ManualService],
+  exports: [ManualService], // チャットの管理操作(再分類)から使う
 })
 export class ManualModule {}

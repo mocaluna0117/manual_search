@@ -18,6 +18,7 @@ import {
   CONVERSATION_QUERY,
   type ChatMessage,
 } from '../../graphql/chat'
+import { ME_QUERY } from '../../graphql/me'
 import { useSendKey } from '../../lib/settings'
 import { useManualViewer } from '../manual/ManualViewerProvider'
 import { MarkdownText } from './MarkdownText'
@@ -176,9 +177,15 @@ export function ChatHome({
     }
   }, [conversationError, conversationId, onConversationNotFound])
 
+  // 管理者はチャットからフォルダ作成・再分類ができるため、その結果を
+  // カテゴリ一覧・マニュアル一覧(表示中のもの)にも反映する。一般ユーザーは
+  // カテゴリが変わることがないので余計な再取得をしない
+  const { data: meData } = useQuery(ME_QUERY)
+  const isAdmin = meData?.me.role === 'ADMIN'
   const [ask, { loading }] = useMutation(ASK_MUTATION, {
-    // 新規会話ができたらサイドバーの履歴一覧を更新する
-    refetchQueries: ['Conversations'],
+    refetchQueries: isAdmin
+      ? ['Conversations', 'ManualCategories', 'Manuals']
+      : ['Conversations'],
   })
 
   // 引用カードからアプリ内ビューアでPDFを開く

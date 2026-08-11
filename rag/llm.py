@@ -33,6 +33,57 @@ SYSTEM_PROMPT = """あなたは社内マニュアル検索の案内係です。�
 - メッセージの一番最後に、実際に回答の根拠として使った抜粋の番号を「[参照] 1,3」の形式で1行だけ書く。読んだが使わなかった抜粋は含めない。どの抜粋も使っていない場合は「[参照] なし」と書く。[選択肢]行がある場合は[参照]行をその前に置く"""
 
 
+# 管理者のチャットにだけ渡す「道具」。Claudeは依頼内容から使うべきツールを判断して
+# 呼び出しを返すだけで、実行するのはNestJS側(このサービスはDBの分類を直接触らない)
+ADMIN_TOOLS = [
+    {
+        "toolSpec": {
+            "name": "create_folder",
+            "description": (
+                "マニュアルを整理するフォルダ(カテゴリ)を新しく作成する。"
+                "管理者に「フォルダを作って」と明確に頼まれたときだけ使う。"
+                "複数作る場合は1つずつ複数回呼び出す"
+            ),
+            "inputSchema": {
+                "json": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "フォルダ名(誰にでも分かる簡潔な日本語)",
+                        }
+                    },
+                    "required": ["name"],
+                }
+            },
+        }
+    },
+    {
+        "toolSpec": {
+            "name": "reclassify_all_manuals",
+            "description": (
+                "登録済みの全マニュアルを、現在存在するフォルダへAIが再分類し直す。"
+                "フォルダ構成を作り直した後の一括整理に使う。"
+                "実行前にシステムが管理者へ確認を取るので、このツールは提案として呼んでよい"
+            ),
+            "inputSchema": {"json": {"type": "object", "properties": {}}},
+        }
+    },
+]
+
+# 管理者モードのときだけシステムプロンプトに足す補足。
+# 本則の「抜粋だけを根拠に・曖昧なら絞り込み質問」が管理操作にまで効くと
+# ツールを呼ばずに聞き返してしまうため、管理操作は別扱いだと明確に書く
+ADMIN_SYSTEM_ADDENDUM = """
+
+補足(管理者モード): あなたはツールでフォルダ(カテゴリ)の作成と全マニュアルの再分類ができます。
+- 「〇〇というフォルダを作って」「マニュアルを再分類して」のような依頼は、マニュアルの内容に関する質問ではなく、この検索システム自体への操作依頼。マニュアル抜粋に根拠を求めず、絞り込み質問もせず、ためらわずに対応するツールを呼び出す
+- フォルダ名が指定されていれば、その名前のままcreate_folderを呼ぶ(勝手に変えない)
+- マニュアルの内容を知りたい通常の質問には、これまで通り抜粋から回答する(ツールは使わない)
+- ツールを使うときは、何をするのかを本文で一言だけ添える(結果の報告はシステムが行うので不要)
+- 管理操作の応答では[選択肢]や[参照]の行は書かない"""
+
+
 class Context:
     """回答の根拠となるマニュアル抜粋"""
 
@@ -55,9 +106,14 @@ class AnswerGenerator(Protocol):
         contexts: list[Context],
         image: tuple[bytes, str] | None = None,
         history: list[HistoryMessage] | None = None,
-    ) -> str: ...
+        tools: list[dict] | None = None,
+    ) -> tuple[str, list[dict]]: ...
 
     def rewrite_query(self, question: str, history: list[HistoryMessage]) -> str: ...
+
+    def classify_manuals(
+        self, manuals: list[dict], categories: list[str], allow_new: bool = True
+    ) -> list[dict]: ...
 
 
 class StubAnswerGenerator:
@@ -69,10 +125,12 @@ class StubAnswerGenerator:
         contexts: list[Context],
         image: tuple[bytes, str] | None = None,
         history: list[HistoryMessage] | None = None,
-    ) -> str:
+        tools: list[dict] | None = None,
+    ) -> tuple[str, list[dict]]:
         return (
             f"「{question}」に関連しそうなマニュアルが{len(contexts)}件見つかりました。"
-            "詳しくは以下をご覧ください。(回答文の生成はANSWER_PROVIDER=bedrockで有効になります)"
+            "詳しくは以下をご覧ください。(回答文の生成はANSWER_PROVIDER=bedrockで有効になります)",
+            [],
         )
 
     def rewrite_query(self, question: str, history: list[HistoryMessage]) -> str:
@@ -81,7 +139,7 @@ class StubAnswerGenerator:
         return f"{recent} {question}".strip()
 
     def classify_manuals(
-        self, manuals: list[dict], categories: list[str]
+        self, manuals: list[dict], categories: list[str], allow_new: bool = True
     ) -> list[dict]:
         return []  # LLM無しでは分類できない(空=何も割り当てない)
 
@@ -101,7 +159,8 @@ class BedrockAnswerGenerator:
         contexts: list[Context],
         image: tuple[bytes, str] | None = None,
         history: list[HistoryMessage] | None = None,
-    ) -> str:
+        tools: list[dict] | None = None,
+    ) -> tuple[str, list[dict]]:
         # 抜粋に番号を振る([参照]行で「どれを使ったか」を申告してもらうため)
         excerpts = "\n\n".join(
             f"【抜粋{i}】{c.title}\n{c.content}"
@@ -130,16 +189,31 @@ class BedrockAnswerGenerator:
         content.append({"text": user_message})
         messages.append({"role": "user", "content": content})
 
+        system_prompt = SYSTEM_PROMPT + (ADMIN_SYSTEM_ADDENDUM if tools else "")
         res = self.client.converse(
             modelId=self.model_id,
-            system=[{"text": SYSTEM_PROMPT}],
+            system=[{"text": system_prompt}],
             messages=messages,
             inferenceConfig={
                 "maxTokens": 1024,
                 "temperature": 0.2,  # 事実ベースの回答なので低め(創造性を抑える)
             },
+            # ツール(管理操作)は管理者のリクエストのときだけ渡される
+            **({"toolConfig": {"tools": tools}} if tools else {}),
         )
-        return res["output"]["message"]["content"][0]["text"]
+
+        # 応答は「本文テキスト」と「ツール呼び出し」が混在しうるので分けて返す
+        answer_parts: list[str] = []
+        actions: list[dict] = []
+        for block in res["output"]["message"]["content"]:
+            if "text" in block:
+                answer_parts.append(block["text"])
+            elif "toolUse" in block:
+                tool_use = block["toolUse"]
+                actions.append(
+                    {"name": tool_use["name"], "input": tool_use.get("input") or {}}
+                )
+        return "\n".join(answer_parts).strip(), actions
 
     def rewrite_query(self, question: str, history: list[HistoryMessage]) -> str:
         """質問(+会話の文脈)を「検索用キーワード列」に展開する(クエリ拡張)。
@@ -168,21 +242,34 @@ class BedrockAnswerGenerator:
         return res["output"]["message"]["content"][0]["text"].strip()
 
     def classify_manuals(
-        self, manuals: list[dict], categories: list[str]
+        self, manuals: list[dict], categories: list[str], allow_new: bool = True
     ) -> list[dict]:
         """マニュアル一覧をカテゴリに割り当てる(全体を1回のリクエストで見せて
-        一貫性のある分類にする)。戻り値: [{"manual_id":…, "category":…}]"""
+        一貫性のある分類にする)。戻り値: [{"manual_id":…, "category":…}]
+
+        allow_new=False のときは既存カテゴリだけに割り当てる(全件再分類で
+        管理者が承認していないフォルダを勝手に増やさないため)。
+        """
         lines = "\n".join(
             f"- id={m['manual_id']} タイトル: {m['title']}\n  冒頭: {m['snippet'][:100]}"
             for m in manuals
         )
         existing = "、".join(categories) if categories else "(まだ無い)"
+        if allow_new:
+            category_rules = (
+                "- できるだけ「既存カテゴリ」を使う。適切なものが無い場合だけ新しいカテゴリ名を作る\n"
+                "- 新しいカテゴリ名は誰にでも分かる簡潔な日本語(2〜10文字程度)にする\n"
+                "- カテゴリを細かく増やしすぎない(マニュアル10件あたり2〜4カテゴリが目安)\n"
+            )
+        else:
+            category_rules = (
+                "- 必ず「既存カテゴリ」のいずれかをそのままの名前で割り当てる。"
+                "新しいカテゴリ名を作ってはいけない\n"
+            )
         prompt = (
             "あなたは社内マニュアルの整理係です。以下のマニュアル一覧を内容ごとにカテゴリ分けしてください。\n\n"
             "ルール:\n"
-            "- できるだけ「既存カテゴリ」を使う。適切なものが無い場合だけ新しいカテゴリ名を作る\n"
-            "- 新しいカテゴリ名は誰にでも分かる簡潔な日本語(2〜10文字程度)にする\n"
-            "- カテゴリを細かく増やしすぎない(マニュアル10件あたり2〜4カテゴリが目安)\n"
+            f"{category_rules}"
             '- JSON配列のみを出力する: [{"manual_id": "...", "category": "カテゴリ名"}, ...]\n\n'
             f"既存カテゴリ: {existing}\n\nマニュアル一覧:\n{lines}"
         )

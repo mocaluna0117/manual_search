@@ -78,6 +78,10 @@ model Conversation {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // チャット経由の管理操作(全マニュアル再分類など)の「確認待ち」状態。
+  // 確認はLLM任せにせず、次のメッセージでこの値を見て確定的に処理する
+  pendingAction Json? @map("pending_action")
+
   @@index([userId, updatedAt])
 }
 

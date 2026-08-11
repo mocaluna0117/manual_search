@@ -15,7 +15,7 @@ from pypdf import PdfReader
 from chunking import split_text
 from security import fetch_pdf, require_api_token
 from embedding import create_embedder, to_vector_literal
-from llm import Context, create_answer_generator
+from llm import ADMIN_TOOLS, Context, create_answer_generator
 from vision import MAX_TRANSCRIBE_PAGES, create_transcriber, render_page_jpeg
 
 load_dotenv()  # rag/.env を読み込む
@@ -60,6 +60,7 @@ class SearchRequest(BaseModel):
     image_base64: str | None = None  # 質問に添付された画像(任意)
     image_format: str | None = None  # png / jpeg / webp / gif
     history: list[HistoryMessage] = []  # 同じ会話のこれまでのやりとり(絞り込み対話用)
+    is_admin: bool = False  # trueなら管理ツール(フォルダ作成・再分類)をClaudeに渡す
 
 
 class Citation(BaseModel):
@@ -71,10 +72,18 @@ class Citation(BaseModel):
     page: int | None = None  # 元PDFの何ページ目か
 
 
+class ActionRequest(BaseModel):
+    """Claudeが要求した管理操作。実行するのはNestJS側"""
+
+    name: str
+    input: dict = {}
+
+
 class SearchResponse(BaseModel):
     answer: str
     citations: list[Citation]
     options: list[str] = []  # 絞り込み質問の選択肢(ボタン表示用)
+    actions: list[ActionRequest] = []  # 管理ツールの呼び出し要求(管理者のみ)
 
 
 OPTION_PATTERN = re.compile(r"^\[選択肢\]\s*(.+)$", re.MULTILINE)
@@ -362,6 +371,8 @@ class OrganizeItem(BaseModel):
 class OrganizeRequest(BaseModel):
     manuals: list[OrganizeItem]
     categories: list[str]  # 既存カテゴリ名
+    # falseなら既存カテゴリだけに割り当てる(全件再分類など、勝手に増やしたくない場合)
+    allow_new: bool = True
 
 
 class OrganizeAssignment(BaseModel):
@@ -380,7 +391,9 @@ def organize(req: OrganizeRequest) -> OrganizeResponse:
         return OrganizeResponse(assignments=[])
     try:
         raw = answer_generator.classify_manuals(
-            [m.model_dump() for m in req.manuals], req.categories
+            [m.model_dump() for m in req.manuals],
+            req.categories,
+            allow_new=req.allow_new,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"分類に失敗しました: {e}")
@@ -437,7 +450,9 @@ def search(req: SearchRequest) -> SearchResponse:
         with conn.cursor() as cur:
             rows = hybrid_search(cur, query_vec, terms)
 
-    if not rows:
+    # 検索ヒットゼロでも、管理者のときは生成まで進める。
+    # 管理操作(フォルダ作成など)はマニュアルが1件も無い状態でも成立する必要がある
+    if not rows and not req.is_admin:
         return SearchResponse(
             answer="まだ検索できるマニュアルがありません。マニュアルをアップロードして取り込んでください。",
             citations=[],
@@ -454,22 +469,38 @@ def search(req: SearchRequest) -> SearchResponse:
         for _manual_id, title, content, page in rows
     ]
     options: list[str] = []
+    actions: list[ActionRequest] = []
     used_rows = rows[:3]  # 保険の既定値: 参照の申告が無ければ上位3件だけ引用に出す
     try:
-        raw_answer = answer_generator.generate(
-            req.question, contexts, image=image, history=req.history
+        raw_answer, raw_actions = answer_generator.generate(
+            req.question,
+            contexts,
+            image=image,
+            history=req.history,
+            # 管理者にだけフォルダ作成・再分類のツールを渡す(実行はNestJS側)
+            tools=ADMIN_TOOLS if req.is_admin else None,
         )
+        actions = [ActionRequest(**a) for a in raw_actions]
+        # 本文もツール呼び出しも無い応答は失敗として扱う(空の吹き出しを出さない)
+        if not raw_answer.strip() and not actions:
+            raise ValueError("モデルが本文を返しませんでした")
         # 絞り込み質問の場合、[選択肢]行を本文から分離してボタン用データにする
         answer, options = extract_options(raw_answer)
         # [参照]行から「実際に根拠に使った抜粋」を特定し、引用をそこに絞る
         answer, used = extract_references(answer, len(rows))
         if used is not None:
             used_rows = [rows[i] for i in used]
+        # 管理操作の要求時は、検索抜粋はほぼ無関係なので引用を出さない
+        if actions:
+            used_rows = []
     except Exception as e:
         answer = (
             "関連しそうなマニュアルが見つかりましたが、"
             f"回答文の生成に失敗しました({e})。以下の抜粋をご確認ください。"
         )
+        # 「失敗した」と伝えた応答から管理操作が実行されるのを防ぐ
+        actions = []
+        options = []
 
     # 引用は「実際に使われた抜粋」だけを、同じマニュアルの同じページでまとめて返す
     citations: list[Citation] = []
@@ -482,4 +513,6 @@ def search(req: SearchRequest) -> SearchResponse:
             Citation(manual_id=manual_id, title=title, snippet=content[:150], page=page)
         )
 
-    return SearchResponse(answer=answer, citations=citations, options=options)
+    return SearchResponse(
+        answer=answer, citations=citations, options=options, actions=actions
+    )

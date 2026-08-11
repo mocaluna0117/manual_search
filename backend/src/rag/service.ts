@@ -2,6 +2,13 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { RagAnswer } from './model';
 
 // Pythonサービスが返すJSONの形(snake_case)
+// Claudeが要求した管理操作(フォルダ作成など)。GraphQLには出さず、
+// ChatServiceが内容を見て実行する
+export interface RagAction {
+  name: string;
+  input: Record<string, unknown>;
+}
+
 interface RagSearchResponse {
   answer: string;
   citations: {
@@ -11,6 +18,7 @@ interface RagSearchResponse {
     page: number | null;
   }[];
   options: string[];
+  actions?: RagAction[];
 }
 
 // 用途ごとのタイムアウト(ミリ秒)。
@@ -95,6 +103,7 @@ export class RagService {
   async organize(
     manuals: { manualId: string; title: string; snippet: string }[],
     categories: string[],
+    allowNew = true, // falseなら既存カテゴリだけに割り当てる(新カテゴリを作らせない)
   ): Promise<{ manualId: string; category: string }[]> {
     const res = await this.request('/organize', TIMEOUT_MS.organize, {
       manuals: manuals.map((m) => ({
@@ -103,6 +112,7 @@ export class RagService {
         snippet: m.snippet,
       })),
       categories,
+      allow_new: allowNew,
     });
     if (!res.ok) {
       throw new ServiceUnavailableException(
@@ -123,7 +133,8 @@ export class RagService {
     image?: { base64: string; format: string },
     history?: { role: 'user' | 'assistant'; content: string }[],
     signal?: AbortSignal,
-  ): Promise<RagAnswer> {
+    isAdmin = false, // trueなら管理ツール(フォルダ作成・再分類)が有効になる
+  ): Promise<RagAnswer & { actions: RagAction[] }> {
     const res = await this.request(
       '/search',
       TIMEOUT_MS.search,
@@ -132,6 +143,7 @@ export class RagService {
         image_base64: image?.base64,
         image_format: image?.format,
         history: history ?? [],
+        is_admin: isAdmin,
       },
       signal,
     );
@@ -151,6 +163,7 @@ export class RagService {
         pageNumber: c.page ?? null,
       })),
       options: body.options ?? [],
+      actions: body.actions ?? [],
     };
   }
 }

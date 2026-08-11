@@ -11,6 +11,7 @@ import {
 import type { Response } from 'express';
 import type { AuthUser } from '../auth/current-user';
 import { CurrentUser } from '../auth/current-user';
+import { UserRole } from '../auth/roles';
 import { UserService } from '../user/service';
 import { AskResult, ChatMessage, Conversation } from './model';
 import { ChatService } from './service';
@@ -74,6 +75,7 @@ export class ChatResolver {
       conversationId,
       image,
       controller.signal,
+      user.role === UserRole.ADMIN, // 管理者ならチャットの管理操作(フォルダ作成等)が有効
     );
   }
 
