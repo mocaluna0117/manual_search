@@ -38,6 +38,7 @@ export interface Manual {
   ingestStatus: IngestStatus
   ingestError: string | null
   chunkCount: number | null
+  updatedAt: string // 詳細表示の「更新日時」列に使う
 }
 
 /** 同名ファイルをアップロードしたときの結果 */
@@ -108,6 +109,7 @@ export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
       ingestStatus
       ingestError
       chunkCount
+      updatedAt
     }
   }
 `

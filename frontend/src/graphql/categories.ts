@@ -3,6 +3,7 @@ import { gql, type TypedDocumentNode } from '@apollo/client'
 export interface Category {
   id: string
   name: string
+  updatedAt?: string // 詳細表示の「更新日時」列に使う
 }
 
 interface CategoriesData {
@@ -14,6 +15,7 @@ export const CATEGORIES_QUERY: TypedDocumentNode<CategoriesData> = gql`
     manualCategories {
       id
       name
+      updatedAt
     }
   }
 `

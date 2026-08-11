@@ -1,18 +1,30 @@
 import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
-import { Box, Button, HStack, Portal, Spinner, Text } from '@chakra-ui/react'
+import {
+  Box,
+  Button,
+  HStack,
+  IconButton,
+  Portal,
+  Spinner,
+  Text,
+} from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
 import { FcFile, FcFolder, FcOpenedFolder } from 'react-icons/fc'
 import {
   LuArrowLeft,
   LuBookOpen,
   LuBot,
+  LuChevronDown,
+  LuChevronUp,
   LuClock,
   LuFolderTree,
+  LuLayoutGrid,
+  LuList,
   LuRefreshCw,
   LuTrash2,
   LuTriangleAlert,
 } from 'react-icons/lu'
-import { CATEGORIES_QUERY } from '../../graphql/categories'
+import { CATEGORIES_QUERY, type Category } from '../../graphql/categories'
 import {
   AUTO_ORGANIZE_MUTATION,
   DELETE_MANUAL_MUTATION,
@@ -22,6 +34,7 @@ import {
   type Manual,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
+import { formatSize } from '../../lib/format'
 import { useManualViewer } from './ManualViewerProvider'
 
 /** 表示中の場所。null=ルート(全フォルダ+未分類のマニュアル) */
@@ -35,24 +48,37 @@ interface ManualExplorerProps {
   onNavigate: (folder: ExplorerFolder) => void
 }
 
-/** アイコンの右上に出す取り込み状態の目印 */
-function StatusMark({ manual }: { manual: Manual }) {
+/** エクスプローラーの表示形式(Windowsの「詳細」と「中アイコン」に相当) */
+type ViewMode = 'details' | 'icons'
+const VIEW_MODE_KEY = 'manualSearch.explorerViewMode'
+
+type SortKey = 'name' | 'updatedAt' | 'size'
+
+/** 「2026/08/11 19:59」形式(Windowsの更新日時列と同じ見た目) */
+function formatDateTime(iso: string | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** 取り込み状態の目印(色付きアイコン)。正常時は何も出さない */
+function StatusIcon({ manual }: { manual: Manual }) {
   switch (manual.ingestStatus) {
     case 'PENDING':
     case 'PROCESSING':
       return (
-        <Box position="absolute" top="1" right="4" color="orange.fg" title="取り込み中…">
+        <Box color="orange.fg" title="取り込み中…" flexShrink={0}>
           <LuClock size={14} />
         </Box>
       )
     case 'FAILED':
       return (
         <Box
-          position="absolute"
-          top="1"
-          right="4"
           color="fg.error"
           title={manual.ingestError ?? '取り込みに失敗しました'}
+          flexShrink={0}
         >
           <LuTriangleAlert size={14} />
         </Box>
@@ -64,6 +90,7 @@ function StatusMark({ manual }: { manual: Manual }) {
 
 /**
  * Windowsのエクスプローラー風のマニュアル一覧。
+ * - 既定は「詳細」表示(名前・更新日時・サイズの列)。アイコン表示にも切替可能
  * - シングルクリックで選択 / ダブルクリックで開く(フォルダ・マニュアル共通)
  * - 管理者はマニュアルをフォルダへドラッグ&ドロップで移動できる
  * - 右クリックでメニュー(開く・削除・再取り込み)
@@ -85,12 +112,10 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         : { categoryId: folder.id },
     fetchPolicy: 'cache-and-network', // 別画面での変更(アップロード等)を開くたびに反映
   })
-  const manuals = data?.manuals ?? []
-  const categories = categoriesData?.manualCategories ?? []
 
   // 取り込み中のものがある間だけ、3秒ごとに一覧を取り直して進行状況を反映する
   const client = useApolloClient()
-  const hasInFlight = manuals.some(
+  const hasInFlight = (data?.manuals ?? []).some(
     (m) => m.ingestStatus === 'PENDING' || m.ingestStatus === 'PROCESSING',
   )
   useEffect(() => {
@@ -104,6 +129,49 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     }
     stopPolling()
   }, [hasInFlight, startPolling, stopPolling, client])
+
+  // 表示形式(localStorageに保存して次回も同じ表示で開く)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      return localStorage.getItem(VIEW_MODE_KEY) === 'icons' ? 'icons' : 'details'
+    } catch {
+      return 'details'
+    }
+  })
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, mode)
+    } catch {
+      // 保存できない環境では今回だけ有効
+    }
+  }
+
+  // 並べ替え(詳細表示のヘッダーをクリック。アイコン表示にも同じ順序を適用)
+  const [sortKey, setSortKey] = useState<SortKey>('name')
+  const [sortAsc, setSortAsc] = useState(true)
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortAsc((v) => !v)
+    else {
+      setSortKey(key)
+      setSortAsc(true)
+    }
+  }
+  const dir = sortAsc ? 1 : -1
+  const manuals = [...(data?.manuals ?? [])].sort((a, b) => {
+    if (sortKey === 'size') return (a.size - b.size) * dir
+    if (sortKey === 'updatedAt')
+      return a.updatedAt.localeCompare(b.updatedAt) * dir
+    return a.title.localeCompare(b.title, 'ja') * dir
+  })
+  // フォルダは常にファイルより先(Windowsと同じ)。サイズ列では名前順を維持
+  const categories = [...(categoriesData?.manualCategories ?? [])].sort(
+    (a, b) => {
+      if (sortKey === 'updatedAt')
+        return (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '') * dir
+      return a.name.localeCompare(b.name, 'ja') * (sortKey === 'size' ? 1 : dir)
+    },
+  )
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
@@ -186,16 +254,46 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     }
   }
 
-  /** アイコン1つぶんの共通の見た目(Windows風: 選択で青くなる) */
-  const itemStyle = (id: string, isDropTarget = false) => ({
-    w: '112px',
-    px: 1,
-    py: 2,
-    borderRadius: 'md',
+  // ---- フォルダ/マニュアルそれぞれの共通ハンドラ(詳細・アイコン両表示で使う) ----
+
+  const folderItemProps = (category: Category) => ({
+    onClick: () => setSelectedId(category.id),
+    onDoubleClick: () => onNavigate(category),
+    onDragOver: (e: React.DragEvent) => {
+      if (!isAdmin) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverFolderId(category.id)
+    },
+    onDragLeave: () => setDragOverFolderId(null),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      const manualId = e.dataTransfer.getData('text/plain')
+      if (manualId) void handleDrop(manualId, category.id)
+    },
+  })
+
+  const manualItemProps = (manual: Manual) => ({
+    draggable: isAdmin,
+    onClick: () => setSelectedId(manual.id),
+    onDoubleClick: () => openManual(manual.id, manual.title),
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault()
+      setSelectedId(manual.id)
+      setContextMenu({ x: e.clientX, y: e.clientY, manual })
+    },
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData('text/plain', manual.id)
+      e.dataTransfer.effectAllowed = 'move'
+    },
+  })
+
+  /** 選択・ドロップ先のハイライト(Windows風の青) */
+  const highlight = (id: string, isDropTarget = false) => ({
     borderWidth: '2px',
     borderColor:
       dragOverFolderId === id && isDropTarget
-        ? 'blue.solid' // ドロップ先のハイライト
+        ? 'blue.solid'
         : selectedId === id
           ? 'blue.muted'
           : 'transparent',
@@ -203,19 +301,24 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     _hover: { bg: selectedId === id ? 'blue.subtle' : 'bg.muted' },
     cursor: 'default',
     userSelect: 'none' as const,
-    textAlign: 'center' as const,
   })
 
-  const label = (text: string) => (
-    <Text
-      fontSize="xs"
-      mt={1}
-      lineClamp={2}
-      wordBreak="break-all"
-      lineHeight="1.25"
+  const showFolders = isRoot // フォルダが並ぶのはルートだけ
+
+  /** 詳細表示の列ヘッダー(クリックで並べ替え) */
+  const sortHeader = (label: string, key: SortKey, w?: string) => (
+    <HStack
+      w={w}
+      flex={w ? undefined : '1'}
+      gap={1}
+      cursor="pointer"
+      _hover={{ color: 'fg' }}
+      onClick={() => toggleSort(key)}
     >
-      {text}
-    </Text>
+      <Text>{label}</Text>
+      {sortKey === key &&
+        (sortAsc ? <LuChevronUp size={12} /> : <LuChevronDown size={12} />)}
+    </HStack>
   )
 
   return (
@@ -228,7 +331,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         if (e.target === e.currentTarget) setSelectedId(null)
       }}
     >
-      {/* ツールバー: パンくず + 操作 */}
+      {/* ツールバー: パンくず + 操作 + 表示切替 */}
       <HStack mb={4} gap={2} flexWrap="wrap">
         {!isRoot && (
           <Button
@@ -267,75 +370,163 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             <LuBot /> 未分類をAIで自動分類
           </Button>
         )}
+        {/* 表示切替(Windowsの「詳細」「中アイコン」) */}
+        <HStack gap={0} borderWidth="1px" borderRadius="md" overflow="hidden">
+          <IconButton
+            aria-label="詳細表示"
+            title="詳細"
+            size="xs"
+            borderRadius={0}
+            variant={viewMode === 'details' ? 'subtle' : 'ghost'}
+            onClick={() => changeViewMode('details')}
+          >
+            <LuList />
+          </IconButton>
+          <IconButton
+            aria-label="アイコン表示"
+            title="中アイコン"
+            size="xs"
+            borderRadius={0}
+            variant={viewMode === 'icons' ? 'subtle' : 'ghost'}
+            onClick={() => changeViewMode('icons')}
+          >
+            <LuLayoutGrid />
+          </IconButton>
+        </HStack>
       </HStack>
 
       {loading && !data && <Spinner />}
 
-      {/* アイコングリッド: ルートはフォルダ+未分類ファイル、フォルダ内はファイルのみ */}
-      <Box
-        display="grid"
-        gridTemplateColumns="repeat(auto-fill, minmax(112px, 1fr))"
-        gap={1}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setSelectedId(null)
-        }}
-      >
-        {isRoot &&
-          categories.map((category) => (
-            <Box
-              key={category.id}
-              {...itemStyle(category.id, true)}
-              onClick={() => setSelectedId(category.id)}
-              onDoubleClick={() => onNavigate(category)}
-              onDragOver={(e) => {
-                if (!isAdmin) return
-                e.preventDefault()
-                e.dataTransfer.dropEffect = 'move'
-                setDragOverFolderId(category.id)
-              }}
-              onDragLeave={() => setDragOverFolderId(null)}
-              onDrop={(e) => {
-                e.preventDefault()
-                const manualId = e.dataTransfer.getData('text/plain')
-                if (manualId) void handleDrop(manualId, category.id)
-              }}
-            >
-              <Box display="flex" justifyContent="center">
-                <FcFolder size={48} />
-              </Box>
-              {label(category.name)}
-            </Box>
-          ))}
+      {/* ===== 詳細表示(既定) ===== */}
+      {viewMode === 'details' && (
+        <Box>
+          <HStack
+            px={2}
+            py={1}
+            gap={2}
+            borderBottomWidth="1px"
+            color="fg.muted"
+            fontSize="xs"
+          >
+            {sortHeader('名前', 'name')}
+            {sortHeader('更新日時', 'updatedAt', '140px')}
+            {sortHeader('サイズ', 'size', '80px')}
+          </HStack>
 
-        {manuals.map((manual) => {
-          return (
+          {showFolders &&
+            categories.map((category) => (
+              <HStack
+                key={category.id}
+                px={2}
+                py={1}
+                gap={2}
+                borderRadius="sm"
+                {...highlight(category.id, true)}
+                {...folderItemProps(category)}
+              >
+                <HStack flex="1" gap={2} minW={0}>
+                  <Box flexShrink={0}>
+                    <FcFolder size={18} />
+                  </Box>
+                  <Text fontSize="sm" truncate>
+                    {category.name}
+                  </Text>
+                </HStack>
+                <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
+                  {formatDateTime(category.updatedAt)}
+                </Text>
+                <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0} />
+              </HStack>
+            ))}
+
+          {manuals.map((manual) => (
+            <HStack
+              key={manual.id}
+              px={2}
+              py={1}
+              gap={2}
+              borderRadius="sm"
+              {...highlight(manual.id)}
+              {...manualItemProps(manual)}
+              title={manual.title}
+            >
+              <HStack flex="1" gap={2} minW={0}>
+                <Box flexShrink={0}>
+                  <FcFile size={18} />
+                </Box>
+                <Text fontSize="sm" truncate>
+                  {manual.title}
+                </Text>
+                <StatusIcon manual={manual} />
+              </HStack>
+              <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
+                {formatDateTime(manual.updatedAt)}
+              </Text>
+              <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0}>
+                {formatSize(manual.size)}
+              </Text>
+            </HStack>
+          ))}
+        </Box>
+      )}
+
+      {/* ===== アイコン表示 ===== */}
+      {viewMode === 'icons' && (
+        <Box
+          display="grid"
+          gridTemplateColumns="repeat(auto-fill, minmax(112px, 1fr))"
+          gap={1}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedId(null)
+          }}
+        >
+          {showFolders &&
+            categories.map((category) => (
+              <Box
+                key={category.id}
+                w="112px"
+                px={1}
+                py={2}
+                borderRadius="md"
+                textAlign="center"
+                {...highlight(category.id, true)}
+                {...folderItemProps(category)}
+              >
+                <Box display="flex" justifyContent="center">
+                  <FcFolder size={48} />
+                </Box>
+                <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
+                  {category.name}
+                </Text>
+              </Box>
+            ))}
+
+          {manuals.map((manual) => (
             <Box
               key={manual.id}
-              {...itemStyle(manual.id)}
+              w="112px"
+              px={1}
+              py={2}
+              borderRadius="md"
+              textAlign="center"
               position="relative"
-              draggable={isAdmin}
-              onClick={() => setSelectedId(manual.id)}
-              onDoubleClick={() => openManual(manual.id, manual.title)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setSelectedId(manual.id)
-                setContextMenu({ x: e.clientX, y: e.clientY, manual })
-              }}
-              onDragStart={(e) => {
-                e.dataTransfer.setData('text/plain', manual.id)
-                e.dataTransfer.effectAllowed = 'move'
-              }}
+              {...highlight(manual.id)}
+              {...manualItemProps(manual)}
               title={manual.title}
             >
               <Box display="flex" justifyContent="center">
                 <FcFile size={48} />
               </Box>
-              <StatusMark manual={manual} />
-              {label(manual.title)}
+              <Box position="absolute" top="1" right="4">
+                <StatusIcon manual={manual} />
+              </Box>
+              <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
+                {manual.title}
+              </Text>
             </Box>
-          )
-        })}
-      </Box>
+          ))}
+        </Box>
+      )}
 
       {!loading && manuals.length === 0 && (isUncategorized || !isRoot) && (
         <Text mt={6} color="fg.muted" fontSize="sm">
