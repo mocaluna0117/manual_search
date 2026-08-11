@@ -426,7 +426,9 @@ export function SidebarContent({
               onNavigate?.()
             }}
           >
-            <FcOpenedFolder /> 未分類
+            {/* 未分類は「色のついていない置き場」としてグレーのフォルダにする */}
+            <FcOpenedFolder style={{ filter: 'grayscale(1)', opacity: 0.85 }} />{' '}
+            未分類
           </Button>
         </VStack>
       </Box>

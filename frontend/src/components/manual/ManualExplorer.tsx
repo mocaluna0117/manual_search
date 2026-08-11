@@ -372,7 +372,12 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         {!isRoot && (
           <HStack gap={1} fontSize="sm" color="fg.muted">
             <Text>{'>'}</Text>
-            {isUncategorized ? <FcOpenedFolder /> : <FcFolder />}
+            {isUncategorized ? (
+              // 未分類はグレーのフォルダ(サイドバーと同じ見た目)
+              <FcOpenedFolder style={{ filter: 'grayscale(1)', opacity: 0.85 }} />
+            ) : (
+              <FcFolder />
+            )}
             <Text>{isUncategorized ? '未分類' : folder.name}</Text>
           </HStack>
         )}
