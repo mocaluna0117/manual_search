@@ -95,6 +95,11 @@ export class StorageService {
       // inline=タブで開く。日本語ファイル名はRFC5987形式でエンコードする
       ResponseContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
       ResponseContentType: 'application/pdf',
+      // ブラウザにキャッシュさせる。PDFビューアはスクロールに応じて
+      // ファイルの続きを小分けに取りに行くので、これが無いと毎回通信が発生し
+      // スクロールが引っかかる。privateなので共有キャッシュには残らない。
+      // 期間は署名の有効期限(15分)に合わせる
+      ResponseCacheControl: 'private, max-age=900',
     });
     return getSignedUrl(client, command, { expiresIn: 900 });
   }

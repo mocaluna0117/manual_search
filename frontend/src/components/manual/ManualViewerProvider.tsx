@@ -7,7 +7,13 @@ import {
   Spinner,
   VStack,
 } from '@chakra-ui/react'
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import { LuExternalLink, LuX } from 'react-icons/lu'
 import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
 
@@ -38,15 +44,36 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
     fetchPolicy: 'no-cache',
   })
 
+  // 発行済みURLを期限内は使い回す。毎回新しい署名を作るとURLが変わり、
+  // ブラウザは別物とみなして同じPDFを何度もダウンロードし直してしまう
+  const urlCacheRef = useRef<Map<string, { url: string; expiresAt: number }>>(
+    new Map(),
+  )
+  const URL_REUSE_MS = 10 * 60 * 1000 // 署名の有効期限15分より短くしておく
+
   const openManual = async (id: string, title: string, page?: number | null) => {
     setViewing({ id, title })
     setUrl(null) // 前のPDFが一瞬見えないようにリセット
+
+    // #page=N はブラウザ内蔵PDFビューアの機能。該当ページを直接表示する
+    // (URLフラグメントはサーバーに送られないので署名の検証にも影響しない)
+    const withPage = (base: string) => base + (page ? `#page=${page}` : '')
+
+    const cached = urlCacheRef.current.get(id)
+    if (cached && cached.expiresAt > Date.now()) {
+      setUrl(withPage(cached.url))
+      return
+    }
+
     const { data, error } = await fetchDownloadUrl({ variables: { id } })
     if (data) {
-      // #page=N はブラウザ内蔵PDFビューアの機能。該当ページを直接表示する
-      // (URLフラグメントはサーバーに送られないので署名の検証にも影響しない)
-      setUrl(data.manualDownloadUrl + (page ? `#page=${page}` : ''))
+      urlCacheRef.current.set(id, {
+        url: data.manualDownloadUrl,
+        expiresAt: Date.now() + URL_REUSE_MS,
+      })
+      setUrl(withPage(data.manualDownloadUrl))
     } else if (error) {
+      urlCacheRef.current.delete(id)
       setViewing(null)
       window.alert('このマニュアルは削除された可能性があり、開けませんでした')
     }
@@ -64,7 +91,9 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
       <Dialog.Root
         open={viewing !== null}
         onOpenChange={(e) => !e.open && close()}
-        size="cover"
+        // coverは周囲に余白が入り表示面積が削られる。PDFは広いほど
+        // スクロール量が減って読みやすいので画面いっぱいに使う
+        size="full"
       >
         <Portal>
           <Dialog.Backdrop />
