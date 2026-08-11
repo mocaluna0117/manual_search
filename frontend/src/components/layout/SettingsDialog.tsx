@@ -15,7 +15,7 @@ import {
 const LAYOUT_OPTIONS: { value: LayoutMode; label: string; hint: string }[] = [
   {
     value: 'single',
-    label: '左に1枚（現状のまま）',
+    label: '左に1枚',
     hint: 'チャットとマニュアルを左サイドバーにまとめる',
   },
   {
