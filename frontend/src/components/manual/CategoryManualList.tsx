@@ -26,7 +26,6 @@ import { CATEGORIES_QUERY } from '../../graphql/categories'
 import { ME_QUERY } from '../../graphql/me'
 import { useManualViewer } from './ManualViewerProvider'
 
-import { formatSize } from '../../lib/format'
 
 interface CategoryManualListProps {
   categoryId?: string
@@ -34,25 +33,15 @@ interface CategoryManualListProps {
   categoryName: string
 }
 
-/** 取り込み状況をバッジで表示する */
-function IngestStatusBadge({
-  status,
-  chunkCount,
-}: {
-  status: IngestStatus
-  chunkCount: number | null
-}) {
+/** 取り込み状況をバッジで表示する。正常(COMPLETED)は何も出さず一覧を静かに保つ */
+function IngestStatusBadge({ status }: { status: IngestStatus }) {
   switch (status) {
     case 'PENDING':
       return <Badge colorPalette="gray">取り込み待ち</Badge>
     case 'PROCESSING':
       return <Badge colorPalette="orange">取り込み中…</Badge>
     case 'COMPLETED':
-      return (
-        <Badge colorPalette="green">
-          AI検索対象{chunkCount != null ? `（${chunkCount}チャンク）` : ''}
-        </Badge>
-      )
+      return null
     case 'FAILED':
       return <Badge colorPalette="red">取り込み失敗</Badge>
   }
@@ -292,20 +281,17 @@ export function CategoryManualList({
                 )}
                 <Box flex="1">
                   <Card.Title>{manual.title}</Card.Title>
-                  <Text fontSize="xs" color="fg.muted" mt={1}>
-                    {manual.fileName}（{formatSize(manual.size)}）
-                  </Text>
-                  <HStack mt={2} gap={2}>
-                    <IngestStatusBadge
-                      status={manual.ingestStatus}
-                      chunkCount={manual.chunkCount}
-                    />
-                    {manual.ingestStatus === 'FAILED' && manual.ingestError && (
-                      <Text fontSize="xs" color="fg.error">
-                        {manual.ingestError}
-                      </Text>
-                    )}
-                  </HStack>
+                  {/* 取り込み中・失敗のときだけ状態を出す(正常時は名前だけの静かな一覧) */}
+                  {manual.ingestStatus !== 'COMPLETED' && (
+                    <HStack mt={2} gap={2}>
+                      <IngestStatusBadge status={manual.ingestStatus} />
+                      {manual.ingestStatus === 'FAILED' && manual.ingestError && (
+                        <Text fontSize="xs" color="fg.error">
+                          {manual.ingestError}
+                        </Text>
+                      )}
+                    </HStack>
+                  )}
                 </Box>
                 <HStack gap={2} flexShrink={0}>
                   {/* 移動先カテゴリの選択(選んだ瞬間に移動) */}

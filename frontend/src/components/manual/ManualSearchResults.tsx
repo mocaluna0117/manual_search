@@ -11,7 +11,6 @@ import {
 } from '@chakra-ui/react'
 import { Fragment } from 'react'
 import { SEARCH_MANUALS_QUERY } from '../../graphql/manuals'
-import { formatSize } from '../../lib/format'
 import { useManualViewer } from './ManualViewerProvider'
 
 interface ManualSearchResultsProps {
@@ -79,9 +78,6 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
                       <HighlightedText text={snippet} keyword={keyword} />
                     </Text>
                   )}
-                  <Text fontSize="xs" color="fg.muted" mt={1}>
-                    {manual.fileName}（{formatSize(manual.size)}）
-                  </Text>
                 </Box>
                 <Button
                   size="sm"
