@@ -79,8 +79,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
 
   const [viewMode, changeViewMode] = useViewMode()
 
-  // 並べ替え(詳細表示のヘッダーをクリック。アイコン表示にも同じ順序を適用)
-  const [sortKey, setSortKey] = useState<SortKey>('name')
+  // 並べ替え(詳細表示のヘッダーをクリック。アイコン表示にも同じ順序を適用)。
+  // 未指定(null)のときは、フォルダはサイドバーで並び替えた順、マニュアルは名前順
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortAsc, setSortAsc] = useState(true)
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((v) => !v)
@@ -94,16 +95,19 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     if (sortKey === 'size') return (a.size - b.size) * dir
     if (sortKey === 'updatedAt')
       return a.updatedAt.localeCompare(b.updatedAt) * dir
-    return a.title.localeCompare(b.title, 'ja') * dir
+    return a.title.localeCompare(b.title, 'ja') * (sortKey ? dir : 1)
   })
-  // フォルダは常にファイルより先(Windowsと同じ)。サイズ列では名前順を維持
-  const categories = [...(categoriesData?.manualCategories ?? [])].sort(
-    (a, b) => {
-      if (sortKey === 'updatedAt')
-        return (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '') * dir
-      return a.name.localeCompare(b.name, 'ja') * (sortKey === 'size' ? 1 : dir)
-    },
-  )
+  // フォルダは常にファイルより先(Windowsと同じ)。
+  // 列で並べ替えていないときは、サーバーから来た順(管理者が決めた並び)のまま
+  const categories = sortKey
+    ? [...(categoriesData?.manualCategories ?? [])].sort((a, b) => {
+        if (sortKey === 'updatedAt')
+          return (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '') * dir
+        return (
+          a.name.localeCompare(b.name, 'ja') * (sortKey === 'size' ? 1 : dir)
+        )
+      })
+    : (categoriesData?.manualCategories ?? [])
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
@@ -247,7 +251,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             variables: { id: manual.id, pinned: !manual.categoryPinned },
           })
         }
-        sortKey={sortKey}
+        sortKey={sortKey ?? undefined}
         sortAsc={sortAsc}
         onSort={toggleSort}
       />

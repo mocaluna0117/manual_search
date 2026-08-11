@@ -20,6 +20,25 @@ export const CATEGORIES_QUERY: TypedDocumentNode<CategoriesData> = gql`
   }
 `
 
+// --- 並び替え(ADMIN専用)。渡した順に並び順を振り直す ---
+
+interface ReorderCategoriesData {
+  reorderManualCategories: number
+}
+
+interface ReorderCategoriesVars {
+  ids: string[]
+}
+
+export const REORDER_CATEGORIES_MUTATION: TypedDocumentNode<
+  ReorderCategoriesData,
+  ReorderCategoriesVars
+> = gql`
+  mutation ReorderManualCategories($ids: [ID!]!) {
+    reorderManualCategories(ids: $ids)
+  }
+`
+
 // --- カテゴリ作成(ADMIN専用) ---
 
 interface CreateCategoryData {

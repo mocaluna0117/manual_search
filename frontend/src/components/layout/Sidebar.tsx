@@ -39,6 +39,7 @@ import {
   CATEGORIES_QUERY,
   CREATE_CATEGORY_MUTATION,
   DELETE_CATEGORY_MUTATION,
+  REORDER_CATEGORIES_MUTATION,
   UPDATE_CATEGORY_MUTATION,
   type Category,
 } from '../../graphql/categories'
@@ -213,6 +214,45 @@ export function SidebarContent({
       setReclassifying(true)
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '再分類を開始できませんでした')
+    }
+  }
+
+  // フォルダの並び替え(管理者のみ)。マニュアルのドラッグと区別するため
+  // 専用のデータ形式を使う(dragover中でも types なら中身を見られる)
+  const FOLDER_MIME = 'application/x-manual-folder'
+  const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null)
+  // 挿入位置の線を出す場所(どのフォルダの上/下か)
+  const [dropAt, setDropAt] = useState<{ id: string; before: boolean } | null>(
+    null,
+  )
+  const [reorderCategories] = useMutation(REORDER_CATEGORIES_MUTATION, {
+    refetchQueries: ['ManualCategories'],
+  })
+
+  const handleFolderReorder = async (targetId: string, before: boolean) => {
+    const list = data?.manualCategories ?? []
+    const dragged = draggingFolderId
+    setDraggingFolderId(null)
+    setDropAt(null)
+    if (!dragged || dragged === targetId) return
+
+    const next = list.filter((c) => c.id !== dragged)
+    const draggedItem = list.find((c) => c.id === dragged)
+    if (!draggedItem) return
+    const targetIndex = next.findIndex((c) => c.id === targetId)
+    if (targetIndex < 0) return
+    next.splice(before ? targetIndex : targetIndex + 1, 0, draggedItem)
+
+    // 先に画面へ反映してから保存する(ドラッグ後に一瞬元へ戻るのを防ぐ)
+    client.writeQuery({
+      query: CATEGORIES_QUERY,
+      data: { manualCategories: next },
+    })
+    try {
+      await reorderCategories({ variables: { ids: next.map((c) => c.id) } })
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '並び替えを保存できませんでした')
+      void client.refetchQueries({ include: ['ManualCategories'] })
     }
   }
 
@@ -460,7 +500,24 @@ export function SidebarContent({
                 }}
               />
             ) : (
-              <HStack key={category.id} gap={0}>
+              <HStack
+                key={category.id}
+                gap={0}
+                // 並び替え時の挿入位置を線で示す
+                borderTopWidth="2px"
+                borderBottomWidth="2px"
+                borderTopColor={
+                  dropAt?.id === category.id && dropAt.before
+                    ? 'blue.solid'
+                    : 'transparent'
+                }
+                borderBottomColor={
+                  dropAt?.id === category.id && !dropAt.before
+                    ? 'blue.solid'
+                    : 'transparent'
+                }
+                opacity={draggingFolderId === category.id ? 0.4 : 1}
+              >
                 <Button
                   variant="ghost"
                   size="sm"
@@ -474,13 +531,47 @@ export function SidebarContent({
                   borderColor={
                     dropTargetId === category.id ? 'blue.solid' : 'transparent'
                   }
+                  // 管理者はフォルダ自体をドラッグして並び替えられる
+                  draggable={isAdmin}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(FOLDER_MIME, category.id)
+                    e.dataTransfer.effectAllowed = 'move'
+                    setDraggingFolderId(category.id)
+                  }}
+                  onDragEnd={() => {
+                    setDraggingFolderId(null)
+                    setDropAt(null)
+                  }}
                   onDragOver={(e) => {
                     e.preventDefault()
                     e.dataTransfer.dropEffect = 'move'
-                    setDropTargetId(category.id)
+                    // フォルダを運んでいるときは並び替え、マニュアルなら移動先
+                    if (e.dataTransfer.types.includes(FOLDER_MIME)) {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      setDropAt({
+                        id: category.id,
+                        before: e.clientY < rect.top + rect.height / 2,
+                      })
+                      setDropTargetId(null)
+                    } else {
+                      setDropTargetId(category.id)
+                    }
                   }}
-                  onDragLeave={() => setDropTargetId(null)}
-                  onDrop={(e) => void handleManualDrop(e, category.id)}
+                  onDragLeave={() => {
+                    setDropTargetId(null)
+                    setDropAt((prev) =>
+                      prev?.id === category.id ? null : prev,
+                    )
+                  }}
+                  onDrop={(e) => {
+                    if (e.dataTransfer.types.includes(FOLDER_MIME)) {
+                      e.preventDefault()
+                      const before = dropAt?.before ?? true
+                      void handleFolderReorder(category.id, before)
+                      return
+                    }
+                    void handleManualDrop(e, category.id)
+                  }}
                   onClick={() => {
                     onSelectCategory(category)
                     onNavigate?.()

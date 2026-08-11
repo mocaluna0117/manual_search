@@ -166,6 +166,7 @@ type Mutation {
   createManualCategory(name: String!): ManualCategory!
   updateManualCategory(id: ID!, name: String!): ManualCategory!
   deleteManualCategory(id: ID!): ManualCategory!
+  reorderManualCategories(ids: [ID!]!): Int!
   askQuestion(question: String!, conversationId: ID, imageBase64: String, imageFormat: String): AskResult!
   deleteConversation(id: ID!): Conversation!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!

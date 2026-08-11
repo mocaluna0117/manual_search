@@ -1,4 +1,4 @@
-import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Roles, UserRole } from '../auth/roles';
 import { ManualCategory } from './model';
 import { CategoryService } from './service';
@@ -32,5 +32,14 @@ export class CategoryResolver {
   @Mutation(() => ManualCategory)
   deleteManualCategory(@Args('id', { type: () => ID }) id: string) {
     return this.categoryService.delete(id);
+  }
+
+  // フォルダの並び替え(ドラッグ)。渡された順に並び順を振り直す
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  reorderManualCategories(
+    @Args('ids', { type: () => [ID] }) ids: string[],
+  ) {
+    return this.categoryService.reorder(ids);
   }
 }

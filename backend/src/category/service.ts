@@ -6,16 +6,49 @@ export class CategoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   findAll() {
+    // 管理者が決めた並び順が優先。同値(未設定)なら名前順で安定させる
     return this.prisma.manualCategory.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
   }
 
   async create(name: string) {
     const trimmed = await this.validateName(name);
-    return this.prisma.manualCategory.create({
-      data: { name: trimmed },
+    // 新しいフォルダは一番下に置く
+    const last = await this.prisma.manualCategory.findFirst({
+      orderBy: { sortOrder: 'desc' },
+      select: { sortOrder: true },
     });
+    return this.prisma.manualCategory.create({
+      data: { name: trimmed, sortOrder: (last?.sortOrder ?? 0) + 1 },
+    });
+  }
+
+  /**
+   * フォルダの並び順を保存する(ドラッグでの入れ替え)。
+   * 渡されたidの順に1,2,3…を振る。一覧に無いidは無視し、
+   * 渡されなかったフォルダ(同時に別の人が作った等)は末尾に回す
+   */
+  async reorder(ids: string[]) {
+    const categories = await this.prisma.manualCategory.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true },
+    });
+    const known = new Set(categories.map((c) => c.id));
+    const ordered = ids.filter((id) => known.has(id));
+    const rest = categories.map((c) => c.id).filter((id) => !ordered.includes(id));
+    const finalOrder = [...ordered, ...rest];
+
+    // 全件をまとめて更新する(順序の整合が崩れた中間状態を残さない)
+    await this.prisma.$transaction(
+      finalOrder.map((id, index) =>
+        this.prisma.manualCategory.update({
+          where: { id },
+          data: { sortOrder: index + 1 },
+        }),
+      ),
+    );
+    return finalOrder.length;
   }
 
   async rename(id: string, name: string) {
