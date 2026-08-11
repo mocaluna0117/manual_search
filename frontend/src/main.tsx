@@ -6,6 +6,11 @@ import { AuthProvider } from 'react-oidc-context'
 import App from './App.tsx'
 import { apolloClient } from './lib/apollo.ts'
 import { oidcConfig } from './lib/auth.ts'
+import { watchSystemTheme } from './lib/settings.ts'
+
+// 「端末準拠」を選んでいる間、OS側の配色変更に追随する
+// (初期適用はindex.htmlのスクリプトが担当)
+watchSystemTheme()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

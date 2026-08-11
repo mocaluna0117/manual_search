@@ -8,21 +8,26 @@
     <meta name="color-scheme" content="light dark" />
     <title>社内マニュアル検索</title>
     <script>
-      // 端末(OS/ブラウザ)のダークモード設定に追随して<html>のクラスを切り替える。
-      // Reactの描画より先に実行するので、起動時に明るい画面が一瞬見える現象が起きない。
-      // Chakraは .dark クラスを見て配色を切り替える(_dark条件)
+      // 配色を<html>のクラスに反映する。Reactの描画より先に実行するので、
+      // 起動時に明るい画面が一瞬見える現象が起きない。
+      // Chakraは .dark クラスを見て配色を切り替える(_dark条件)。
+      // 設定(端末準拠/ライト固定/ダーク固定)はlocalStorageから読む。
+      // 設定変更の反映と端末側の変更監視はReact側(lib/settings.ts)が行う
       ;(function () {
-        var mq = window.matchMedia('(prefers-color-scheme: dark)')
-        function apply(isDark) {
-          var root = document.documentElement
-          root.classList.toggle('dark', isDark)
-          root.classList.toggle('light', !isDark)
+        var mode = 'system'
+        try {
+          var saved = localStorage.getItem('manualSearch.settings.theme')
+          if (saved === 'light' || saved === 'dark') mode = saved
+        } catch (e) {
+          // ストレージが使えない環境は端末準拠のまま
         }
-        apply(mq.matches)
-        // アプリを開いたまま端末側の設定が変わった場合も即座に反映する
-        mq.addEventListener('change', function (e) {
-          apply(e.matches)
-        })
+        var isDark =
+          mode === 'dark' ||
+          (mode === 'system' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches)
+        var root = document.documentElement
+        root.classList.toggle('dark', isDark)
+        root.classList.toggle('light', !isDark)
       })()
     </script>
   </head>
