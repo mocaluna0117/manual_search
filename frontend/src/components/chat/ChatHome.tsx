@@ -163,6 +163,12 @@ export function ChatHome({
   }, [input, draftKey])
   // サーバーに保存済みのメッセージ + 送信中の楽観的な表示をまとめて持つ
   const [messages, setMessages] = useState<LocalMessage[]>([])
+  // 「〜を開始しました」で終わっている=裏で処理が走っていて、
+  // 完了メッセージが後から届く状態(その間だけ会話を取り直す)
+  const lastMessage = messages[messages.length - 1]
+  const waitingForBackgroundJob =
+    lastMessage?.role === 'ASSISTANT' &&
+    lastMessage.content.includes('再分類を開始しました')
   const [attachedImage, setAttachedImage] = useState<File | null>(null)
   // 選択肢の下に常設する「その他」インライン入力欄の内容
   const [otherText, setOtherText] = useState('')
@@ -189,6 +195,9 @@ export function ChatHome({
     variables: { id: conversationId ?? '' },
     skip: !conversationId,
     fetchPolicy: 'cache-and-network',
+    // 再分類のような裏で走る処理は、完了メッセージが後から会話に書き込まれる。
+    // 待っている間だけ会話を取り直して、開いたままでも結果が出るようにする
+    pollInterval: waitingForBackgroundJob ? 5000 : 0,
   })
   const apolloClient = useApolloClient()
   useEffect(() => {

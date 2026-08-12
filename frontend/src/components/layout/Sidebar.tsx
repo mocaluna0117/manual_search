@@ -158,9 +158,11 @@ export function SidebarContent({
   const client = useApolloClient()
   const [startReclassify] = useMutation(START_RECLASSIFY_MUTATION)
   const [reclassifying, setReclassifying] = useState(false)
+  // 実行中は短い間隔で、それ以外も控えめに監視する。
+  // チャットから始めた再分類もここで拾えるようにするため(一覧の自動更新用)
   const { data: statusData } = useQuery(RECLASSIFY_STATUS_QUERY, {
     skip: !isAdmin,
-    pollInterval: reclassifying ? 3000 : 0,
+    pollInterval: reclassifying ? 3000 : 30000,
     fetchPolicy: 'network-only',
   })
   const [fetchCounts] = useLazyQuery(RECLASSIFY_COUNTS_QUERY, {
@@ -173,14 +175,17 @@ export function SidebarContent({
     if (running) setReclassifying(true)
   }, [running])
 
-  // 実行中→完了に変わったら結果を知らせ、一覧を最新化する
+  // 実行中→完了に変わったら一覧を最新化する。
+  // ダイアログでの通知は、このボタンから始めたときだけ(チャットから始めた
+  // 場合は会話に完了メッセージが出るので、二重に知らせない)
   const wasRunningRef = useRef(false)
+  const startedHereRef = useRef(false)
   useEffect(() => {
     if (wasRunningRef.current && !running) {
       const status = statusData?.reclassifyStatus
       setReclassifying(false)
       void client.refetchQueries({ include: ['ManualCategories', 'Manuals'] })
-      if (status) {
+      if (status && startedHereRef.current) {
         window.alert(
           status.error
             ? `再分類に失敗しました: ${status.error}`
@@ -190,6 +195,7 @@ export function SidebarContent({
                   : ''),
         )
       }
+      startedHereRef.current = false
     }
     wasRunningRef.current = running
   }, [running, statusData, client])
@@ -216,6 +222,7 @@ export function SidebarContent({
         window.alert('再分類は既に実行中です。完了までお待ちください。')
         return
       }
+      startedHereRef.current = true
       setReclassifying(true)
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '再分類を開始できませんでした')
