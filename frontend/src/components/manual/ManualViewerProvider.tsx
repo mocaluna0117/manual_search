@@ -98,7 +98,9 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
         <Portal>
           <Dialog.Backdrop />
           <Dialog.Positioner>
-            <Dialog.Content display="flex" flexDirection="column">
+            {/* 高さを確定させる。full指定はminHしか付かず、中のiframeの
+                height:100%が解決できずに既定の150pxになってしまう */}
+            <Dialog.Content display="flex" flexDirection="column" h="100dvh">
               <Dialog.Header py={3}>
                 <HStack justify="space-between" w="100%">
                   <Dialog.Title truncate>{viewing?.title}</Dialog.Title>
@@ -119,16 +121,17 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
                 </HStack>
               </Dialog.Header>
 
-              <Dialog.Body flex="1" p={0}>
+              <Dialog.Body flex="1" p={0} minH={0} display="flex">
                 {url ? (
-                  // ブラウザ内蔵のPDFビューアをそのまま埋め込む
+                  // ブラウザ内蔵のPDFビューアをそのまま埋め込む。
+                  // 高さは%ではなくflexで伸ばす(親の高さ指定に左右されない)
                   <iframe
                     src={url}
                     title={viewing?.title ?? 'マニュアル'}
-                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    style={{ flex: 1, width: '100%', border: 'none' }}
                   />
                 ) : (
-                  <VStack h="100%" justify="center">
+                  <VStack flex="1" justify="center">
                     <Spinner size="lg" />
                   </VStack>
                 )}
