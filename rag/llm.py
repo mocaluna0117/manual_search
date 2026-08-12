@@ -91,17 +91,27 @@ ADMIN_TOOLS = [
     {
         "toolSpec": {
             "name": "remove_classification_rule",
-            "description": "分類ルールを削除する。番号は一覧表示(登録順)の1始まり",
+            "description": (
+                "分類ルールを削除する。どのルールかは可能な限りtextで指定する"
+                "(番号は会話の途中でずれるため信頼できない)。"
+                "削除対象が曖昧なときはシステムが候補を返すので、"
+                "推測で番号を埋めず、分かっている手がかりをtextに入れる"
+            ),
             "inputSchema": {
                 "json": {
                     "type": "object",
                     "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "削除するルールの文言(一部でもよい)。例:「床暖房」",
+                        },
                         "number": {
                             "type": "integer",
-                            "description": "削除するルールの番号(1始まり)",
-                        }
+                            "description": (
+                                "補助。直前に表示した一覧の番号(1始まり)が確実に分かる場合だけ使う"
+                            ),
+                        },
                     },
-                    "required": ["number"],
                 }
             },
         }

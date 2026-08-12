@@ -115,6 +115,12 @@ type ManualSearchResult {
   snippet: String
 }
 
+type ClassificationRule {
+  id: ID!
+  text: String!
+  createdAt: DateTime!
+}
+
 type ChatMessage {
   id: ID!
   role: MessageRole!
@@ -164,6 +170,7 @@ type Query {
   manualDownloadUrl(id: ID!): String!
   reclassifyStatus: ReclassifyStatus!
   reclassifyCounts: ReclassifyCounts!
+  classificationRules: [ClassificationRule!]!
   promptTemplates: [PromptTemplate!]!
 }
 
@@ -186,6 +193,9 @@ type Mutation {
   moveManuals(ids: [ID!]!, categoryId: ID): Int!
   deleteManual(id: ID!): Manual!
   ingestManual(id: ID!): Boolean!
+  createClassificationRule(text: String!): ClassificationRule!
+  updateClassificationRule(id: ID!, text: String!): ClassificationRule!
+  deleteClassificationRule(id: ID!): ClassificationRule!
   sendInquiry(message: String!): Boolean!
   createPromptTemplate(title: String!, body: String!): PromptTemplate!
   updatePromptTemplate(id: ID!, title: String!, body: String!): PromptTemplate!

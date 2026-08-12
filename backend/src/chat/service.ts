@@ -6,6 +6,7 @@ import { ManualService } from '../manual/service';
 import { PrismaService } from '../prisma/service';
 import { RagCitation } from '../rag/model';
 import { RagService, type RagAction } from '../rag/service';
+import { RuleService } from '../rule/service';
 import { AskResult, ChatMessage, MessageRole } from './model';
 
 // 再分類の確認ボタンの文言。クリックするとこの文字列がそのまま質問として届くので、
@@ -20,7 +21,16 @@ export class ChatService {
     private readonly rag: RagService,
     private readonly categoryService: CategoryService,
     private readonly manualService: ManualService,
+    private readonly ruleService: RuleService,
   ) {}
+
+  /** 分類ルール一覧の表示(チャットのどの経路でも同じ文面にする) */
+  private formatRules(rules: { text: string }[]) {
+    return rules.length === 0
+      ? '分類ルールはまだ登録されていません。サイドバーの「分類ルール」から追加できます。'
+      : '📏 現在の分類ルール:\n' +
+          rules.map((r, i) => `${i + 1}. ${r.text}`).join('\n');
+  }
 
   conversations(userId: string) {
     return this.prisma.conversation.findMany({
@@ -99,48 +109,45 @@ export class ChatService {
       // 1.6) 明示形式のルール操作はLLMを介さず確定的に処理する
       //      (モデルの「実行したフリ」の影響を受けない確実な経路)
       const text = question.replace(/^分類ルールを?追加\s*[:：]\s*/s, '').trim();
-      await this.prisma.classificationRule.create({ data: { text } });
-      return this.respond(
-        conversation.id,
-        question,
-        `📏 分類ルールを追加しました: 「${text}」\n今後のすべての自動分類(アップロード時・再分類)で適用されます。`,
-      );
+      try {
+        const rule = await this.ruleService.create(text);
+        return await this.respond(
+          conversation.id,
+          question,
+          `📏 分類ルールを追加しました: 「${rule.text}」\n今後のすべての自動分類(アップロード時・再分類)で適用されます。`,
+        );
+      } catch (e) {
+        return this.respond(
+          conversation.id,
+          question,
+          `⚠️ 分類ルールを追加できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+        );
+      }
     } else if (
       isAdmin &&
       /^分類ルール(の一覧|一覧|を見せて|を教えて|見せて)$/.test(question.trim())
     ) {
-      const rules = await this.prisma.classificationRule.findMany({
-        orderBy: { createdAt: 'asc' },
-      });
+      const rules = await this.ruleService.findAll();
       return this.respond(
         conversation.id,
         question,
-        rules.length === 0
-          ? '分類ルールはまだ登録されていません。「分類ルールを追加: 〜」のように伝えると登録できます。'
-          : '📏 現在の分類ルール:\n' +
-              rules.map((r, i) => `${i + 1}. ${r.text}`).join('\n'),
+        this.formatRules(rules),
       );
     } else if (
       isAdmin &&
       /^分類ルール\s*\d+\s*(?:番目?)?\s*を?削除$/.test(question.trim())
     ) {
       const number = Number(question.match(/\d+/)?.[0]);
-      const rules = await this.prisma.classificationRule.findMany({
-        orderBy: { createdAt: 'asc' },
-      });
-      const target = rules[number - 1];
-      if (!target) {
-        return this.respond(
-          conversation.id,
-          question,
-          '⚠️ その番号の分類ルールはありません。「分類ルール一覧」で番号を確認してください。',
-        );
-      }
-      await this.prisma.classificationRule.delete({ where: { id: target.id } });
+      const { deleted } = await this.ruleService.deleteByTextOrNumber(
+        undefined,
+        number,
+      );
       return this.respond(
         conversation.id,
         question,
-        `🗑 分類ルール「${target.text}」を削除しました。`,
+        deleted
+          ? `🗑 分類ルール「${deleted.text}」を削除しました。`
+          : '⚠️ その番号の分類ルールはありません。サイドバーの「分類ルール」から一覧・削除できます。',
       );
     } else if (question === CONFIRM_RECLASSIFY) {
       // 確認待ちが無いのに確認の文言が届いた=履歴に残った古いボタンのクリック。
@@ -170,13 +177,15 @@ export class ChatService {
           : '';
       let content = m.content;
       if (m.role === MessageRole.ASSISTANT) {
-        // 管理操作の実行結果(システムが書いた📏/📁等の行)は履歴に入れない。
-        // 履歴に成功メッセージが並ぶと、モデルがツールを呼ばずに
-        // 「実行したフリ」の文章を真似して書く事故が起きるため
+        // 管理操作の「成功」行(システムが書いた📏/📁等)は履歴に入れない。
+        // 成功メッセージが並ぶと、モデルがツールを呼ばずに
+        // 「実行したフリ」の文章を真似して書く事故が起きるため。
+        // ただし⚠️の訂正行は必ず残す。訂正だけ消すと、モデルは自分の
+        // 誤った成功宣言だけを見続けて同じ誤りを繰り返す
         content =
           content
             .split('\n')
-            .filter((line) => !/^(📏|📁|🗑|⏳|⚠️|✅|\(再分類はまだ)/.test(line))
+            .filter((line) => !/^(📏|📁|🗑|⏳|✅)/.test(line))
             .join('\n')
             .trim() || '(管理操作を実行しました)';
       }
@@ -256,37 +265,37 @@ export class ChatService {
         } else if (action.name === 'add_classification_rule') {
           const text = String(action.input.text ?? '').trim();
           if (!text) continue;
-          await this.prisma.classificationRule.create({ data: { text } });
-          lines.push(
-            `📏 分類ルールを追加しました: 「${text}」\n今後のすべての自動分類(アップロード時・再分類)で適用されます。`,
-          );
-        } else if (action.name === 'list_classification_rules') {
-          const rules = await this.prisma.classificationRule.findMany({
-            orderBy: { createdAt: 'asc' },
-          });
-          lines.push(
-            rules.length === 0
-              ? '分類ルールはまだ登録されていません。「分類ルールを追加: 〜」のように伝えると登録できます。'
-              : '📏 現在の分類ルール:\n' +
-                  rules.map((r, i) => `${i + 1}. ${r.text}`).join('\n'),
-          );
-        } else if (action.name === 'remove_classification_rule') {
-          const number = Number(action.input.number);
-          const rules = await this.prisma.classificationRule.findMany({
-            orderBy: { createdAt: 'asc' },
-          });
-          const target = Number.isInteger(number)
-            ? rules[number - 1]
-            : undefined;
-          if (!target) {
+          try {
+            const rule = await this.ruleService.create(text);
             lines.push(
-              '⚠️ 指定された番号の分類ルールが見つかりませんでした。「分類ルールを見せて」で番号を確認してください。',
+              `📏 分類ルールを追加しました: 「${rule.text}」\n今後のすべての自動分類(アップロード時・再分類)で適用されます。`,
+            );
+          } catch (e) {
+            lines.push(
+              `⚠️ 分類ルールを追加できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+            );
+          }
+        } else if (action.name === 'list_classification_rules') {
+          lines.push(this.formatRules(await this.ruleService.findAll()));
+        } else if (action.name === 'remove_classification_rule') {
+          // 番号は会話の途中でずれるため、文言での指定を優先する
+          const { deleted, candidates } =
+            await this.ruleService.deleteByTextOrNumber(
+              String(action.input.text ?? '') || undefined,
+              Number(action.input.number),
+            );
+          if (deleted) {
+            lines.push(`🗑 分類ルール「${deleted.text}」を削除しました。`);
+          } else if (candidates.length > 0) {
+            // 取り違えて消さない。どれを消すかを選んでもらう
+            lines.push(
+              '⚠️ 該当する分類ルールが複数あります。消したいものを教えてください:\n' +
+                candidates.map((r, i) => `${i + 1}. ${r.text}`).join('\n'),
             );
           } else {
-            await this.prisma.classificationRule.delete({
-              where: { id: target.id },
-            });
-            lines.push(`🗑 分類ルール「${target.text}」を削除しました。`);
+            lines.push(
+              '⚠️ 指定された分類ルールが見つかりませんでした。サイドバーの「分類ルール」から一覧・削除できます。',
+            );
           }
         }
       }

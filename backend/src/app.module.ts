@@ -12,6 +12,7 @@ import { InquiryModule } from './inquiry/module';
 import { ManualModule } from './manual/module';
 import { PrismaModule } from './prisma/module';
 import { RagModule } from './rag/module';
+import { RuleModule } from './rule/module';
 import { TemplateModule } from './template/module';
 
 @Module({
@@ -35,6 +36,7 @@ import { TemplateModule } from './template/module';
     ManualModule,
     InquiryModule,
     RagModule,
+    RuleModule,
     TemplateModule,
   ],
   controllers: [HealthController],

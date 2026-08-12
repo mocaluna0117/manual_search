@@ -30,6 +30,7 @@ import {
   LuPanelRight,
   LuPencil,
   LuPlus,
+  LuRuler,
   LuSettings,
   LuTrash2,
   LuUpload,
@@ -59,6 +60,7 @@ import {
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
+import { ClassificationRuleDialog } from './ClassificationRuleDialog'
 import { InquiryDialog } from './InquiryDialog'
 import { SettingsDialog } from './SettingsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
@@ -105,6 +107,7 @@ export function SidebarContent({
   const [uploadOpen, setUploadOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inquiryOpen, setInquiryOpen] = useState(false)
+  const [rulesOpen, setRulesOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
@@ -452,6 +455,17 @@ export function SidebarContent({
                 <LuBot />
               </IconButton>
               <IconButton
+                aria-label="分類ルール"
+                title="分類ルール(AIの分類の決まりごと)"
+                size="2xs"
+                variant="ghost"
+                color="fg.muted"
+                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                onClick={() => setRulesOpen(true)}
+              >
+                <LuRuler />
+              </IconButton>
+              <IconButton
                 aria-label="フォルダを追加"
                 title="フォルダを追加"
                 size="2xs"
@@ -658,6 +672,11 @@ export function SidebarContent({
         </>
       )}
       </Box>
+
+      <ClassificationRuleDialog
+        open={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+      />
 
       {/* マニュアル追加(管理者のみ。本命の防御はバックエンドの@Roles) */}
       {isAdmin && showManuals && (
