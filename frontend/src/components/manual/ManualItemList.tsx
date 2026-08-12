@@ -318,7 +318,7 @@ export function ManualItemList({
                   <Text fontSize="sm" truncate>
                     {renderTitle ? renderTitle(manual) : manual.title}
                   </Text>
-                  {manual.categoryPinned && (
+                  {isAdmin && manual.categoryPinned && (
                     <Box
                       color="fg.muted"
                       flexShrink={0}
@@ -388,7 +388,7 @@ export function ManualItemList({
               <Box position="absolute" top="1" right="4">
                 <StatusIcon manual={manual} />
               </Box>
-              {manual.categoryPinned && (
+              {isAdmin && manual.categoryPinned && (
                 <Box
                   position="absolute"
                   top="1"
