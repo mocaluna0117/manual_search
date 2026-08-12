@@ -40,7 +40,7 @@ export interface Manual {
   chunkCount: number | null
   updatedAt: string // DBの更新時刻(並べ替えの保険用)
   pdfCreatedAt: string | null // PDF自体が持つ作成日(「作成日」列)
-  categoryPinned: boolean // 手動分類済み(AIの再分類で動かない)
+  categoryPinned: boolean // ピン留め済み(AIの再分類で動かない)
 }
 
 /** 同名ファイルをアップロードしたときの結果 */

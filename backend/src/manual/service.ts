@@ -498,11 +498,11 @@ export class ManualService implements OnApplicationBootstrap {
         throw new BadRequestException('移動先のカテゴリが見つかりません');
       }
     }
+    // ピン留めは移動では変えない(右クリックの「ピン留め」でだけ切り替える)。
+    // 移動しただけで再分類の対象から外れると、意図せず固定される
     return this.prisma.manual.update({
       where: { id },
-      // 手動でフォルダへ移動したものはピン留めし、AIの再分類で動かさない。
-      // 未分類へ戻すのは「分類し直したい」なのでピンを外す
-      data: { categoryId, categoryPinned: categoryId !== null },
+      data: { categoryId },
     });
   }
 
@@ -519,7 +519,7 @@ export class ManualService implements OnApplicationBootstrap {
     }
     const result = await this.prisma.manual.updateMany({
       where: { id: { in: ids } },
-      data: { categoryId, categoryPinned: categoryId !== null },
+      data: { categoryId }, // ピン留めは変えない(move参照)
     });
     return result.count;
   }

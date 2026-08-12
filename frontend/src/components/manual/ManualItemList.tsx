@@ -322,7 +322,7 @@ export function ManualItemList({
                     <Box
                       color="fg.muted"
                       flexShrink={0}
-                      title="手動分類済み(AIの再分類では動きません)"
+                      title="ピン留め済み(AIの再分類では動きません)"
                     >
                       <LuPin size={12} />
                     </Box>
@@ -394,7 +394,7 @@ export function ManualItemList({
                   top="1"
                   left="4"
                   color="fg.muted"
-                  title="手動分類済み(AIの再分類では動きません)"
+                  title="ピン留め済み(AIの再分類では動きません)"
                 >
                   <LuPin size={14} />
                 </Box>

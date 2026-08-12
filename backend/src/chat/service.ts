@@ -272,7 +272,7 @@ export class ChatService {
           );
           if (result.status === 'moved') {
             lines.push(
-              `📁 「${result.manual.title}」を「${result.folderName}」に移動しました。\n手動で移動したものは、AIの再分類では動かしません。`,
+              `📁 「${result.manual.title}」を「${result.folderName}」に移動しました。`,
             );
           } else if (result.status === 'manual_ambiguous') {
             lines.push(
