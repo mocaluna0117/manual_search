@@ -262,6 +262,43 @@ export class ChatService {
               `⚠️ フォルダ「${name}」は作成できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
             );
           }
+        } else if (action.name === 'move_manual') {
+          // 特定の1件を今すぐ移動する。名前が曖昧なときは動かさず候補を出す
+          const manualText = String(action.input.manual ?? '').trim();
+          const folderText = String(action.input.folder ?? '').trim();
+          const result = await this.manualService.moveByName(
+            manualText,
+            folderText,
+          );
+          if (result.status === 'moved') {
+            lines.push(
+              `📁 「${result.manual.title}」を「${result.folderName}」に移動しました。\n手動で移動したものは、AIの再分類では動かしません。`,
+            );
+          } else if (result.status === 'manual_ambiguous') {
+            lines.push(
+              `⚠️ 「${manualText}」に当てはまるマニュアルが複数あります。どれを移動しますか？\n` +
+                result.manuals
+                  .slice(0, 10)
+                  .map((m, i) => `${i + 1}. ${m.title}`)
+                  .join('\n'),
+            );
+          } else if (result.status === 'manual_not_found') {
+            lines.push(
+              `⚠️ 「${manualText}」に当てはまるマニュアルが見つかりませんでした。`,
+            );
+          } else if (result.status === 'folder_ambiguous') {
+            lines.push(
+              `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれに移動しますか？\n` +
+                result.folders.map((c, i) => `${i + 1}. ${c.name}`).join('\n'),
+            );
+          } else if (result.status === 'folder_not_found') {
+            lines.push(
+              `⚠️ 「${folderText}」というフォルダはありません。現在のフォルダ:\n` +
+                result.folders.map((c, i) => `${i + 1}. ${c.name}`).join('\n'),
+            );
+          } else {
+            lines.push('⚠️ 移動するマニュアルと移動先を指定してください。');
+          }
         } else if (action.name === 'add_classification_rule') {
           const text = String(action.input.text ?? '').trim();
           if (!text) continue;
@@ -347,10 +384,32 @@ export class ChatService {
       }
       if (
         !ragActions.some((a) => a.name === 'add_classification_rule') &&
-        /分類ルールを追加しました/.test(answer)
+        // 「追加しました」以外の言い回しでも検知する
+        /(分類ルール|ルール).{0,10}(を)?(追加|登録|保存|設定)(し|いたし)(ました|ます)/.test(
+          answer,
+        )
       ) {
         notes.push(
-          '⚠️ 実際にはルールは登録されていません。「分類ルールを追加: 〜」の形式で送ると確実に登録されます。',
+          '⚠️ 実際にはルールは登録されていません。サイドバーの「分類ルール」から登録すると確実です。',
+        );
+      }
+      if (
+        !ragActions.some((a) => a.name === 'move_manual') &&
+        // 「移動します/移動させますね/移しました」など宣言だけのケース
+        /(移動|移し).{0,8}(させ)?(ます|ました|ますね|ておきます)/.test(answer)
+      ) {
+        notes.push(
+          '⚠️ 実際には移動していません。「〇〇のマニュアルを△△フォルダに移動して」と送るか、一覧画面でドラッグして移動してください。',
+        );
+      }
+      if (
+        !ragActions.some((a) => a.name === 'create_folder') &&
+        /フォルダ.{0,10}(を)?(作成|作り).{0,6}(ます|ました|ますね|ておきます)/.test(
+          answer,
+        )
+      ) {
+        notes.push(
+          '⚠️ 実際にはフォルダは作成されていません。もう一度「〇〇というフォルダを作って」と送ってください。',
         );
       }
       if (notes.length > 0) {

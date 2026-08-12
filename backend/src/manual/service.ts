@@ -524,6 +524,55 @@ export class ManualService implements OnApplicationBootstrap {
     return result.count;
   }
 
+  /**
+   * 名前を手がかりに1件だけ移動する(チャットからの「〇〇を△△に入れて」用)。
+   * 取り違えて動かさないよう、曖昧なときは移動せず候補を返す
+   */
+  async moveByName(manualQuery: string, folderQuery: string) {
+    const manualNeedle = manualQuery.normalize('NFC').trim();
+    const folderNeedle = folderQuery.normalize('NFC').trim();
+    if (!manualNeedle || !folderNeedle) {
+      return { status: 'invalid' as const };
+    }
+
+    const manuals = await this.prisma.manual.findMany({
+      where: { title: { contains: manualNeedle, mode: 'insensitive' } },
+      orderBy: { title: 'asc' },
+    });
+    if (manuals.length === 0) return { status: 'manual_not_found' as const };
+    if (manuals.length > 1) {
+      return { status: 'manual_ambiguous' as const, manuals };
+    }
+    const manual = manuals[0];
+
+    // 「未分類」への指定は分類を外す操作として扱う
+    if (/^(未分類|分類なし|なし)$/.test(folderNeedle)) {
+      const moved = await this.move(manual.id, null);
+      return { status: 'moved' as const, manual: moved, folderName: '未分類' };
+    }
+
+    const categories = await this.prisma.manualCategory.findMany({
+      where: { name: { contains: folderNeedle, mode: 'insensitive' } },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    if (categories.length === 0) {
+      const all = await this.prisma.manualCategory.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      });
+      return { status: 'folder_not_found' as const, folders: all };
+    }
+    if (categories.length > 1) {
+      return { status: 'folder_ambiguous' as const, folders: categories };
+    }
+
+    const moved = await this.move(manual.id, categories[0].id);
+    return {
+      status: 'moved' as const,
+      manual: moved,
+      folderName: categories[0].name,
+    };
+  }
+
   /** ピン留めの切り替え(ピン=AIの再分類で動かさない) */
   async setPinned(id: string, pinned: boolean) {
     const manual = await this.prisma.manual.findUnique({ where: { id } });
