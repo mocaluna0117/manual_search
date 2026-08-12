@@ -144,3 +144,13 @@ model ManualChunk {
 
   @@unique([manualId, chunkIndex])
 }
+
+// アプリからの問い合わせ。メール送信に失敗しても内容が残るようDBにも保存する
+model Inquiry {
+  id        String   @id @default(uuid())
+  userEmail String?  @map("user_email") // 送信者(ログイン中のユーザー)
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

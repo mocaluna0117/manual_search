@@ -8,6 +8,7 @@ import { AuthModule } from './auth/module';
 import { CategoryModule } from './category/module';
 import { ChatModule } from './chat/module';
 import { HealthController } from './health/controller';
+import { InquiryModule } from './inquiry/module';
 import { ManualModule } from './manual/module';
 import { PrismaModule } from './prisma/module';
 import { RagModule } from './rag/module';
@@ -32,6 +33,7 @@ import { TemplateModule } from './template/module';
     CategoryModule,
     ChatModule,
     ManualModule,
+    InquiryModule,
     RagModule,
     TemplateModule,
   ],

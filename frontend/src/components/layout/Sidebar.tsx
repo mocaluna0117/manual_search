@@ -23,6 +23,7 @@ import {
   LuBot,
   LuFolderTree,
   LuLogOut,
+  LuMail,
   LuMenu,
   LuMessageSquarePlus,
   LuPanelLeft,
@@ -58,6 +59,7 @@ import {
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
+import { InquiryDialog } from './InquiryDialog'
 import { SettingsDialog } from './SettingsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
 
@@ -102,6 +104,7 @@ export function SidebarContent({
   const isAdmin = meData?.me.role === 'ADMIN'
   const [uploadOpen, setUploadOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [inquiryOpen, setInquiryOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
@@ -714,6 +717,15 @@ export function SidebarContent({
             variant="ghost"
             color="fg.muted"
             _hover={{ bg: 'bg.emphasized' }}
+            onClick={() => setInquiryOpen(true)}
+          >
+            <LuMail /> 問い合わせ
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            color="fg.muted"
+            _hover={{ bg: 'bg.emphasized' }}
             onClick={() => void handleLogout()}
           >
             <LuLogOut /> ログアウト
@@ -722,6 +734,10 @@ export function SidebarContent({
         <SettingsDialog
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
+        />
+        <InquiryDialog
+          open={inquiryOpen}
+          onClose={() => setInquiryOpen(false)}
         />
       </Box>
       )}

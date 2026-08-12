@@ -186,6 +186,7 @@ type Mutation {
   moveManuals(ids: [ID!]!, categoryId: ID): Int!
   deleteManual(id: ID!): Manual!
   ingestManual(id: ID!): Boolean!
+  sendInquiry(message: String!): Boolean!
   createPromptTemplate(title: String!, body: String!): PromptTemplate!
   updatePromptTemplate(id: ID!, title: String!, body: String!): PromptTemplate!
   deletePromptTemplate(id: ID!): PromptTemplate!
