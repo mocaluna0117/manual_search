@@ -145,9 +145,22 @@ ADMIN_SYSTEM_ADDENDUM = """
 - 「再分類して」と依頼されたら、分類の方針を聞き返さずにすぐreclassify_all_manualsを呼ぶ(方針が依頼文に書かれていた場合だけinstructionに渡す。実行前の確認はシステムが行う)
 - 本文で「再分類します」と宣言するだけでは何も実行されない。再分類する意図があるなら、必ずreclassify_all_manualsを同じ応答で呼ぶ(再分類はフォルダが足りなければ自動で作るので、フォルダ作成を先に済ませる必要はない)
 - フォルダ名が指定されていれば、その名前のままcreate_folderを呼ぶ(勝手に変えない)
-- マニュアルの内容を知りたい通常の質問には、これまで通り抜粋から回答する(ツールは使わない)
+- マニュアルの内容を知りたい通常の質問には、これまで通り抜粋から回答する(ツールは使わない)。例えば「Boxへの資料保管ルール」「共有フォルダの命名規則」のような、業務でのフォルダ運用についての質問は、この検索システムのフォルダ操作ではないのでツールを使わずに抜粋から答える
 - ツールを使うときは、何をするのかを本文で一言だけ添える(結果の報告はシステムが行うので不要)
 - 管理操作の応答では[選択肢]や[参照]の行は書かない"""
+
+# 一般ユーザー(MEMBER)のときに足す補足。
+# 管理者専用の操作を頼まれたときに、マニュアル検索で代用しようとして
+# 話が噛み合わなくなるのを防ぐ
+MEMBER_SYSTEM_ADDENDUM = """
+
+補足(権限について): この検索システムには管理者だけが行える操作があります。
+具体的には、フォルダ(カテゴリ)の作成・名前変更・削除・並び替え、マニュアルの分類や全体の再分類、マニュアルの追加・削除、利用者の管理です。
+
+- 相手がこれらの操作を「してほしい」と依頼している場合は、マニュアルを検索して似た情報で代用しようとせず、その操作は管理者のみが行えることを伝え、管理者へ依頼するよう案内する。この場合は[参照]なしとする
+- ただし、マニュアルに書かれている業務上のやり方についての質問は、これまで通り抜粋から回答する。例えば「Boxへの資料保管ルール」「共有フォルダの命名規則」「書類の格納先」などは業務の質問であり、この検索システムの操作ではない
+- 見分け方: この検索システムの画面を操作してほしいのか、業務のやり方を知りたいのか。「(この)アプリで」「ここで」「マニュアル検索の」といった言い方や、画面に見えているフォルダを指している場合は前者
+- どちらか判断できないときは、勝手にどちらかに決めず、どちらの意味かを確かめる質問を1つだけ返す"""
 
 
 class Context:
@@ -173,6 +186,7 @@ class AnswerGenerator(Protocol):
         image: tuple[bytes, str] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
+        is_admin: bool = False,
     ) -> tuple[str, list[dict]]: ...
 
     def rewrite_query(self, question: str, history: list[HistoryMessage]) -> str: ...
@@ -197,6 +211,7 @@ class StubAnswerGenerator:
         image: tuple[bytes, str] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
+        is_admin: bool = False,
     ) -> tuple[str, list[dict]]:
         return (
             f"「{question}」に関連しそうなマニュアルが{len(contexts)}件見つかりました。"
@@ -236,6 +251,7 @@ class BedrockAnswerGenerator:
         image: tuple[bytes, str] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
+        is_admin: bool = False,
     ) -> tuple[str, list[dict]]:
         # 抜粋に番号を振る([参照]行で「どれを使ったか」を申告してもらうため)
         excerpts = "\n\n".join(
@@ -265,7 +281,9 @@ class BedrockAnswerGenerator:
         content.append({"text": user_message})
         messages.append({"role": "user", "content": content})
 
-        system_prompt = SYSTEM_PROMPT + (ADMIN_SYSTEM_ADDENDUM if tools else "")
+        system_prompt = SYSTEM_PROMPT + (
+            ADMIN_SYSTEM_ADDENDUM if is_admin else MEMBER_SYSTEM_ADDENDUM
+        )
         res = self.client.converse(
             modelId=self.model_id,
             system=[{"text": system_prompt}],

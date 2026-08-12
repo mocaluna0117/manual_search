@@ -497,8 +497,10 @@ def search(req: SearchRequest) -> SearchResponse:
             contexts,
             image=image,
             history=req.history,
-            # 管理者にだけフォルダ作成・再分類のツールを渡す(実行はNestJS側)
+            # 管理者にだけフォルダ作成・再分類のツールを渡す(実行はNestJS側)。
+            # 一般ユーザーには「管理者専用の操作」と案内させるための補足を付ける
             tools=ADMIN_TOOLS if req.is_admin else None,
+            is_admin=req.is_admin,
         )
         actions = [ActionRequest(**a) for a in raw_actions]
         # 本文もツール呼び出しも無い応答は失敗として扱う(空の吹き出しを出さない)
