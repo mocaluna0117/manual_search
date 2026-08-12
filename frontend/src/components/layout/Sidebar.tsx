@@ -472,6 +472,9 @@ export function SidebarContent({
                 variant="ghost"
                 color="fg.muted"
                 _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                // フォーカスを奪わない。奪うと入力欄のonBlurが先に閉じてしまい、
+                // このボタンで閉じられなくなる
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setAddingCategory((v) => !v)}
               >
                 <LuPlus />
@@ -486,16 +489,25 @@ export function SidebarContent({
             size="sm"
             mb={2}
             autoFocus
-            placeholder="カテゴリ名を入力してEnter"
+            placeholder="フォルダ名を入力してEnter"
             bg="bg.panel"
             borderColor="border.emphasized"
             _placeholder={{ color: 'fg.subtle' }}
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
+            // 作らずに他をクリックしたら閉じる(入力欄が出しっぱなしにならない)。
+            // 名前の変更欄と同じ振る舞いに揃えている
+            onBlur={() => {
+              setAddingCategory(false)
+              setNewCategoryName('')
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.nativeEvent.isComposing)
                 void handleCreateCategory()
-              if (e.key === 'Escape') setAddingCategory(false)
+              if (e.key === 'Escape') {
+                setAddingCategory(false)
+                setNewCategoryName('')
+              }
             }}
           />
         )}
