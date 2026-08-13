@@ -36,6 +36,20 @@ def db_connect():
     return psycopg.connect(DATABASE_URL, **_DB_SSL_ARGS)
 
 
+
+# 康熙部首・CJK部首補助(⽅ U+2F58 など)を通常の漢字(方)に畳むための対応表。
+# macOSのフォントを埋め込んだPDFはToUnicodeが部首側を指すことがあり、
+# そのまま取り込むと「使い方」で検索しても「使い⽅」に一致しない。
+# NFCでは畳まれない(NFKC相当の互換分解)ため、部首ブロックだけを対象に畳む
+_RADICALS = re.compile(r"[\u2E80-\u2EF3\u2F00-\u2FD5]")
+
+
+def normalize_text(text: str) -> str:
+    """検索で同一視したい表記ゆれを吸収する(NFC + 部首の畳み込み)。"""
+    text = _RADICALS.sub(lambda m: unicodedata.normalize("NFKC", m.group()), text)
+    return unicodedata.normalize("NFC", text)
+
+
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Manual Search RAG Service")
@@ -326,7 +340,7 @@ def ingest(req: IngestRequest) -> IngestResponse:
 
     # 2.7) 表記をNFCに正規化する。PDFの内部表現によってはNFDで抽出されることが
     #      あり、そのまま保存すると検索キーワード(NFC)のILIKEに当たらなくなる
-    pages = [unicodedata.normalize("NFC", text) for text in pages]
+    pages = [normalize_text(text) for text in pages]
 
     # 3) ページごとにチャンク化する(どのページ由来かを記録し、引用をページ単位にするため)
     chunks: list[tuple[str, int]] = []  # (本文, ページ番号)
@@ -348,7 +362,7 @@ def ingest(req: IngestRequest) -> IngestResponse:
             )
             row = cur.fetchone()
     # タイトルもNFCに揃えてから埋め込みに使う(移行前のNFDデータへの保険)
-    title = unicodedata.normalize("NFC", row[0]) if row else ""
+    title = normalize_text(row[0]) if row else ""
     embeddings = embedder.embed_texts(
         [f"{title}\n{content}" if title else content for content, _page in chunks]
     )
@@ -459,7 +473,7 @@ def search(req: SearchRequest) -> SearchResponse:
 
     # 0.7) 表記ゆれをNFCに揃える。macOS由来のNFD(濁点・半濁点が結合文字)が
     #      混ざると、DB側(NFCで保存)との部分一致・ベクトル化が微妙にずれる
-    retrieval_query = unicodedata.normalize("NFC", retrieval_query)
+    retrieval_query = normalize_text(retrieval_query)
 
     # 1) 質問文(+画像の説明)を、チャンクと同じ方法でベクトル化
     query_vec = to_vector_literal(embedder.embed_texts([retrieval_query])[0])

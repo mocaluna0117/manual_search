@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
 import {
   LuBot,
+  LuCircleHelp,
   LuFolderTree,
   LuLogOut,
   LuMail,
@@ -61,6 +62,7 @@ import {
 import { ME_QUERY } from '../../graphql/me'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { ClassificationRuleDialog } from './ClassificationRuleDialog'
+import { HelpDialog } from './HelpDialog'
 import { InquiryDialog } from './InquiryDialog'
 import { SettingsDialog } from './SettingsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
@@ -108,6 +110,7 @@ export function SidebarContent({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inquiryOpen, setInquiryOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
@@ -740,7 +743,16 @@ export function SidebarContent({
             {auth.user?.profile.email}
           </Text>
         </HStack>
-        <HStack justify="space-between">
+        <HStack justify="space-between" flexWrap="wrap" gap={0}>
+          <Button
+            size="xs"
+            variant="ghost"
+            color="fg.muted"
+            _hover={{ bg: 'bg.emphasized' }}
+            onClick={() => setHelpOpen(true)}
+          >
+            <LuCircleHelp /> 使い方
+          </Button>
           <Button
             size="xs"
             variant="ghost"
@@ -777,6 +789,7 @@ export function SidebarContent({
           open={inquiryOpen}
           onClose={() => setInquiryOpen(false)}
         />
+        <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
       </Box>
       )}
     </VStack>
