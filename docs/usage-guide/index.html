@@ -52,7 +52,15 @@
     margin: 2mm 0 3mm;
   }
   .note { color: #718096; font-size: 10pt; }
-  section { page-break-inside: avoid; }
+  figure.shot { margin: 2mm 0 4mm; page-break-inside: avoid; }
+  figure.shot img {
+    width: 100%;
+    max-width: 170mm;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    display: block;
+  }
+  figure.shot figcaption { color: #718096; font-size: 9.5pt; margin-top: 1.5mm; }
 </style>
 </head>
 <body>
@@ -72,10 +80,18 @@
 例:「クイックパーツマニュアルを見せて」「床鳴りの対応手順は？」「お客様への断りのメール文例が欲しい」
 </div>
 <p class="note">Enterで送信します（設定で「Shift+Enterで送信」にも変えられます）。日本語変換の確定Enterでは送信されません。</p>
+<figure class="shot">
+<img src="images/chat-home.png" alt="ホーム画面。下の入力欄に質問を書いて「検索」を押します">
+<figcaption>ホーム画面。下の入力欄に質問を書いて「検索」を押します</figcaption>
+</figure>
 </section>
 <section>
 <h3>回答の根拠からPDFを開く</h3>
 <p>回答の下に、根拠になったマニュアルのカードが表示されます。マニュアル名や「p.3」のようなページボタンをクリックすると、そのページが直接開きます。ページボタンにマウスを乗せると該当箇所の抜粋が見えます。</p>
+<figure class="shot">
+<img src="images/chat-answer.png" alt="回答の例。青い枠が絞り込みの選択肢、下のカードが根拠マニュアル(ページボタン付き)です">
+<figcaption>回答の例。青い枠が絞り込みの選択肢、下のカードが根拠マニュアル(ページボタン付き)です</figcaption>
+</figure>
 </section>
 <section>
 <h3>絞り込みの選択肢</h3>
@@ -84,6 +100,10 @@
 <section>
 <h3>よく使う質問（テンプレート）</h3>
 <p>入力欄の左にある吹き出しアイコンを押すと、定型文の一覧が開きます。選ぶと入力欄に入り、「〇〇」の部分が選択状態になるので、そのまま打ち替えれば質問が完成します。</p>
+<figure class="shot">
+<img src="images/chat-templates.png" alt="入力欄左の吹き出しアイコンから、よく使う質問を選べます">
+<figcaption>入力欄左の吹き出しアイコンから、よく使う質問を選べます</figcaption>
+</figure>
 </section>
 <section>
 <h3>画像で質問する</h3>
@@ -106,11 +126,19 @@
 <section>
 <h3>フォルダから探す</h3>
 <p>サイドバーの「マニュアル」を押すと、Windowsのエクスプローラーのようなフォルダ一覧が開きます。フォルダやマニュアルは<strong>ダブルクリック</strong>で開きます（1回クリックは選択です）。</p>
+<figure class="shot">
+<img src="images/explorer-root.png" alt="マニュアル一覧のルート。オレンジの帯と時計アイコンは「取り込み中」の表示です">
+<figcaption>マニュアル一覧のルート。オレンジの帯と時計アイコンは「取り込み中」の表示です</figcaption>
+</figure>
 </section>
 <section>
 <h3>表示の切り替え・並べ替え</h3>
 <p>一覧の右上のボタンで「詳細」（行表示）と「中アイコン」（グリッド表示）を切り替えられます。詳細表示では「名前」「作成日」「サイズ」の列ヘッダーをクリックすると並べ替えられます。</p>
 <p class="note">「作成日」は登録した日ではなく、PDFファイル自身が持つ作成日です。</p>
+<figure class="shot">
+<img src="images/explorer-details.png" alt="詳細表示。列ヘッダーで並べ替えできます。名前の横のピンはピン留めの印(管理者のみ表示)です">
+<figcaption>詳細表示。列ヘッダーで並べ替えできます。名前の横のピンはピン留めの印(管理者のみ表示)です</figcaption>
+</figure>
 </section>
 <section>
 <h3>マニュアルの状態</h3>
@@ -126,6 +154,10 @@
 <li><strong>配色</strong>: 端末の設定に合わせる / ライト / ダーク</li>
 <li><strong>画面の並び</strong>: 左に1枚 / チャット左・マニュアル右 / マニュアル左・チャット右（パソコン表示のみ）</li>
 </ul>
+<figure class="shot">
+<img src="images/settings.png" alt="設定画面。変更はすぐに反映されます">
+<figcaption>設定画面。変更はすぐに反映されます</figcaption>
+</figure>
 </section>
 <section>
 <h3>サイドバー</h3>
@@ -146,6 +178,10 @@
 <section>
 <h3>アップロード</h3>
 <p>サイドバーの「マニュアルを追加」からPDFをドラッグ&ドロップします（複数まとめて可）。分類先は「<strong>AIにおまかせ</strong>」がおすすめで、内容を読んで自動でフォルダに振り分けます（合うフォルダが無ければ新しく作られます）。</p>
+<figure class="shot">
+<img src="images/upload-dialog.png" alt="アップロード画面。分類先は「AIにおまかせ」がおすすめです">
+<figcaption>アップロード画面。分類先は「AIにおまかせ」がおすすめです</figcaption>
+</figure>
 </section>
 <section>
 <h3>同名ファイルの差し替え</h3>
@@ -168,6 +204,10 @@
 <section>
 <h3>ピン留め</h3>
 <p>右クリック →「ピン留め」で、そのマニュアルをAIの再分類から保護できます。付け外しは手動のみで、移動しても勝手に変わりません。</p>
+<figure class="shot">
+<img src="images/context-menu.png" alt="マニュアルの右クリックメニュー。「ピン留め」「削除」は管理者のみ表示されます">
+<figcaption>マニュアルの右クリックメニュー。「ピン留め」「削除」は管理者のみ表示されます</figcaption>
+</figure>
 </section>
 <section>
 <h3>AIで再分類</h3>
