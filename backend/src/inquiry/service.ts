@@ -2,10 +2,16 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { PrismaService } from '../prisma/service';
 
-/** 問い合わせの宛先。運用で変える場合は環境変数で上書きする */
-const TO_EMAIL = process.env.INQUIRY_TO_EMAIL ?? 'daibon20020117@gmail.com';
-// SESは差出人も認証済みアドレスである必要があるため、既定は宛先と同じにする
-const FROM_EMAIL = process.env.INQUIRY_FROM_EMAIL ?? TO_EMAIL;
+/** 問い合わせの宛先(カンマ区切りで複数可)。運用で変える場合は環境変数で上書きする */
+const TO_EMAILS = (
+  process.env.INQUIRY_TO_EMAIL ??
+  'daibon20020117@gmail.com,kimura@takamatsu-build.jp'
+)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+// SESは差出人も認証済みアドレスである必要があるため、既定は先頭の宛先にする
+const FROM_EMAIL = process.env.INQUIRY_FROM_EMAIL ?? TO_EMAILS[0];
 const MAX_LENGTH = 2000;
 
 @Injectable()
@@ -37,39 +43,43 @@ export class InquiryService {
       data: { message: trimmed, userEmail },
     });
 
-    try {
-      await this.ses.send(
-        new SendEmailCommand({
-          FromEmailAddress: FROM_EMAIL,
-          Destination: { ToAddresses: [TO_EMAIL] },
-          // 送信者へそのまま返信できるようにする
-          ReplyToAddresses: userEmail ? [userEmail] : undefined,
-          Content: {
-            Simple: {
-              Subject: {
-                Data: `【社内マニュアル検索】お問い合わせ (${userEmail ?? '不明'})`,
-                Charset: 'UTF-8',
-              },
-              Body: {
-                Text: {
-                  Data: [
-                    `送信者: ${userEmail ?? '不明'}`,
-                    `受付日時: ${inquiry.createdAt.toLocaleString('ja-JP')}`,
-                    '',
-                    trimmed,
-                  ].join('\n'),
+    // SESのサンドボックスでは未認証の宛先が1人でも混ざると送信全体が拒否される。
+    // 1通ずつ送ることで、届けられる宛先には確実に届ける
+    for (const to of TO_EMAILS) {
+      try {
+        await this.ses.send(
+          new SendEmailCommand({
+            FromEmailAddress: FROM_EMAIL,
+            Destination: { ToAddresses: [to] },
+            // 送信者へそのまま返信できるようにする
+            ReplyToAddresses: userEmail ? [userEmail] : undefined,
+            Content: {
+              Simple: {
+                Subject: {
+                  Data: `【社内マニュアル検索】お問い合わせ (${userEmail ?? '不明'})`,
                   Charset: 'UTF-8',
+                },
+                Body: {
+                  Text: {
+                    Data: [
+                      `送信者: ${userEmail ?? '不明'}`,
+                      `受付日時: ${inquiry.createdAt.toLocaleString('ja-JP')}`,
+                      '',
+                      trimmed,
+                    ].join('\n'),
+                    Charset: 'UTF-8',
+                  },
                 },
               },
             },
-          },
-        }),
-      );
-    } catch (e) {
-      // 送信できなくても問い合わせ自体は受理済み(DBに残っている)
-      this.logger.error(
-        `問い合わせメールの送信に失敗 id=${inquiry.id}: ${e instanceof Error ? e.message : String(e)}`,
-      );
+          }),
+        );
+      } catch (e) {
+        // 送れない宛先があっても問い合わせ自体は受理済み(DBに残っている)
+        this.logger.error(
+          `問い合わせメールの送信に失敗 id=${inquiry.id} to=${to}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
     }
     return true;
   }
