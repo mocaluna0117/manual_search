@@ -2,6 +2,7 @@ import { useQuery } from '@apollo/client/react'
 import {
   Badge,
   Box,
+  Image,
   Button,
   Dialog,
   HStack,
@@ -23,6 +24,14 @@ import {
   LuUsers,
 } from 'react-icons/lu'
 import { ME_QUERY } from '../../graphql/me'
+import imgChatAnswer from '../../assets/help/chat-answer.png'
+import imgChatHome from '../../assets/help/chat-home.png'
+import imgChatTemplates from '../../assets/help/chat-templates.png'
+import imgContextMenu from '../../assets/help/context-menu.png'
+import imgExplorerDetails from '../../assets/help/explorer-details.png'
+import imgExplorerRoot from '../../assets/help/explorer-root.png'
+import imgSettings from '../../assets/help/settings.png'
+import imgUploadDialog from '../../assets/help/upload-dialog.png'
 
 interface HelpDialogProps {
   open: boolean
@@ -34,6 +43,9 @@ interface HelpDialogProps {
 interface HelpItem {
   label: string
   body: string
+  /** 実際の画面のスクリーンショット(PDF版と同じもの) */
+  image?: string
+  imageCaption?: string
 }
 
 interface HelpSection {
@@ -52,10 +64,14 @@ const SECTIONS: HelpSection[] = [
     items: [
       {
         label: '質問のしかた',
+        image: imgChatHome,
+        imageCaption: 'ホーム画面。下の入力欄に質問を書いて「検索」を押します',
         body: '入力欄に知りたいことを書いて「検索」を押すだけです。例:「クイックパーツマニュアルを見せて」「床鳴りの対応手順は？」。話し言葉のままで大丈夫です。',
       },
       {
         label: '回答の根拠からPDFを開く',
+        image: imgChatAnswer,
+        imageCaption: '青い枠が絞り込みの選択肢、下のカードが根拠マニュアルです',
         body: '回答の下に根拠マニュアルのカードが出ます。マニュアル名や「p.3」のようなページボタンを押すと、該当ページが直接開きます。',
       },
       {
@@ -64,6 +80,8 @@ const SECTIONS: HelpSection[] = [
       },
       {
         label: 'よく使う質問（テンプレート）',
+        image: imgChatTemplates,
+        imageCaption: '入力欄左の吹き出しアイコンから選べます',
         body: '入力欄左の吹き出しアイコンから定型文を選べます。「〇〇」の部分が選択状態で入るので、そのまま打ち替えれば完成です。',
       },
       {
@@ -90,10 +108,14 @@ const SECTIONS: HelpSection[] = [
       },
       {
         label: 'フォルダから探す',
+        image: imgExplorerRoot,
+        imageCaption: 'オレンジの帯と時計アイコンは「取り込み中」の表示です',
         body: 'サイドバーの「マニュアル」でエクスプローラーが開きます。フォルダやマニュアルはダブルクリックで開きます（1回クリックは選択）。',
       },
       {
         label: '表示の切り替え・並べ替え',
+        image: imgExplorerDetails,
+        imageCaption: '詳細表示。名前の横のピンはピン留めの印です',
         body: '一覧右上のボタンで「詳細」と「中アイコン」を切り替えられます。詳細表示では「名前」「作成日」「サイズ」のヘッダーで並べ替えできます（作成日はPDF自身が持つ作成日です）。',
       },
       {
@@ -108,6 +130,8 @@ const SECTIONS: HelpSection[] = [
     items: [
       {
         label: '設定',
+        image: imgSettings,
+        imageCaption: '',
         body: 'サイドバー下部の「設定」から、送信キー（Enterで送信 / Shift+Enterで送信）、配色（端末に合わせる・ライト・ダーク）、画面の並び（左に1枚 / チャット左 / マニュアル左）を変えられます。',
       },
       {
@@ -137,6 +161,8 @@ const SECTIONS: HelpSection[] = [
     items: [
       {
         label: 'アップロード',
+        image: imgUploadDialog,
+        imageCaption: '',
         body: '「マニュアルを追加」からPDFをドラッグ&ドロップ（複数可）。カテゴリは「AIにおまかせ」がおすすめで、内容を読んで自動で振り分けます（合うフォルダが無ければ作成）。',
       },
       {
@@ -164,6 +190,8 @@ const SECTIONS: HelpSection[] = [
       },
       {
         label: 'ピン留め',
+        image: imgContextMenu,
+        imageCaption: 'マニュアルの右クリックメニュー',
         body: '右クリック →「ピン留め」で、AIの再分類から保護できます（手動の判断を守る仕組み）。ピンの付け外しは手動のみです。',
       },
       {
@@ -268,13 +296,31 @@ export function HelpDialog({ open, onClose, onOpenPdf }: HelpDialogProps) {
                           <Text fontSize="sm" color="fg.muted">
                             {item.body}
                           </Text>
+                          {item.image && (
+                            <Box mt={2} mb={1}>
+                              <Image
+                                src={item.image}
+                                alt={item.imageCaption || item.label}
+                                borderWidth="1px"
+                                borderStyle="solid"
+                                borderColor="border"
+                                rounded="md"
+                                w="100%"
+                              />
+                              {item.imageCaption && (
+                                <Text fontSize="xs" color="fg.subtle" mt={1}>
+                                  {item.imageCaption}
+                                </Text>
+                              )}
+                            </Box>
+                          )}
                         </Box>
                       ))}
                     </VStack>
                   </Box>
                 ))}
                 <Text fontSize="xs" color="fg.subtle">
-                  実際の画面の画像で見たいときは、下の「画像つきガイド(PDF)を開く」からどうぞ。
+                  印刷や共有には、下の「PDF版を開く」が便利です。
                   チャットで「使い方を教えて」と聞いても、このガイドの内容をAIが案内します。
                 </Text>
               </VStack>
@@ -289,7 +335,7 @@ export function HelpDialog({ open, onClose, onOpenPdf }: HelpDialogProps) {
                   onOpenPdf()
                 }}
               >
-                <LuFileImage /> 画像つきガイド(PDF)を開く
+                <LuFileImage /> PDF版を開く
               </Button>
               <Button variant="outline" onClick={onClose}>
                 閉じる

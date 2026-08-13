@@ -5,7 +5,8 @@
 
 サイドバーの「使い方」ボタンはテキスト版のヘルプ
 (frontend/src/components/layout/HelpDialog.tsx)を開き、その中の
-「画像つきガイド(PDF)を開く」でこのPDFに切り替えられる。
+「PDF版を開く」でこのPDFに切り替えられる。スクリーンショットは
+frontend/src/assets/help/ と docs/usage-guide/images/ の両方に同じものを置く。
 機能を追加・変更したら index.html と HelpDialog の両方を更新する。
 
 ファイル名(社内マニュアル検索_使い方ガイド.pdf)は「使い方」ボタンが
