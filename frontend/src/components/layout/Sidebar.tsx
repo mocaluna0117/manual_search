@@ -62,6 +62,7 @@ import {
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
 import { useManualViewer } from '../manual/ManualViewerProvider'
+import { HelpDialog } from './HelpDialog'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { ClassificationRuleDialog } from './ClassificationRuleDialog'
 import { InquiryDialog } from './InquiryDialog'
@@ -111,6 +112,7 @@ export function SidebarContent({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inquiryOpen, setInquiryOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
@@ -777,7 +779,7 @@ const FOLDER_MIME = 'application/x-manual-folder'
             variant="ghost"
             color="fg.muted"
             _hover={{ bg: 'bg.emphasized' }}
-            onClick={openUsageGuide}
+            onClick={() => setHelpOpen(true)}
           >
             <LuCircleHelp /> 使い方
           </Button>
@@ -816,6 +818,11 @@ const FOLDER_MIME = 'application/x-manual-folder'
         <InquiryDialog
           open={inquiryOpen}
           onClose={() => setInquiryOpen(false)}
+        />
+        <HelpDialog
+          open={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          onOpenPdf={openUsageGuide}
         />
       </Box>
       )}
