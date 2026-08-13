@@ -54,15 +54,16 @@ import {
   DELETE_CONVERSATION_MUTATION,
 } from '../../graphql/chat'
 import {
+  MANUALS_QUERY,
   MOVE_MANUAL_MUTATION,
   RECLASSIFY_COUNTS_QUERY,
   RECLASSIFY_STATUS_QUERY,
   START_RECLASSIFY_MUTATION,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
+import { useManualViewer } from '../manual/ManualViewerProvider'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { ClassificationRuleDialog } from './ClassificationRuleDialog'
-import { HelpDialog } from './HelpDialog'
 import { InquiryDialog } from './InquiryDialog'
 import { SettingsDialog } from './SettingsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
@@ -110,7 +111,6 @@ export function SidebarContent({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inquiryOpen, setInquiryOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
-  const [helpOpen, setHelpOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
@@ -164,6 +164,31 @@ export function SidebarContent({
   const client = useApolloClient()
   const [startReclassify] = useMutation(START_RECLASSIFY_MUTATION)
   const [reclassifying, setReclassifying] = useState(false)
+
+  const { openManual } = useManualViewer()
+  // 「使い方」はマニュアルとして登録済みのガイドPDFを開く
+  // (docs/usage-guide/で生成・登録している。ファイル名を変えたらここも変える)
+  const openUsageGuide = async () => {
+    const find = async (fetchPolicy: 'cache-first' | 'network-only') => {
+      const { data } = await client.query({
+        query: MANUALS_QUERY,
+        variables: {},
+        fetchPolicy,
+      })
+      return data?.manuals.find(
+        (m) => m.fileName === USAGE_GUIDE_FILE_NAME,
+      )
+    }
+    // 登録直後などキャッシュに無いことがあるので、見つからなければ取り直す
+    const guide = (await find('cache-first')) ?? (await find('network-only'))
+    if (!guide) {
+      alert(
+        '使い方ガイドが見つかりませんでした。管理者に連絡してください(docs/usage-guide/の手順で再登録できます)',
+      )
+      return
+    }
+    openManual(guide.id, guide.title)
+  }
   // 実行中は短い間隔で、それ以外も控えめに監視する。
   // チャットから始めた再分類もここで拾えるようにするため(一覧の自動更新用)
   const { data: statusData } = useQuery(RECLASSIFY_STATUS_QUERY, {
@@ -237,7 +262,10 @@ export function SidebarContent({
 
   // フォルダの並び替え(管理者のみ)。マニュアルのドラッグと区別するため
   // 専用のデータ形式を使う(dragover中でも types なら中身を見られる)
-  const FOLDER_MIME = 'application/x-manual-folder'
+  // 使い方ガイドPDFのファイル名。docs/usage-guide/README.mdの登録手順と揃えること
+const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pdf'
+
+const FOLDER_MIME = 'application/x-manual-folder'
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null)
   // 挿入位置の線を出す場所(どのフォルダの上/下か)
   const [dropAt, setDropAt] = useState<{ id: string; before: boolean } | null>(
@@ -749,7 +777,7 @@ export function SidebarContent({
             variant="ghost"
             color="fg.muted"
             _hover={{ bg: 'bg.emphasized' }}
-            onClick={() => setHelpOpen(true)}
+            onClick={openUsageGuide}
           >
             <LuCircleHelp /> 使い方
           </Button>
@@ -789,7 +817,6 @@ export function SidebarContent({
           open={inquiryOpen}
           onClose={() => setInquiryOpen(false)}
         />
-        <HelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
       </Box>
       )}
     </VStack>
