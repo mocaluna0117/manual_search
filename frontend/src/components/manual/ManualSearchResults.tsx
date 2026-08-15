@@ -118,7 +118,10 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
             variant="outline"
             loading={progress !== null}
             onClick={() =>
-              void download([...checkedIds], `検索結果(${keyword})`)
+              void download(
+                [...checkedIds].map((id) => ({ id })),
+                `検索結果(${keyword})`,
+              )
             }
           >
             <LuDownload /> 選択した{checkedIds.size}件をダウンロード

@@ -147,6 +147,9 @@ interface ManualItemListProps {
   checkedIds?: Set<string>
   onToggleCheck?: (id: string) => void
   onToggleCheckAll?: () => void
+  /** フォルダのチェック(フォルダ単位でまとめてダウンロードする) */
+  checkedFolderIds?: Set<string>
+  onToggleFolderCheck?: (id: string) => void
 }
 
 /** 一括操作用のチェックボックス(行やタイルのクリックとは独立させる) */
@@ -194,10 +197,16 @@ export function ManualItemList({
   checkedIds,
   onToggleCheck,
   onToggleCheckAll,
+  checkedFolderIds,
+  onToggleFolderCheck,
 }: ManualItemListProps) {
   const selectable = Boolean(checkedIds && onToggleCheck)
+  const foldersSelectable = Boolean(checkedFolderIds && onToggleFolderCheck)
+  // 全選択の判定は「表示中のフォルダとファイルがすべて入っているか」
   const allChecked =
-    manuals.length > 0 && manuals.every((m) => checkedIds?.has(m.id))
+    manuals.length + folders.length > 0 &&
+    manuals.every((m) => checkedIds?.has(m.id)) &&
+    (!foldersSelectable || folders.every((f) => checkedFolderIds?.has(f.id)))
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -326,8 +335,17 @@ export function ManualItemList({
               {...highlight(folder.id, true)}
               {...folderItemProps(folder)}
             >
-              {/* フォルダは一括ダウンロードの対象外。列の位置を合わせるための余白 */}
-              {selectable && <Box w="15px" flexShrink={0} />}
+              {selectable &&
+                (foldersSelectable ? (
+                  <ItemCheckbox
+                    checked={checkedFolderIds!.has(folder.id)}
+                    onChange={() => onToggleFolderCheck!(folder.id)}
+                    label={`${folder.name} を選択`}
+                  />
+                ) : (
+                  // 列の位置を合わせるための余白
+                  <Box w="15px" flexShrink={0} />
+                ))}
               <HStack flex="1" gap={2} minW={0}>
                 <Box flexShrink={0}>
                   <FcFolder size={18} />
@@ -407,12 +425,22 @@ export function ManualItemList({
               py={2}
               borderRadius="md"
               textAlign="center"
+              position="relative"
               {...highlight(folder.id, true)}
               {...folderItemProps(folder)}
             >
               <Box display="flex" justifyContent="center">
                 <FcFolder size={48} />
               </Box>
+              {foldersSelectable && (
+                <Box position="absolute" top="1" left="3">
+                  <ItemCheckbox
+                    checked={checkedFolderIds!.has(folder.id)}
+                    onChange={() => onToggleFolderCheck!(folder.id)}
+                    label={`${folder.name} を選択`}
+                  />
+                </Box>
+              )}
               <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
                 {folder.name}
               </Text>

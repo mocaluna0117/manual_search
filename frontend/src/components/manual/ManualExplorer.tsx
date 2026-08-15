@@ -160,12 +160,29 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       else next.add(id)
       return next
     })
-  const toggleCheckAll = () =>
-    setCheckedIds((prev) =>
-      manuals.every((m) => prev.has(m.id))
-        ? new Set()
-        : new Set(manuals.map((m) => m.id)),
+  const [checkedFolderIds, setCheckedFolderIds] = useState<Set<string>>(
+    new Set(),
+  )
+  useEffect(() => {
+    setCheckedFolderIds(new Set())
+  }, [folder])
+  const toggleFolderCheck = (id: string) =>
+    setCheckedFolderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const toggleCheckAll = () => {
+    const allOn =
+      manuals.every((m) => checkedIds.has(m.id)) &&
+      categories.every((c) => checkedFolderIds.has(c.id))
+    setCheckedIds(allOn ? new Set() : new Set(manuals.map((m) => m.id)))
+    setCheckedFolderIds(
+      allOn || !isRoot ? new Set() : new Set(categories.map((c) => c.id)),
     )
+  }
+  const checkedCount = checkedIds.size + checkedFolderIds.size
   const { download, progress } = useBulkDownload()
 
   /** 表示中の場所の名前(ZIPのファイル名に使う) */
@@ -179,10 +196,36 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const [fetchAllManuals] = useLazyQuery(MANUALS_QUERY, {
     fetchPolicy: 'network-only',
   })
+  /** マニュアルの所属フォルダ名(ZIP内の階層に使う。未分類はルート直下) */
+  const folderNameOf = (categoryId: string | null) =>
+    categories.find((c) => c.id === categoryId)?.name
+
   const downloadAll = async () => {
     const { data: all } = await fetchAllManuals()
-    const ids = (all?.manuals ?? []).map((m) => m.id)
-    await download(ids, 'マニュアル(全件)')
+    const items = (all?.manuals ?? []).map((m) => ({
+      id: m.id,
+      folder: folderNameOf(m.categoryId),
+    }))
+    await download(items, 'マニュアル(全件)')
+  }
+
+  /** チェックしたフォルダの中身 + 個別にチェックしたファイル */
+  const downloadChecked = async () => {
+    const items: { id: string; folder?: string }[] = []
+    if (checkedFolderIds.size > 0) {
+      // フォルダの中身は一覧に出ていないので、全件から取り出す
+      const { data: all } = await fetchAllManuals()
+      for (const m of all?.manuals ?? []) {
+        if (m.categoryId && checkedFolderIds.has(m.categoryId)) {
+          items.push({ id: m.id, folder: folderNameOf(m.categoryId) })
+        }
+      }
+    }
+    for (const id of checkedIds) {
+      // フォルダ選択と重なったファイルは二重に入れない
+      if (!items.some((item) => item.id === id)) items.push({ id })
+    }
+    await download(items, `${locationName}(選択)`)
   }
 
   const [moveManual] = useMutation(MOVE_MANUAL_MUTATION, {
@@ -311,17 +354,15 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           </Button>
         )}
         {/* 一括ダウンロード。選択があれば選択分、無ければ表示中/全件 */}
-        {checkedIds.size > 0 ? (
+        {checkedCount > 0 ? (
           <Button
             size="xs"
             colorPalette="blue"
             variant="outline"
             loading={progress !== null}
-            onClick={() =>
-              void download([...checkedIds], `${locationName}(選択${checkedIds.size}件)`)
-            }
+            onClick={() => void downloadChecked()}
           >
-            <LuDownload /> 選択した{checkedIds.size}件をダウンロード
+            <LuDownload /> 選択した{checkedCount}件をダウンロード
           </Button>
         ) : isRoot ? (
           <Button
@@ -340,7 +381,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
               loading={progress !== null}
               onClick={() =>
                 void download(
-                  manuals.map((m) => m.id),
+                  manuals.map((m) => ({ id: m.id })),
                   locationName,
                 )
               }
@@ -397,6 +438,8 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         checkedIds={checkedIds}
         onToggleCheck={toggleCheck}
         onToggleCheckAll={toggleCheckAll}
+        checkedFolderIds={checkedFolderIds}
+        onToggleFolderCheck={toggleFolderCheck}
         sortKey={sortKey ?? undefined}
         sortAsc={sortAsc}
         onSort={toggleSort}

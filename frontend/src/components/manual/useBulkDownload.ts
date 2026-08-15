@@ -50,10 +50,15 @@ export function useBulkDownload() {
   }
 
   /**
-   * @param ids ダウンロードするマニュアルのID
+   * @param items ダウンロードする対象。folderを指定するとZIP内で
+   *              そのフォルダにまとめる(フォルダ選択時の階層を再現する)
    * @param zipName ZIPのファイル名(拡張子なし)
    */
-  const download = async (ids: string[], zipName: string) => {
+  const download = async (
+    items: { id: string; folder?: string }[],
+    zipName: string,
+  ) => {
+    const ids = items.map((item) => item.id)
     if (ids.length === 0) {
       window.alert('ダウンロードするファイルを選択してください。')
       return
@@ -83,7 +88,9 @@ export function useBulkDownload() {
 
       const { default: JSZip } = await import('jszip')
       const zip = new JSZip()
-      const used = new Set<string>()
+      const folderOf = new Map(items.map((item) => [item.id, item.folder]))
+      // 名前の重複チェックはZIP内のフォルダごとに行う
+      const usedByFolder = new Map<string, Set<string>>()
       let done = 0
       for (const target of targets) {
         const res = await fetch(target.url)
@@ -92,7 +99,12 @@ export function useBulkDownload() {
           console.warn(`ダウンロード失敗: ${target.fileName}`)
           continue
         }
-        zip.file(uniqueName(used, target.fileName), await res.blob())
+        const folder = folderOf.get(target.id)
+        const key = folder ?? ''
+        if (!usedByFolder.has(key)) usedByFolder.set(key, new Set())
+        const name = uniqueName(usedByFolder.get(key)!, target.fileName)
+        const dir = folder ? (zip.folder(folder) ?? zip) : zip
+        dir.file(name, await res.blob())
         done += 1
         setProgress({ done, total: targets.length })
       }
