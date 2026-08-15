@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, type Message } from '../../generated/prisma/client';
 import { CategoryService } from '../category/service';
 import { IngestStatus } from '../manual/model';
@@ -510,6 +514,22 @@ export class ChatService {
       question,
       '⏳ 全マニュアルの再分類を開始しました(数分かかることがあります)。完了すると、この会話に結果が記録されます。',
     );
+  }
+
+  /** 会話の名前を変える(自分の会話だけ) */
+  async renameConversation(id: string, userId: string, title: string) {
+    await this.conversation(id, userId); // 所有者チェック
+    const trimmed = title.trim();
+    if (!trimmed) {
+      throw new BadRequestException('チャット名を入力してください');
+    }
+    // サイドバーの並びは更新日時順。Prismaのupdateだと@updatedAtが必ず
+    // 現在時刻に書き換わり、名前を変えただけで先頭へ飛んでしまうため、
+    // titleだけを更新する生SQLを使う
+    await this.prisma.$executeRaw`
+      UPDATE "Conversation" SET title = ${trimmed.slice(0, 100)} WHERE id = ${id}
+    `;
+    return this.prisma.conversation.findUniqueOrThrow({ where: { id } });
   }
 
   async deleteConversation(id: string, userId: string) {

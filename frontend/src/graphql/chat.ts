@@ -114,6 +114,29 @@ export const ASK_MUTATION: TypedDocumentNode<AskData, AskVars> = gql`
   }
 `
 
+// --- 会話の名前変更 ---
+
+interface RenameConversationData {
+  renameConversation: Conversation
+}
+
+interface RenameConversationVars {
+  id: string
+  title: string
+}
+
+export const RENAME_CONVERSATION_MUTATION: TypedDocumentNode<
+  RenameConversationData,
+  RenameConversationVars
+> = gql`
+  mutation RenameConversation($id: ID!, $title: String!) {
+    renameConversation(id: $id, title: $title) {
+      id
+      title
+    }
+  }
+`
+
 // --- 会話の削除 ---
 
 interface DeleteConversationData {

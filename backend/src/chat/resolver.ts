@@ -79,6 +79,17 @@ export class ChatResolver {
     );
   }
 
+  // チャット名の変更(自分の会話のみ)
+  @Mutation(() => Conversation)
+  async renameConversation(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('title') title: string,
+    @CurrentUser() authUser: AuthUser,
+  ) {
+    const user = await this.userService.ensure(authUser);
+    return this.chatService.renameConversation(id, user.id, title);
+  }
+
   @Mutation(() => Conversation)
   async deleteConversation(
     @Args('id', { type: () => ID }) id: string,

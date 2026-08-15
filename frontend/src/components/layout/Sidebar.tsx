@@ -53,6 +53,7 @@ import { signOutRedirect } from '../../lib/auth'
 import {
   CONVERSATIONS_QUERY,
   DELETE_CONVERSATION_MUTATION,
+  RENAME_CONVERSATION_MUTATION,
 } from '../../graphql/chat'
 import {
   DELETE_MANUALS_MUTATION,
@@ -158,6 +159,23 @@ export function SidebarContent({
   const [deleteConversation] = useMutation(DELETE_CONVERSATION_MUTATION, {
     refetchQueries: ['Conversations'],
   })
+
+  // チャット名のインライン編集(フォルダ名の変更と同じ操作感に揃える)
+  const [editingChatId, setEditingChatId] = useState<string | null>(null)
+  const [editingChatName, setEditingChatName] = useState('')
+  const [renameConversation] = useMutation(RENAME_CONVERSATION_MUTATION, {
+    refetchQueries: ['Conversations'],
+  })
+  const handleRenameConversation = async (id: string, original: string) => {
+    const title = editingChatName.trim()
+    setEditingChatId(null)
+    if (!title || title === original) return
+    try {
+      await renameConversation({ variables: { id, title } })
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '名前を変更できませんでした')
+    }
+  }
 
   // カテゴリ管理(ADMINのみUIに出る。本命の防御はバックエンド)
   const [addingCategory, setAddingCategory] = useState(false)
@@ -489,7 +507,33 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
           </Text>
         )}
         <VStack gap={1} align="stretch">
-          {chatData?.conversations.map((conversation) => (
+          {chatData?.conversations.map((conversation) =>
+            editingChatId === conversation.id ? (
+              // 編集モード: その場で名前を書き換える
+              <Input
+                key={conversation.id}
+                size="sm"
+                autoFocus
+                bg="bg.panel"
+                borderColor="border.emphasized"
+                value={editingChatName}
+                onChange={(e) => setEditingChatName(e.target.value)}
+                onBlur={() =>
+                  void handleRenameConversation(
+                    conversation.id,
+                    conversation.title,
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+                    void handleRenameConversation(
+                      conversation.id,
+                      conversation.title,
+                    )
+                  if (e.key === 'Escape') setEditingChatId(null)
+                }}
+              />
+            ) : (
             <HStack key={conversation.id} gap={0} className="group">
               <Button
                 variant="ghost"
@@ -516,7 +560,22 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
                 {conversation.title}
               </Button>
               <IconButton
+                aria-label="チャット名を変更"
+                title="チャット名を変更"
+                size="xs"
+                variant="ghost"
+                color="fg.muted"
+                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                onClick={() => {
+                  setEditingChatId(conversation.id)
+                  setEditingChatName(conversation.title)
+                }}
+              >
+                <LuPencil />
+              </IconButton>
+              <IconButton
                 aria-label="会話を削除"
+                title="会話を削除"
                 size="xs"
                 variant="ghost"
                 color="fg.muted"
@@ -528,7 +587,8 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
                 <LuTrash2 />
               </IconButton>
             </HStack>
-          ))}
+            ),
+          )}
         </VStack>
         </>
       )}

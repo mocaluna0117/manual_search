@@ -197,6 +197,7 @@ type Mutation {
   deleteManualCategory(id: ID!): ManualCategory!
   reorderManualCategories(ids: [ID!]!): Int!
   askQuestion(question: String!, conversationId: ID, imageBase64: String, imageFormat: String): AskResult!
+  renameConversation(id: ID!, title: String!): Conversation!
   deleteConversation(id: ID!): Conversation!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!
   registerManual(input: RegisterManualInput!): RegisterManualResult!
