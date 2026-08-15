@@ -32,6 +32,13 @@ export class CategoryService {
     }));
   }
 
+  /** 名前で1件探す(生きているフォルダのみ)。チャットの重複判定に使う */
+  findByName(name: string) {
+    return this.prisma.manualCategory.findFirst({
+      where: { name: name.trim().normalize('NFC'), deletedAt: null },
+    });
+  }
+
   async create(name: string) {
     const trimmed = await this.validateName(name);
     // 新しいフォルダは一番下に置く

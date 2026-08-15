@@ -272,14 +272,22 @@ export class ChatService {
         if (action.name === 'create_folder') {
           const name = String(action.input.name ?? '').trim();
           if (!name) continue;
-          try {
-            await this.categoryService.create(name);
-            lines.push(`📁 フォルダ「${name}」を作成しました。`);
-          } catch (e) {
-            // 重複などの失敗は会話として伝える(例外で全体を止めない)
-            lines.push(
-              `⚠️ フォルダ「${name}」は作成できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
-            );
+          // 既にあるフォルダを頼まれるのは、直前の会話で作った流れでは普通のこと。
+          // これを失敗として返すと「さっき作ったのに」と話が噛み合わなくなるので、
+          // そのまま使うと伝える(利用者の目的は「そこに入ること」なので達成できる)
+          const existing = await this.categoryService.findByName(name);
+          if (existing) {
+            lines.push(`📁 フォルダ「${name}」は既にあるので、そのまま使います。`);
+          } else {
+            try {
+              await this.categoryService.create(name);
+              lines.push(`📁 フォルダ「${name}」を作成しました。`);
+            } catch (e) {
+              // 名前の規則違反などの失敗は会話として伝える(例外で全体を止めない)
+              lines.push(
+                `⚠️ フォルダ「${name}」は作成できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+              );
+            }
           }
         } else if (action.name === 'move_manual') {
           // 特定の1件を今すぐ移動する。名前が曖昧なときは動かさず候補を出す
@@ -294,26 +302,33 @@ export class ChatService {
               `📁 「${result.manual.title}」を「${result.folderName}」に移動しました。`,
             );
           } else if (result.status === 'manual_ambiguous') {
+            const candidates = result.manuals.slice(0, 10);
             lines.push(
-              `⚠️ 「${manualText}」に当てはまるマニュアルが複数あります。どれを移動しますか？\n` +
-                result.manuals
-                  .slice(0, 10)
-                  .map((m, i) => `${i + 1}. ${m.title}`)
-                  .join('\n'),
+              `⚠️ 「${manualText}」に当てはまるマニュアルが複数あります。どれを移動しますか？\n\n` +
+                candidates.map((m) => `- ${m.title}`).join('\n'),
             );
+            // 入力させずに選べるようにする。押すと題名がそのまま送られ、
+            // moveByNameが完全一致で1件に確定する
+            options = [
+              ...candidates.map((m) => m.title),
+              `すべて「${folderText}」に移動する`,
+            ];
           } else if (result.status === 'manual_not_found') {
             lines.push(
               `⚠️ 「${manualText}」に当てはまるマニュアルが見つかりませんでした。`,
             );
           } else if (result.status === 'folder_ambiguous') {
             lines.push(
-              `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれに移動しますか？\n` +
-                result.folders.map((c, i) => `${i + 1}. ${c.name}`).join('\n'),
+              `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれに移動しますか？\n\n` +
+                result.folders.map((c) => `- ${c.name}`).join('\n'),
             );
+            options = result.folders
+              .slice(0, 10)
+              .map((c) => `「${manualText}」を「${c.name}」に移動`);
           } else if (result.status === 'folder_not_found') {
             lines.push(
-              `⚠️ 「${folderText}」というフォルダはありません。現在のフォルダ:\n` +
-                result.folders.map((c, i) => `${i + 1}. ${c.name}`).join('\n'),
+              `⚠️ 「${folderText}」というフォルダはありません。現在のフォルダ:\n\n` +
+                result.folders.map((c) => `- ${c.name}`).join('\n'),
             );
           } else {
             lines.push('⚠️ 移動するマニュアルと移動先を指定してください。');
@@ -345,9 +360,12 @@ export class ChatService {
           } else if (candidates.length > 0) {
             // 取り違えて消さない。どれを消すかを選んでもらう
             lines.push(
-              '⚠️ 該当する分類ルールが複数あります。消したいものを教えてください:\n' +
-                candidates.map((r, i) => `${i + 1}. ${r.text}`).join('\n'),
+              '⚠️ 該当する分類ルールが複数あります。消したいものを選んでください:\n\n' +
+                candidates.map((r) => `- ${r.text}`).join('\n'),
             );
+            options = candidates
+              .slice(0, 10)
+              .map((r) => `分類ルール「${r.text}」を削除`);
           } else {
             lines.push(
               '⚠️ 指定された分類ルールが見つかりませんでした。サイドバーの「分類ルール」から一覧・削除できます。',
@@ -382,8 +400,10 @@ export class ChatService {
       }
 
       // ツール名が想定外だった等で1行も作れなかった場合の保険(空の吹き出しを出さない)
+      // 段落として分ける。Markdownでは単一の改行が空白に潰れるため、
+      // '\n'でつなぐと結果が1行にべったり並んで読めなくなる
       answer =
-        lines.join('\n') ||
+        lines.join('\n\n') ||
         '依頼された操作を実行できませんでした。もう一度具体的に指示してください。';
       // 引用はRAG側が管理操作時に空にして返すため、ここでは触らない
     }

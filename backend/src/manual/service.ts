@@ -773,7 +773,17 @@ export class ManualService implements OnApplicationBootstrap {
     });
     if (manuals.length === 0) return { status: 'manual_not_found' as const };
     if (manuals.length > 1) {
-      return { status: 'manual_ambiguous' as const, manuals };
+      // 候補をボタンで選べるようにしてあるので、押されたときは題名がそのまま届く。
+      // 完全に一致する1件があればそれで確定する(部分一致のままだと
+      // 「ANDPAD導入周知文」が「ANDPAD導入周知文書」も拾って選び直しになる)
+      const exact = manuals.filter(
+        (m) => m.title.normalize('NFC').toLowerCase() === manualNeedle.toLowerCase(),
+      );
+      if (exact.length !== 1) {
+        return { status: 'manual_ambiguous' as const, manuals };
+      }
+      manuals.length = 0;
+      manuals.push(exact[0]);
     }
     const manual = manuals[0];
 
