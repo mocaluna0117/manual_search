@@ -184,6 +184,16 @@ export class ManualResolver {
     return this.manualService.restoreMany(ids);
   }
 
+  // 画面に出る名前を変える(元のファイル名は変えない)
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Manual)
+  renameManual(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('title') title: string,
+  ) {
+    return this.manualService.rename(id, title);
+  }
+
   // 選んだマニュアルだけをAIで分類し直す。
   // 既存のフォルダの中から選ばせる(新しいフォルダは作らない)
   @Roles(UserRole.ADMIN)

@@ -277,6 +277,7 @@ type Mutation {
   deleteManual(id: ID!): Manual!
   deleteManuals(ids: [ID!]!): Int!
   restoreManuals(ids: [ID!]!): Int!
+  renameManual(id: ID!, title: String!): Manual!
   reclassifySelectedManuals(ids: [ID!]!): ReclassifySelectedResult!
   deleteEmptyCategories(ids: [ID!]!): DeleteEmptyCategoriesResult!
   restoreCategories(ids: [ID!]!): RestoreCategoriesResult!

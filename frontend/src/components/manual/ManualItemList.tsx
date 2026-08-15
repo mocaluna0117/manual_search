@@ -1,4 +1,11 @@
-import { Box, HStack, IconButton, Portal, Text } from '@chakra-ui/react'
+import {
+  Box,
+  HStack,
+  IconButton,
+  Input,
+  Portal,
+  Text,
+} from '@chakra-ui/react'
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   FcDataSheet,
@@ -33,6 +40,7 @@ import {
   LuClock,
   LuLayoutGrid,
   LuList,
+  LuPencil,
   LuPin,
   LuPinOff,
   LuRefreshCw,
@@ -168,6 +176,8 @@ interface ManualItemListProps {
   onDeleteManual?: (manual: Manual) => void
   onIngestManual?: (manual: Manual) => void
   onTogglePin?: (manual: Manual) => void
+  /** 名前を変える(渡されたときだけ右クリックメニューに出る) */
+  onRenameManual?: (manual: Manual, title: string) => void
   /** 並べ替え(詳細表示のヘッダー)。省略すると並べ替え不可 */
   sortKey?: SortKey
   sortAsc?: boolean
@@ -220,6 +230,7 @@ export function ManualItemList({
   onDeleteManual,
   onIngestManual,
   onTogglePin,
+  onRenameManual,
   sortKey,
   sortAsc = true,
   onSort,
@@ -237,6 +248,47 @@ export function ManualItemList({
     manuals.every((m) => checkedIds?.has(m.id)) &&
     (!foldersSelectable || folders.every((f) => checkedFolderIds?.has(f.id)))
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
+  // 名前を書き換え中のマニュアル。フォルダ名の変更と同じ操作感にする
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
+
+  const startRename = (manual: Manual) => {
+    setEditingId(manual.id)
+    setEditingName(manual.title)
+  }
+  const commitRename = (manual: Manual) => {
+    const next = editingName.trim()
+    setEditingId(null)
+    if (!next || next === manual.title) return
+    onRenameManual?.(manual, next)
+  }
+
+  /** 名前の欄。編集中は入力欄に差し替える */
+  const nameCell = (manual: Manual, fontSize: string) =>
+    editingId === manual.id ? (
+      <Input
+        size="xs"
+        autoFocus
+        bg="bg.panel"
+        borderColor="border.emphasized"
+        value={editingName}
+        // 行のクリック(選択・ダブルクリックで開く)に巻き込まれないようにする
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onChange={(e) => setEditingName(e.target.value)}
+        onBlur={() => commitRename(manual)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+            commitRename(manual)
+          if (e.key === 'Escape') setEditingId(null)
+        }}
+      />
+    ) : (
+      <Text fontSize={fontSize} truncate>
+        {renderTitle ? renderTitle(manual) : manual.title}
+      </Text>
+    )
+
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -439,9 +491,7 @@ export function ManualItemList({
                   <Box flexShrink={0}>
                     <FileIcon fileName={manual.fileName} size={18} />
                   </Box>
-                  <Text fontSize="sm" truncate>
-                    {renderTitle ? renderTitle(manual) : manual.title}
-                  </Text>
+                  {nameCell(manual, 'sm')}
                   {isAdmin && manual.categoryPinned && (
                     <Tooltip label="ピン留め済み(AIの再分類では動きません)">
                       <Box color="fg.muted" flexShrink={0}>
@@ -540,9 +590,13 @@ export function ManualItemList({
                   />
                 </Box>
               )}
-              <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
-                {renderTitle ? renderTitle(manual) : manual.title}
-              </Text>
+              {editingId === manual.id ? (
+                <Box mt={1}>{nameCell(manual, 'xs')}</Box>
+              ) : (
+                <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
+                  {renderTitle ? renderTitle(manual) : manual.title}
+                </Text>
+              )}
               {/* 名前だけでは種類が分からないので、拡張子を添える */}
               <Text fontSize="10px" color="fg.subtle">
                 {extensionOf(manual.fileName)}
@@ -570,6 +624,11 @@ export function ManualItemList({
             <MenuButton onClick={() => onOpenManual(contextMenu.manual)}>
               <LuBookOpen /> 開く
             </MenuButton>
+            {isAdmin && onRenameManual && (
+              <MenuButton onClick={() => startRename(contextMenu.manual)}>
+                <LuPencil /> 名前を変更
+              </MenuButton>
+            )}
             {isAdmin && onTogglePin && (
               <MenuButton onClick={() => onTogglePin(contextMenu.manual)}>
                 {contextMenu.manual.categoryPinned ? (

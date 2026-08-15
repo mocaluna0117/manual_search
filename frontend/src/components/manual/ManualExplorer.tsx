@@ -26,6 +26,7 @@ import {
   DELETE_MANUALS_MUTATION,
   MOVE_MANUAL_MUTATION,
   RECLASSIFY_SELECTED_MUTATION,
+  RENAME_MANUAL_MUTATION,
   SET_MANUAL_PINNED_MUTATION,
   type Manual,
 } from '../../graphql/manuals'
@@ -266,6 +267,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   })
   const [deleteCategory] = useMutation(DELETE_CATEGORY_MUTATION, {
     refetchQueries: ['Manuals', 'ManualCategories'],
+  })
+  const [renameManual] = useMutation(RENAME_MANUAL_MUTATION, {
+    refetchQueries: ['Manuals'],
   })
   const [reclassifying, setReclassifying] = useState(false)
   const [reclassifySelected] = useMutation(RECLASSIFY_SELECTED_MUTATION, {
@@ -607,6 +611,14 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         }
         onDeleteManual={(manual) => void handleDelete(manual)}
         onIngestManual={(manual) => void handleIngest(manual)}
+        onRenameManual={(manual, title) => {
+          void renameManual({ variables: { id: manual.id, title } }).catch(
+            (e: unknown) =>
+              window.alert(
+                e instanceof Error ? e.message : '名前を変更できませんでした',
+              ),
+          )
+        }}
         onTogglePin={(manual) =>
           void setManualPinned({
             variables: { id: manual.id, pinned: !manual.categoryPinned },

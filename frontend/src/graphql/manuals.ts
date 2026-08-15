@@ -390,6 +390,24 @@ export const MANUAL_DOWNLOAD_URL_QUERY: TypedDocumentNode<
   }
 `
 
+// --- 表示名の変更(ADMIN専用。元のファイル名は変わらない) ---
+
+interface RenameManualData {
+  renameManual: Pick<Manual, 'id' | 'title'>
+}
+
+export const RENAME_MANUAL_MUTATION: TypedDocumentNode<
+  RenameManualData,
+  { id: string; title: string }
+> = gql`
+  mutation RenameManual($id: ID!, $title: String!) {
+    renameManual(id: $id, title: $title) {
+      id
+      title
+    }
+  }
+`
+
 // --- カテゴリ間の移動(ADMIN専用) ---
 
 interface MoveManualData {

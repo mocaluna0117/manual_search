@@ -668,6 +668,31 @@ export class ManualService implements OnApplicationBootstrap {
     return { movedCount: moved.length, createdCategories, moved };
   }
 
+  /**
+   * 画面に出る名前を変える。
+   *
+   * 変えるのは表示名(title)だけで、元のファイル名(fileName)は触らない。
+   * fileNameは同名アップロードの新旧判定とダウンロード時のファイル名に
+   * 使っているので、ここで書き換えると「同じ資料の更新版を上げたのに
+   * 別物として増える」ことになる。
+   */
+  async rename(id: string, title: string) {
+    const trimmed = title.trim().normalize('NFC');
+    if (!trimmed) {
+      throw new BadRequestException('名前を入力してください');
+    }
+    const manual = await this.prisma.manual.findFirst({
+      where: { id, ...ALIVE },
+    });
+    if (!manual) {
+      throw new NotFoundException('マニュアルが見つかりません');
+    }
+    return this.prisma.manual.update({
+      where: { id },
+      data: { title: trimmed.slice(0, 200) },
+    });
+  }
+
   /** マニュアルを別カテゴリへ移動する(categoryId=nullで未分類へ) */
   async move(id: string, categoryId: string | null) {
     const manual = await this.prisma.manual.findUnique({ where: { id } });

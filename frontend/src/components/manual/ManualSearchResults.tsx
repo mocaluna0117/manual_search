@@ -6,6 +6,7 @@ import {
   DELETE_MANUAL_MUTATION,
   DELETE_MANUALS_MUTATION,
   INGEST_MANUAL_MUTATION,
+  RENAME_MANUAL_MUTATION,
   SEARCH_MANUALS_QUERY,
   SET_MANUAL_PINNED_MUTATION,
   type Manual,
@@ -69,6 +70,10 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
     refetchQueries: ['SearchManuals', 'Manuals'],
   })
   const [ingestManual] = useMutation(INGEST_MANUAL_MUTATION, {
+    refetchQueries: ['SearchManuals', 'Manuals'],
+  })
+  const [renameManual] = useMutation(RENAME_MANUAL_MUTATION, {
+    // 検索結果とマニュアル一覧の両方を最新にする
     refetchQueries: ['SearchManuals', 'Manuals'],
   })
   const [setManualPinned] = useMutation(SET_MANUAL_PINNED_MUTATION, {
@@ -196,6 +201,14 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
         onIngestManual={(manual) =>
           void ingestManual({ variables: { id: manual.id } })
         }
+        onRenameManual={(manual, title) => {
+          void renameManual({ variables: { id: manual.id, title } }).catch(
+            (e: unknown) =>
+              window.alert(
+                e instanceof Error ? e.message : '名前を変更できませんでした',
+              ),
+          )
+        }}
         onTogglePin={(manual) =>
           void setManualPinned({
             variables: { id: manual.id, pinned: !manual.categoryPinned },
