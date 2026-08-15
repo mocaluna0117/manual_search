@@ -10,7 +10,12 @@ import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
-import { IngestStatus, ReclassifyStatus, RegisterOutcome } from './model';
+import {
+  EmptiedCategory,
+  IngestStatus,
+  ReclassifyStatus,
+  RegisterOutcome,
+} from './model';
 
 /** ゴミ箱に入っていない(生きている)マニュアルだけを対象にする条件 */
 const ALIVE = { deletedAt: null } as const;
@@ -340,6 +345,7 @@ export class ManualService implements OnApplicationBootstrap {
     running: false,
     movedCount: 0,
     createdCategories: [],
+    emptiedCategories: [],
     error: null,
     finishedAt: null,
   };
@@ -358,6 +364,7 @@ export class ManualService implements OnApplicationBootstrap {
       ok: boolean;
       movedCount: number;
       createdCategories: string[];
+      emptiedCategories: EmptiedCategory[];
       error?: string;
     }) => void,
   ): boolean {
@@ -366,19 +373,21 @@ export class ManualService implements OnApplicationBootstrap {
       running: true,
       movedCount: 0,
       createdCategories: [],
+      emptiedCategories: [],
       error: null,
       finishedAt: null,
     };
     void this.reclassifyAll(instruction)
-      .then(({ movedCount, createdCategories }) => {
+      .then(({ movedCount, createdCategories, emptiedCategories }) => {
         this.reclassifyJob = {
           running: false,
           movedCount,
           createdCategories,
+          emptiedCategories,
           error: null,
           finishedAt: new Date(),
         };
-        onFinish?.({ ok: true, movedCount, createdCategories });
+        onFinish?.({ ok: true, movedCount, createdCategories, emptiedCategories });
       })
       .catch((e: unknown) => {
         const error = e instanceof Error ? e.message : '不明なエラー';
@@ -386,10 +395,17 @@ export class ManualService implements OnApplicationBootstrap {
           running: false,
           movedCount: 0,
           createdCategories: [],
+          emptiedCategories: [],
           error,
           finishedAt: new Date(),
         };
-        onFinish?.({ ok: false, movedCount: 0, createdCategories: [], error });
+        onFinish?.({
+          ok: false,
+          movedCount: 0,
+          createdCategories: [],
+          emptiedCategories: [],
+          error,
+        });
       });
     return true;
   }
@@ -436,13 +452,17 @@ export class ManualService implements OnApplicationBootstrap {
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
     if (manuals.length === 0) {
-      return { movedCount: 0, createdCategories: [] };
+      return { movedCount: 0, createdCategories: [], emptiedCategories: [] };
     }
 
     // 1回の呼び出し時間とレスポンスJSONのトークン量の両方に余裕を持たせる。
     // (80件だと応答が出力上限4000トークンに接近し、通信も1分を超えやすい)
     // 管理者が蓄積した分類ルール(「〜は〜のフォルダへ」)を最優先で効かせる
     const rules = await this.classificationRules();
+
+    // 実行前のフォルダごとの件数を控える。分類が終わったあとに取り直して
+    // 「前は入っていたのに空になったフォルダ」を割り出す
+    const countsBefore = await this.categoryManualCounts();
 
     const BATCH_SIZE = 50;
     let movedCount = 0;
@@ -469,7 +489,41 @@ export class ManualService implements OnApplicationBootstrap {
       movedCount += result.movedCount;
       createdCategories.push(...result.createdCategories);
     }
-    return { movedCount, createdCategories };
+    const emptiedCategories = await this.findEmptiedCategories(countsBefore);
+    return { movedCount, createdCategories, emptiedCategories };
+  }
+
+  /** 生きているフォルダごとの、生きているマニュアル件数 */
+  private async categoryManualCounts(): Promise<Map<string, number>> {
+    const rows = await this.prisma.manual.groupBy({
+      by: ['categoryId'],
+      where: ALIVE,
+      _count: { _all: true },
+    });
+    return new Map(
+      rows
+        .filter((r) => r.categoryId !== null)
+        .map((r) => [r.categoryId as string, r._count._all]),
+    );
+  }
+
+  /**
+   * 分類の前後を比べて「中身があったのに空になったフォルダ」を返す。
+   * もともと空だったフォルダは対象にしない(この分類で空になったわけではないため)。
+   * 消すかどうかは利用者が決めるので、ここでは候補を挙げるだけ
+   */
+  private async findEmptiedCategories(countsBefore: Map<string, number>) {
+    const countsAfter = await this.categoryManualCounts();
+    const emptiedIds = [...countsBefore.entries()]
+      .filter(([id, before]) => before > 0 && (countsAfter.get(id) ?? 0) === 0)
+      .map(([id]) => id);
+    if (emptiedIds.length === 0) return [];
+    const categories = await this.prisma.manualCategory.findMany({
+      where: { id: { in: emptiedIds }, ...ALIVE },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, createdByAi: true },
+    });
+    return categories;
   }
 
   /** 1件だけAIで分類する(アップロード時の「AIにおまかせ」用)。失敗しても取り込みは成功扱い */
@@ -533,7 +587,7 @@ export class ManualService implements OnApplicationBootstrap {
         if (!allowNew) continue;
         // 同名がゴミ箱にあっても作れる(一意なのは生きているフォルダの中だけ)
         category = await this.prisma.manualCategory.create({
-          data: { name },
+          data: { name, createdByAi: true },
         });
         createdCategories.push(name);
       }
@@ -750,6 +804,76 @@ export class ManualService implements OnApplicationBootstrap {
     );
   }
 
+  /**
+   * 空のフォルダだけをゴミ箱へ移す(再分類後の片付け用)。
+   *
+   * 一覧を出してから押すまでの間に、アップロードや手動の移動で中身が
+   * 入ることがある。通常のフォルダ削除は中身ごと捨てる仕様なので、
+   * そのまま呼ぶとマニュアルが黙ってゴミ箱に落ちる。ここで必ず数え直し、
+   * 空でなくなっていたら見送って名前を返す
+   */
+  async deleteEmptyCategories(ids: string[]) {
+    if (ids.length === 0) return { deletedIds: [], skipped: [] };
+    const categories = await this.prisma.manualCategory.findMany({
+      where: { id: { in: ids }, ...ALIVE },
+      select: { id: true, name: true },
+    });
+    const deletedAt = new Date();
+    const deletedIds: string[] = [];
+    const skipped: string[] = [];
+    for (const category of categories) {
+      // 数えてから消すまでの隙間に中身が入ると、生きているマニュアルが
+      // ゴミ箱のフォルダに取り残される(画面のどこにも出てこなくなる)。
+      // 「空である」ことを条件に含めた1文で書き換え、判定と更新を分けない
+      const updated = await this.prisma.$executeRaw`
+        UPDATE "ManualCategory" c
+        SET deleted_at = ${deletedAt}
+        WHERE c.id = ${category.id}
+          AND c.deleted_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM "Manual" m
+            WHERE m."categoryId" = c.id AND m.deleted_at IS NULL
+          )
+      `;
+      if (updated === 1) deletedIds.push(category.id);
+      else skipped.push(category.name);
+    }
+    return { deletedIds, skipped };
+  }
+
+  /**
+   * 再分類の結果に、今の状態を重ねて返す。
+   *
+   * 空になったフォルダの一覧は完了時点の写しなので、そのまま出すと
+   * 「もう消したフォルダ」「あとから中身が入ったフォルダ」が残ってしまう。
+   * 画面に出す直前に、今も生きていて今も空のものだけに絞る
+   */
+  async reclassifyStatusView(): Promise<ReclassifyStatus> {
+    const job = this.reclassifyJob;
+    if (job.emptiedCategories.length === 0) return job;
+    const ids = job.emptiedCategories.map((c) => c.id);
+    const [alive, counts] = await Promise.all([
+      this.prisma.manualCategory.findMany({
+        where: { id: { in: ids }, ...ALIVE },
+        // サイドバーと同じ並びで出す(見比べながら選べるように)
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, name: true, createdByAi: true },
+      }),
+      this.prisma.manual.groupBy({
+        by: ['categoryId'],
+        where: { ...ALIVE, categoryId: { in: ids } },
+        _count: { _all: true },
+      }),
+    ]);
+    const hasContents = new Set(
+      counts.filter((c) => c._count._all > 0).map((c) => c.categoryId),
+    );
+    return {
+      ...job,
+      emptiedCategories: alive.filter((c) => !hasContents.has(c.id)),
+    };
+  }
+
   /** ゴミ箱のフォルダを中身ごと元に戻す */
   async restoreCategories(ids: string[]) {
     const categories = await this.prisma.manualCategory.findMany({
@@ -771,6 +895,18 @@ export class ManualService implements OnApplicationBootstrap {
             where: { categoryId: category.id, deletedAt: category.deletedAt },
             data: { deletedAt: null, categoryId: live.id },
           }),
+          // 片方でも利用者が作った箱なら、残る方も手作業扱いにする。
+          // そうしないと、手で作った箱を捨てている間にAIが同名の箱を
+          // 作り直していた場合、復元をきっかけに印が消えて、
+          // 空になったときの片付け候補に自動で入ってしまう
+          ...(category.createdByAi || !live.createdByAi
+            ? []
+            : [
+                this.prisma.manualCategory.update({
+                  where: { id: live.id },
+                  data: { createdByAi: false },
+                }),
+              ]),
           this.prisma.manualCategory.delete({ where: { id: category.id } }),
         ]);
         mergedInto.push(category.name);

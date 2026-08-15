@@ -101,10 +101,22 @@ type AutoOrganizeResult {
   createdCategories: [String!]!
 }
 
+type EmptiedCategory {
+  id: ID!
+  name: String!
+  createdByAi: Boolean!
+}
+
+type DeleteEmptyCategoriesResult {
+  deletedIds: [ID!]!
+  skipped: [String!]!
+}
+
 type ReclassifyStatus {
   running: Boolean!
   movedCount: Int!
   createdCategories: [String!]!
+  emptiedCategories: [EmptiedCategory!]!
   error: String
   finishedAt: DateTime
 }
@@ -214,6 +226,7 @@ type Mutation {
   deleteManual(id: ID!): Manual!
   deleteManuals(ids: [ID!]!): Int!
   restoreManuals(ids: [ID!]!): Int!
+  deleteEmptyCategories(ids: [ID!]!): DeleteEmptyCategoriesResult!
   restoreCategories(ids: [ID!]!): RestoreCategoriesResult!
   purgeCategories(ids: [ID!]!): Int!
   purgeManuals(ids: [ID!]!): Int!

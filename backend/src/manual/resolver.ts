@@ -5,6 +5,7 @@ import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
 import {
   AutoOrganizeResult,
+  DeleteEmptyCategoriesResult,
   Manual,
   ManualDownloadTarget,
   ManualSearchResult,
@@ -95,11 +96,12 @@ export class ManualResolver {
     return this.manualService.startReclassifyAll(instruction);
   }
 
-  // 再分類の進行状況(フロントがポーリングして完了を知る)
+  // 再分類の進行状況(フロントがポーリングして完了を知る)。
+  // 空になったフォルダの一覧は、今も生きていて今も空のものだけに絞って返す
   @Roles(UserRole.ADMIN)
   @Query(() => ReclassifyStatus)
   reclassifyStatus() {
-    return this.manualService.reclassifyStatus;
+    return this.manualService.reclassifyStatusView();
   }
 
   // 再分類の対象件数(確認ダイアログの表示用)
@@ -170,6 +172,14 @@ export class ManualResolver {
   @Mutation(() => Int)
   restoreManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
     return this.manualService.restoreMany(ids);
+  }
+
+  // 空のフォルダだけをゴミ箱へ移す(再分類後の片付け)。
+  // 中身が入っていたら見送るので、マニュアルが巻き添えで消えることはない
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => DeleteEmptyCategoriesResult)
+  deleteEmptyCategories(@Args('ids', { type: () => [ID] }) ids: string[]) {
+    return this.manualService.deleteEmptyCategories(ids);
   }
 
   // フォルダを中身ごと元に戻す

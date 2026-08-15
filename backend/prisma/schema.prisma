@@ -1,7 +1,7 @@
 generator client {
-  provider = "prisma-client"
-  output = "../generated/prisma"
-  runtime = "nodejs"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  runtime      = "nodejs"
   moduleFormat = "cjs"
 }
 
@@ -10,22 +10,27 @@ datasource db {
 }
 
 model ManualCategory {
-  id        String    @id @default(uuid())
+  id          String    @id @default(uuid())
   // 一意制約はマイグレーションで書いた部分インデックス
   // (ManualCategory_name_alive_key)で、生きているフォルダの中だけに効かせている。
   // ゴミ箱のフォルダが名前を占有すると、再分類が同じ名前のフォルダを
   // 作れず対象が未分類のまま残ってしまうため。Prismaは部分インデックスを
   // 表現できないので、ここには@uniqueを書かない
-  name      String
-  manuals   Manual[]
+  name        String
+  manuals     Manual[]
+  // AIの自動分類が作ったフォルダかどうか。再分類で空になったフォルダを
+  // 片付けるとき、利用者が自分で作った箱をうっかり消さないよう区別する。
+  // 既定をfalseにしてあるのは安全側に倒すため(書き忘れても
+  // 「消してよい候補」に入らない)。AIが作る経路だけが明示的にtrueを入れる
+  createdByAi Boolean   @default(false) @map("created_by_ai")
   // 管理者がドラッグで決めた並び順(小さいほど上)。同値なら名前順
-  sortOrder Int       @default(0) @map("sort_order")
+  sortOrder   Int       @default(0) @map("sort_order")
   // ゴミ箱。中のマニュアルごとフォルダを捨てられるようにするための印。
   // フォルダと一緒に捨てたマニュアルには、同じ日時をdeletedAtに入れて
   // 「どれを一緒に戻すか」を判別する
-  deletedAt DateTime? @map("deleted_at")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([sortOrder, name])
 }
@@ -60,28 +65,28 @@ enum IngestStatus {
 }
 
 model Manual {
-  id            String            @id @default(uuid())
-  title         String
-  fileKey       String            @map("file_key") // S3上のファイルの場所(キー)
-  fileName      String            @map("file_name") // 元のPDFファイル名
-  fileLastModified DateTime?      @map("file_last_modified") // 元ファイルの最終更新日時(同名アップロード時の新旧判定に使用)
-  mimeType      String            @map("mime_type") @default("application/pdf")
-  size          Int               // ファイルサイズ（バイト）
-  categoryId    String?
-  category      ManualCategory?   @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String          @id @default(uuid())
+  title            String
+  fileKey          String          @map("file_key") // S3上のファイルの場所(キー)
+  fileName         String          @map("file_name") // 元のPDFファイル名
+  fileLastModified DateTime?       @map("file_last_modified") // 元ファイルの最終更新日時(同名アップロード時の新旧判定に使用)
+  mimeType         String          @default("application/pdf") @map("mime_type")
+  size             Int // ファイルサイズ（バイト）
+  categoryId       String?
+  category         ManualCategory? @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   // trueなら管理者が手動で分類した(ピン留め)。AIの再分類では動かさない
-  categoryPinned Boolean          @default(false) @map("category_pinned")
-  chunks        ManualChunk[]
+  categoryPinned   Boolean         @default(false) @map("category_pinned")
+  chunks           ManualChunk[]
   // PDF自体が持つ作成日(取り込み時に読み取る)。一覧の「作成日」列に使う
-  pdfCreatedAt  DateTime?         @map("pdf_created_at")
-  ingestStatus  IngestStatus      @default(PENDING) @map("ingest_status")
-  ingestError   String?           @map("ingest_error") // 失敗理由(FAILEDのとき)
-  chunkCount    Int?              @map("chunk_count") // 作成されたチャンク数
-  ingestedAt    DateTime?         @map("ingested_at")
+  pdfCreatedAt     DateTime?       @map("pdf_created_at")
+  ingestStatus     IngestStatus    @default(PENDING) @map("ingest_status")
+  ingestError      String?         @map("ingest_error") // 失敗理由(FAILEDのとき)
+  chunkCount       Int?            @map("chunk_count") // 作成されたチャンク数
+  ingestedAt       DateTime?       @map("ingested_at")
   // ゴミ箱。値が入っていたら削除済み扱いで、一覧・検索・AI回答から外す
-  deletedAt     DateTime?         @map("deleted_at")
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  deletedAt        DateTime?       @map("deleted_at")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   // 外部キー列にPostgresは自動でインデックスを作らないので明示する。
   // 一覧は「カテゴリで絞って作成日時の降順」で引くため複合にしておく

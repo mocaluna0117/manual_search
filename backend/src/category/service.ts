@@ -40,7 +40,14 @@ export class CategoryService {
       select: { sortOrder: true },
     });
     return this.prisma.manualCategory.create({
-      data: { name: trimmed, sortOrder: (last?.sortOrder ?? 0) + 1 },
+      // 画面の「+」からでも、チャットで頼まれて作る場合でも、
+      // 「利用者が作ると決めた箱」なのでAI作成にはしない。
+      // 再分類で空になっても、勝手に消す候補として扱わないため
+      data: {
+        name: trimmed,
+        sortOrder: (last?.sortOrder ?? 0) + 1,
+        createdByAi: false,
+      },
     });
   }
 

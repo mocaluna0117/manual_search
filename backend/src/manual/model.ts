@@ -114,6 +114,36 @@ export class AutoOrganizeResult {
   createdCategories!: string[];
 }
 
+// 再分類で中身が他へ移り、空になったフォルダ。
+// 消すかどうかは利用者が決めるので、候補として返すだけ
+@ObjectType()
+export class EmptiedCategory {
+  @Field(() => ID)
+  id!: string;
+
+  @Field()
+  name!: string;
+
+  // AIの自動分類が作ったフォルダか。falseなら利用者が自分で作った箱なので、
+  // 画面ではそれと分かるようにして、既定では消す対象から外す
+  @Field()
+  createdByAi!: boolean;
+}
+
+// 空フォルダの片付け結果
+@ObjectType()
+export class DeleteEmptyCategoriesResult {
+  // 実際に消したフォルダ。画面側が「開いていたフォルダを消したか」を
+  // 判定できるよう、件数ではなくIDを返す
+  @Field(() => [ID])
+  deletedIds!: string[];
+
+  // 実行するまでに中身が入った等で消さなかったフォルダ名。
+  // 黙って見送るとマニュアルごと消えたように見えるため必ず伝える
+  @Field(() => [String])
+  skipped!: string[];
+}
+
 // 全件再分類の進行状況。数分かかるためリクエストは待たせず、
 // フロントはこの状態をポーリングして完了を知る
 @ObjectType()
@@ -126,6 +156,10 @@ export class ReclassifyStatus {
 
   @Field(() => [String])
   createdCategories!: string[];
+
+  // この再分類で中身が無くなったフォルダ(もともと空だったものは含まない)
+  @Field(() => [EmptiedCategory])
+  emptiedCategories!: EmptiedCategory[];
 
   @Field(() => String, { nullable: true })
   error!: string | null;

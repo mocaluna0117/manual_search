@@ -434,13 +434,43 @@ export const START_RECLASSIFY_MUTATION: TypedDocumentNode<StartReclassifyData> =
   }
 `
 
+/** 再分類で中身が他へ移り、空になったフォルダ */
+export interface EmptiedCategory {
+  id: string
+  name: string
+  /** AIの自動分類が作ったフォルダか。falseなら利用者が自分で作った箱 */
+  createdByAi: boolean
+}
+
 export interface ReclassifyStatus {
   running: boolean
   movedCount: number
   createdCategories: string[]
+  emptiedCategories: EmptiedCategory[]
   error: string | null
   finishedAt: string | null
 }
+
+interface DeleteEmptyCategoriesData {
+  deleteEmptyCategories: {
+    /** 実際に消したフォルダのID */
+    deletedIds: string[]
+    /** 中身が入っていて消さなかったフォルダ名 */
+    skipped: string[]
+  }
+}
+
+export const DELETE_EMPTY_CATEGORIES_MUTATION: TypedDocumentNode<
+  DeleteEmptyCategoriesData,
+  { ids: string[] }
+> = gql`
+  mutation DeleteEmptyCategories($ids: [ID!]!) {
+    deleteEmptyCategories(ids: $ids) {
+      deletedIds
+      skipped
+    }
+  }
+`
 
 interface ReclassifyStatusData {
   reclassifyStatus: ReclassifyStatus
@@ -452,6 +482,11 @@ export const RECLASSIFY_STATUS_QUERY: TypedDocumentNode<ReclassifyStatusData> = 
       running
       movedCount
       createdCategories
+      emptiedCategories {
+        id
+        name
+        createdByAi
+      }
       error
       finishedAt
     }

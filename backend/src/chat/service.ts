@@ -495,7 +495,15 @@ export class ChatService {
             (result.createdCategories.length > 0
               ? `\n新しく作られたフォルダ: ${result.createdCategories.join('、')}`
               : '') +
-            '\nサイドバーのフォルダを開いて結果を確認してください。空になったフォルダは🗑から削除できます。'
+            // 空になったフォルダは画面側でまとめて片付けられる。
+            // ここで件数だけ伝えて、削除の可否はモーダルで選んでもらう
+            (result.emptiedCategories.length > 0
+              ? `\n中身が他へ移って空になったフォルダが${result.emptiedCategories.length}個あります: ` +
+                `${result.emptiedCategories.map((c) => c.name).join('、')}` +
+                '\n画面に確認が出るので、そこでまとめて削除できます。' +
+                '\n確認を閉じてしまった場合も、サイドバーの🗑から1つずつ削除できます。'
+              : '') +
+            '\nサイドバーのフォルダを開いて結果を確認してください。'
           : `再分類に失敗しました: ${result.error ?? '不明なエラー'}`;
         void this.appendAssistantMessage(conversationId, content).catch(
           () => undefined,

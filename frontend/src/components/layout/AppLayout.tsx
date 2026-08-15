@@ -5,6 +5,7 @@ import type { Category } from '../../graphql/categories'
 import { useLayoutMode, type LayoutMode } from '../../lib/settings'
 import { MobileSidebar, SidebarPanel, type SidebarSections } from './Sidebar'
 import { Tooltip } from '../ui/Tooltip'
+import { EmptiedFolderCleanup } from '../manual/EmptiedFolderCleanup'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -156,6 +157,14 @@ export function AppLayout({ children, ...props }: AppLayoutProps) {
       )}
 
       <MobileSidebar {...props} />
+
+      {/* 再分類で空になったフォルダの片付け確認。
+          サイドバーは左右+スマホ用に複数マウントされるため、
+          見張りはここに1つだけ置く(でないとモーダルが何枚も開く) */}
+      <EmptiedFolderCleanup
+        selectedCategoryId={props.selectedCategoryId}
+        onSelectCategory={props.onSelectCategory}
+      />
     </Flex>
   )
 }
