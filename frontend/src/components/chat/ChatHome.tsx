@@ -36,6 +36,7 @@ import { MarkdownText } from './MarkdownText'
 import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
 import { PromptTemplateMenu } from './PromptTemplateMenu'
 import { Tooltip } from '../ui/Tooltip'
+import { toastError } from '../../lib/toast'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -275,11 +276,11 @@ export function ChatHome({
   const handleAttach = (file: File | null) => {
     if (!file) return
     if (!(file.type in ALLOWED_IMAGE_TYPES)) {
-      window.alert('PNG / JPEG / WebP / GIF の画像を選択してください')
+      toastError('この画像は使えません', 'PNG / JPEG / WebP / GIF を選んでください')
       return
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      window.alert('画像は4MB以下にしてください')
+      toastError('画像が大きすぎます', '4MB以下にしてください')
       return
     }
     setAttachedImage(file)
@@ -416,7 +417,7 @@ export function ChatHome({
         1500,
       )
     } catch {
-      window.alert('コピーできませんでした')
+      toastError('コピーできませんでした')
     }
   }
 

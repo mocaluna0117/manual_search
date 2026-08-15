@@ -19,6 +19,7 @@ import {
   useViewMode,
 } from './ManualItemList'
 import { useManualViewer } from './ManualViewerProvider'
+import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
 
 /** ゴミ箱に入れてから自動削除されるまでの日数(サーバー側の設定と合わせる) */
 const RETENTION_DAYS = 30
@@ -71,9 +72,9 @@ export function TrashView() {
       await action()
       setCheckedIds(new Set())
       setCheckedFolderIds(new Set())
-      window.alert(done)
+      toastSuccess(done)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '実行できませんでした')
+      toastError('実行できませんでした', errorMessage(e, ''))
     } finally {
       setBusy(false)
     }
@@ -95,8 +96,9 @@ export function TrashView() {
       }
     }, `${checkedCount}件を元に戻しました。`).then(() => {
       if (merged.length > 0) {
-        window.alert(
-          `次のフォルダは同じ名前のフォルダが既にあったため、中身をそちらへ戻しました: ${merged.join('、')}`,
+        toastInfo(
+          '同じ名前のフォルダが既にありました',
+          `中身をそちらへ戻しました: ${merged.join('、')}`,
         )
       }
     })

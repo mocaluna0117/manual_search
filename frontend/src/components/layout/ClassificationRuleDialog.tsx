@@ -20,6 +20,7 @@ import {
   UPDATE_RULE_MUTATION,
   type ClassificationRule,
 } from '../../graphql/rules'
+import { errorMessage, toastError } from '../../lib/toast'
 
 interface ClassificationRuleDialogProps {
   open: boolean
@@ -54,7 +55,7 @@ export function ClassificationRuleDialog({
       await createRule({ variables: { text } })
       setNewText('')
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '追加できませんでした')
+      toastError('追加できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -66,7 +67,7 @@ export function ClassificationRuleDialog({
       })
       setEditing(null)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '保存できませんでした')
+      toastError('保存できませんでした', errorMessage(e, ''))
     }
   }
 

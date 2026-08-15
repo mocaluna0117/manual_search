@@ -30,6 +30,7 @@ import {
   fileTypeOf,
   stripExtension,
 } from '../../lib/fileTypes'
+import { toastError } from '../../lib/toast'
 
 interface UploadManualDialogProps {
   open: boolean
@@ -190,10 +191,9 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
     const accepted = files.filter((f) => fileTypeOf(f.name))
     const rejected = files.filter((f) => !fileTypeOf(f.name))
     if (rejected.length > 0) {
-      window.alert(
-        `次のファイルは対応していない形式のためスキップしました:\n` +
-          `${rejected.map((f) => f.name).join('\n')}\n\n` +
-          `対応形式: ${SUPPORTED_LABEL}`,
+      toastError(
+        `${rejected.length}件は対応していない形式です`,
+        `${rejected.map((f) => f.name).join('\n')}\n対応形式: ${SUPPORTED_LABEL}`,
       )
     }
     setItems((prev) => [

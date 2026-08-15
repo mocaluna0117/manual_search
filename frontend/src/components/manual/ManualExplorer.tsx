@@ -42,6 +42,7 @@ import { updatedDateOf } from '../../lib/manualDate'
 import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './ManualViewerProvider'
 import { Tooltip } from '../ui/Tooltip'
+import { errorMessage, toastError, toastReport, toastSuccess } from '../../lib/toast'
 
 /** 表示中の場所。null=ルート(全フォルダ+未分類のマニュアル) */
 export type ExplorerFolder =
@@ -103,11 +104,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       if (nowInFlight.has(id)) continue
       const finished = manuals.find((m) => m.id === id)
       if (!finished) continue // 一覧から消えた(削除・移動)ときは何も言わない
-      window.alert(
-        finished.ingestStatus === 'COMPLETED'
-          ? `「${finished.title}」の取り込みが完了しました（${finished.chunkCount ?? 0}件のチャンク）。AI検索で使えます。`
-          : `「${finished.title}」の取り込みに失敗しました。\n${finished.ingestError ?? ''}`,
-      )
+      if (finished.ingestStatus === 'COMPLETED') {
+        toastSuccess(
+          `「${finished.title}」の取り込みが完了しました`,
+          `${finished.chunkCount ?? 0}件のチャンク。AI検索で使えます`,
+        )
+      } else {
+        toastError(
+          `「${finished.title}」の取り込みに失敗しました`,
+          finished.ingestError ?? undefined,
+        )
+      }
     }
     watchedRef.current = nowInFlight
   }, [data])
@@ -291,7 +298,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     try {
       await moveManual({ variables: { id: manualId, categoryId } })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '移動できませんでした')
+      toastError('移動できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -300,9 +307,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     try {
       await ingestManual({ variables: { id: manual.id } })
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : '再取り込みを開始できませんでした',
-      )
+      toastError('再取り込みを開始できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -364,11 +369,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           ? `次のフォルダは移動できませんでした: ${keptFolders.join('、')}`
           : '',
       ].filter(Boolean)
-      window.alert(
-        lines.join('\n') || '移動できるものがありませんでした。',
-      )
+      toastReport('削除しました', lines.join('\n') || '削除できるものがありませんでした')
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+      toastError('削除できませんでした', errorMessage(e, ''))
     } finally {
       setDeleting(false)
     }
@@ -380,7 +383,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     try {
       await deleteManual({ variables: { id: manual.id } })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+      toastError('削除できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -402,11 +405,11 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       const r = data?.reclassifySelectedManuals
       if (!r) return
       setCheckedIds(new Set())
-      window.alert(
+      toastReport(
+        r.movedCount > 0 ? `${r.movedCount}件を分類し直しました` : '移動はありませんでした',
         (r.movedCount > 0
-          ? `${r.movedCount}件を分類し直しました。\n\n` +
-            r.moved.map((m) => `・${m.title} → 📁 ${m.categoryName}`).join('\n')
-          : '移動したファイルはありません。今の分類のままです。') +
+          ? r.moved.map((m) => `・${m.title} → 📁 ${m.categoryName}`).join('\n')
+          : '今の分類のままです。') +
           // 増えたフォルダは必ず伝える(サイドバーに見慣れない箱が増えるため)
           (r.createdCategories.length > 0
             ? `\n\n新しく作ったフォルダ: ${r.createdCategories.join('、')}`
@@ -421,7 +424,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             : ''),
       )
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '分類し直せませんでした')
+      toastError('分類し直せませんでした', errorMessage(e, ''))
     } finally {
       setReclassifying(false)
     }
@@ -438,15 +441,15 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       const { data: result } = await autoOrganize()
       if (result) {
         const { movedCount, createdCategories } = result.autoOrganizeManuals
-        window.alert(
-          `${movedCount}件を分類しました` +
-            (createdCategories.length > 0
-              ? `\n新しく作られたカテゴリ: ${createdCategories.join('、')}`
-              : ''),
+        toastSuccess(
+          `${movedCount}件を分類しました`,
+          createdCategories.length > 0
+            ? `新しく作られたフォルダ: ${createdCategories.join('、')}`
+            : undefined,
         )
       }
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '自動分類に失敗しました')
+      toastError('自動分類に失敗しました', errorMessage(e, ''))
     }
   }
 
@@ -622,9 +625,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         onRenameManual={(manual, title) => {
           void renameManual({ variables: { id: manual.id, title } }).catch(
             (e: unknown) =>
-              window.alert(
-                e instanceof Error ? e.message : '名前を変更できませんでした',
-              ),
+              toastError('名前を変更できませんでした', errorMessage(e, '')),
           )
         }}
         onTogglePin={(manual) =>

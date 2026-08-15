@@ -4,6 +4,7 @@ import {
   MANUAL_DOWNLOAD_URLS_QUERY,
   type ManualDownloadTarget,
 } from '../../graphql/manuals'
+import { errorMessage, toastError, toastInfo } from '../../lib/toast'
 
 /**
  * マニュアルをまとめてダウンロードする。
@@ -60,7 +61,7 @@ export function useBulkDownload() {
   ) => {
     const ids = items.map((item) => item.id)
     if (ids.length === 0) {
-      window.alert('ダウンロードするファイルを選択してください。')
+      toastInfo('ダウンロードするファイルを選んでください')
       return
     }
     setProgress({ done: 0, total: ids.length })
@@ -73,7 +74,7 @@ export function useBulkDownload() {
       })
       const targets: ManualDownloadTarget[] = data?.manualDownloadUrls ?? []
       if (targets.length === 0) {
-        window.alert('ダウンロードできるファイルがありませんでした。')
+        toastInfo('ダウンロードできるファイルがありませんでした')
         return
       }
 
@@ -113,9 +114,7 @@ export function useBulkDownload() {
       const blob = await zip.generateAsync({ type: 'blob' })
       saveBlob(blob, `${zipName}.zip`)
     } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : 'ダウンロードできませんでした',
-      )
+      toastError('ダウンロードできませんでした', errorMessage(e, ''))
     } finally {
       setProgress(null)
     }

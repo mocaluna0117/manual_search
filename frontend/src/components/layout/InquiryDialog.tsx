@@ -10,6 +10,7 @@ import {
 import { useState } from 'react'
 import { LuCircleCheck, LuSend } from 'react-icons/lu'
 import { SEND_INQUIRY_MUTATION } from '../../graphql/inquiry'
+import { errorMessage, toastError } from '../../lib/toast'
 
 interface InquiryDialogProps {
   open: boolean
@@ -37,7 +38,7 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
       setSent(true)
       setMessage('')
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '送信できませんでした')
+      toastError('送信できませんでした', errorMessage(e, ''))
     }
   }
 

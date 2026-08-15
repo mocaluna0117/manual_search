@@ -18,6 +18,7 @@ import {
 import { LuDownload, LuExternalLink, LuX } from 'react-icons/lu'
 import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
 import { fileTypeOf } from '../../lib/fileTypes'
+import { toastError } from '../../lib/toast'
 
 interface ManualViewerContextValue {
   /** どの画面からでもこれを呼ぶと、アプリ内モーダルでPDFが開く(pageで特定ページを直接表示) */
@@ -94,7 +95,7 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
     } else if (error) {
       urlCacheRef.current.delete(id)
       setViewing(null)
-      window.alert('このマニュアルは削除された可能性があり、開けませんでした')
+      toastError('開けませんでした', 'このマニュアルは削除された可能性があります')
     }
   }
 

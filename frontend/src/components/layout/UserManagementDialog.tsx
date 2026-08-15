@@ -21,6 +21,7 @@ import {
   USERS_QUERY,
   type ManagedUser,
 } from '../../graphql/users'
+import { errorMessage, toastError } from '../../lib/toast'
 
 interface UserManagementDialogProps {
   open: boolean
@@ -63,7 +64,7 @@ export function UserManagementDialog({
       setInviteEmail('')
       setInviteRole('MEMBER')
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '招待できませんでした')
+      toastError('招待できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -77,7 +78,7 @@ export function UserManagementDialog({
         variables: { cognitoSub: user.cognitoSub, role: next },
       })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '変更できませんでした')
+      toastError('変更できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -91,7 +92,7 @@ export function UserManagementDialog({
     try {
       await deleteUser({ variables: { cognitoSub: user.cognitoSub } })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+      toastError('削除できませんでした', errorMessage(e, ''))
     }
   }
 

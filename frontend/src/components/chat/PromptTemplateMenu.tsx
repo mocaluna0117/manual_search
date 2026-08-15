@@ -30,6 +30,7 @@ import {
   UPDATE_TEMPLATE_MUTATION,
   type PromptTemplate,
 } from '../../graphql/templates'
+import { errorMessage, toastError } from '../../lib/toast'
 
 interface PromptTemplateMenuProps {
   /** テンプレートを選んだとき(入力欄に本文を差し込む) */
@@ -166,7 +167,7 @@ function TemplateManagerDialog({
       }
       setEditing(null)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '保存できませんでした')
+      toastError('保存できませんでした', errorMessage(e, ''))
     }
   }
 

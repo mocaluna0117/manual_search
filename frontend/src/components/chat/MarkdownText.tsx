@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
 import { IconLine, splitLeadingIcon, withInlineIcons } from './MessageIcons'
+import { toastError } from '../../lib/toast'
 
 /** 描画された要素から元の文字列だけを取り出す(コピー用) */
 function extractText(node: ReactNode): string {
@@ -31,7 +32,7 @@ function CopyableBlock({ children }: { children: ReactNode }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
-      window.alert('コピーできませんでした')
+      toastError('コピーできませんでした')
     }
   }
 

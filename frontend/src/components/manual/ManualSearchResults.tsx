@@ -19,6 +19,7 @@ import {
 } from './ManualItemList'
 import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './ManualViewerProvider'
+import { errorMessage, toastError, toastSuccess } from '../../lib/toast'
 
 interface ManualSearchResultsProps {
   keyword: string
@@ -98,9 +99,9 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
         variables: { ids: [...checkedIds] },
       })
       setCheckedIds(new Set())
-      window.alert(`${result?.deleteManuals ?? 0}件を削除しました。`)
+      toastSuccess(`${result?.deleteManuals ?? 0}件を削除しました`)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+      toastError('削除できませんでした', errorMessage(e, ''))
     } finally {
       setDeleting(false)
     }
@@ -119,7 +120,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
     try {
       await deleteManual({ variables: { id: manual.id } })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+      toastError('削除できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -204,9 +205,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
         onRenameManual={(manual, title) => {
           void renameManual({ variables: { id: manual.id, title } }).catch(
             (e: unknown) =>
-              window.alert(
-                e instanceof Error ? e.message : '名前を変更できませんでした',
-              ),
+              toastError('名前を変更できませんでした', errorMessage(e, '')),
           )
         }}
         onTogglePin={(manual) =>

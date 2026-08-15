@@ -74,6 +74,7 @@ import { SettingsDialog } from './SettingsDialog'
 import { AnalyticsDialog } from './AnalyticsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
 import { Tooltip } from '../ui/Tooltip'
+import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
 
 /**
  * フォルダをドラッグしていることを示すデータ形式。
@@ -178,7 +179,7 @@ export function SidebarContent({
     try {
       await renameConversation({ variables: { id, title } })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '名前を変更できませんでした')
+      toastError('名前を変更できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -205,7 +206,7 @@ export function SidebarContent({
       setNewCategoryName('')
       setAddingCategory(false)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'カテゴリを作成できませんでした')
+      toastError('カテゴリを作成できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -224,7 +225,7 @@ export function SidebarContent({
       if (category.id === selectedCategoryId) onSelectCategory(null)
     } catch (e) {
       // マニュアルが残っている場合はバックエンドが理由を返してくる
-      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+      toastError('削除できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -289,14 +290,16 @@ export function SidebarContent({
       setReclassifying(false)
       void client.refetchQueries({ include: ['ManualCategories', 'Manuals'] })
       if (status && startedHereRef.current) {
-        window.alert(
-          status.error
-            ? `再分類に失敗しました: ${status.error}`
-            : `再分類が完了しました（${status.movedCount}件を割り当て）` +
-                (status.createdCategories.length > 0
-                  ? `\n新しく作られたフォルダ: ${status.createdCategories.join('、')}`
-                  : ''),
-        )
+        if (status.error) {
+          toastError('再分類に失敗しました', status.error)
+        } else {
+          toastSuccess(
+            `再分類が完了しました（${status.movedCount}件を割り当て）`,
+            status.createdCategories.length > 0
+              ? `新しく作られたフォルダ: ${status.createdCategories.join('、')}`
+              : undefined,
+          )
+        }
       }
       startedHereRef.current = false
     }
@@ -308,7 +311,7 @@ export function SidebarContent({
     const target = counts?.reclassifyCounts.target ?? 0
     const pinned = counts?.reclassifyCounts.pinned ?? 0
     if (target === 0) {
-      window.alert('再分類できるマニュアルがありません。')
+      toastInfo('再分類できるマニュアルがありません')
       return
     }
     if (
@@ -322,13 +325,13 @@ export function SidebarContent({
     try {
       const { data } = await startReclassify()
       if (data?.startReclassifyAll === false) {
-        window.alert('再分類は既に実行中です。完了までお待ちください。')
+        toastInfo('再分類は既に実行中です', '完了までお待ちください')
         return
       }
       startedHereRef.current = true
       setReclassifying(true)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '再分類を開始できませんでした')
+      toastError('再分類を開始できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -368,7 +371,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
     try {
       await reorderCategories({ variables: { ids: next.map((c) => c.id) } })
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '並び替えを保存できませんでした')
+      toastError('並び替えを保存できませんでした', errorMessage(e, ''))
       void client.refetchQueries({ include: ['ManualCategories'] })
     }
   }
@@ -399,9 +402,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
       const manualId = e.dataTransfer.getData('text/plain')
       if (manualId) await deleteManuals({ variables: { ids: [manualId] } })
     } catch (err) {
-      window.alert(
-        err instanceof Error ? err.message : 'ゴミ箱に移動できませんでした',
-      )
+      toastError('ゴミ箱に移動できませんでした', errorMessage(err, ''))
     }
   }
 
@@ -424,7 +425,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
     try {
       await moveManual({ variables: { id: manualId, categoryId } })
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : '移動できませんでした')
+      toastError('移動できませんでした', errorMessage(err, ''))
     }
   }
   const [updateCategory] = useMutation(UPDATE_CATEGORY_MUTATION, {
@@ -446,7 +447,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
       }
       setEditingCategory(null)
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : '名前を変更できませんでした')
+      toastError('名前を変更できませんでした', errorMessage(e, ''))
     }
   }
 

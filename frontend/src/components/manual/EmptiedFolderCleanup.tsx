@@ -18,6 +18,7 @@ import {
   type EmptiedCategory,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
+import { errorMessage, toastError, toastInfo } from '../../lib/toast'
 
 /** 再分類の完了を見に行く間隔(ミリ秒)。数分かかる処理なので急がない */
 const POLL_INTERVAL = 30000
@@ -145,20 +146,19 @@ export function EmptiedFolderCleanup({
         onSelectCategory(null)
       }
       dismiss()
-      window.alert(
-        (deletedIds.length > 0
-          ? `${deletedIds.length}個のフォルダをゴミ箱に移しました。\n取り消したい場合はゴミ箱から戻せます。`
-          : 'ゴミ箱に移したフォルダはありません。') +
+      toastInfo(
+        deletedIds.length > 0
+          ? `${deletedIds.length}個のフォルダをゴミ箱に移しました`
+          : 'ゴミ箱に移したフォルダはありません',
+        (deletedIds.length > 0 ? '取り消したい場合はゴミ箱から戻せます。' : '') +
           // 空でなくなっていた分は必ず伝える(黙って残すと消えたように見える)
           (skipped.length > 0
-            ? `\n\n次のフォルダは中身が入っていたので、そのままにしました: ${skipped.join('、')}`
+            ? `\n中身が入っていたのでそのままにしました: ${skipped.join('、')}`
             : ''),
       )
     } catch (e) {
       // 削除そのものに失敗したとき。閉じずに、選択も残して再試行できるようにする
-      window.alert(
-        e instanceof Error ? e.message : 'フォルダを削除できませんでした',
-      )
+      toastError('フォルダを削除できませんでした', errorMessage(e, ''))
     } finally {
       // 失敗しても閉じられなくならないよう、必ず戻す
       setBusy(false)
