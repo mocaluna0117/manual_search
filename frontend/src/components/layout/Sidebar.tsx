@@ -487,20 +487,6 @@ const FOLDER_MIME = 'application/x-manual-folder'
           {isAdmin && (
             <HStack gap={0}>
               <IconButton
-                aria-label="ゴミ箱"
-                title="ゴミ箱(削除したマニュアル)"
-                size="2xs"
-                variant="ghost"
-                color="fg.muted"
-                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-                onClick={() => {
-                  onSelectTrash()
-                  onNavigate?.()
-                }}
-              >
-                <LuTrash2 />
-              </IconButton>
-              <IconButton
                 aria-label="AIで全マニュアルを再分類"
                 title="AIで全マニュアルを再分類"
                 size="2xs"
@@ -738,6 +724,22 @@ const FOLDER_MIME = 'application/x-manual-folder'
             <FcOpenedFolder style={{ filter: 'grayscale(1)', opacity: 0.85 }} />{' '}
             未分類
           </Button>
+          {/* ゴミ箱(管理者のみ)。毎日使うものではないので、一覧の最下段に置く */}
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              justifyContent="flex-start"
+              color="fg.muted"
+              _hover={{ bg: 'bg.emphasized' }}
+              onClick={() => {
+                onSelectTrash()
+                onNavigate?.()
+              }}
+            >
+              <LuTrash2 /> ゴミ箱
+            </Button>
+          )}
 
         </VStack>
         </>
