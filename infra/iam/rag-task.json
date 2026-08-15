@@ -10,6 +10,15 @@
         "arn:aws:bedrock:ap-northeast-1:271357390238:inference-profile/jp.anthropic.claude-haiku-4-5-20251001-v1:0",
         "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
       ]
+    },
+    {
+      "Sid": "InvokeChatModelWithStreaming",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModelWithResponseStream",
+      "Resource": [
+        "arn:aws:bedrock:ap-northeast-1:271357390238:inference-profile/jp.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
+      ]
     }
   ]
 }

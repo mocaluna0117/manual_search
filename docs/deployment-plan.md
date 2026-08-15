@@ -90,7 +90,10 @@
 ## 4. セキュリティ設計の要点
 
 - **公開されるのはCloudFrontだけ**。ALBはCloudFrontからのみ、RDS/ragは内部からのみ
-- ECSタスクロールに最小権限（S3の対象バケットのみ / bedrock:InvokeModelのみ）
+- ECSタスクロールに最小権限（S3の対象バケットのみ / bedrockは呼ぶモデルのみ）
+  - 回答のストリーミング(converse_stream)には `bedrock:InvokeModelWithResponseStream` が別途必要。
+    `InvokeModel` があっても許可されず、AccessDeniedExceptionになる（2026-08-16に踏んだ）。
+    埋め込み(Titan)はストリーミングしないので対象外。定義は infra/iam/rag-task.json
 - 秘密情報は Secrets Manager（DBパスワード、必要ならCognito設定）
 - ⚠️ 個人アカウントの間は**ダミーPDFのみ**。実マニュアルは会社アカウント移行後
 
