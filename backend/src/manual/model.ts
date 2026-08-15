@@ -9,7 +9,7 @@ registerEnumType(IngestStatus, {
 
 export { IngestStatus };
 
-// アップロード先の情報。フロントはuploadUrlへPDFをPUTし、
+// アップロード先の情報。フロントはuploadUrlへファイルをPUTし、
 // 完了後にfileKeyを添えてregisterManualを呼ぶ
 @ObjectType()
 export class ManualUploadTarget {

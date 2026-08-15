@@ -86,7 +86,7 @@ export class RagService {
     return body.status;
   }
 
-  /** PDFの取り込み(テキスト抽出→チャンク分割→DB保存)をPythonに依頼する */
+  /** ファイルの取り込み(テキスト抽出→チャンク分割→DB保存)をPythonに依頼する */
   async ingest(
     manualId: string,
     downloadUrl: string,
@@ -99,7 +99,7 @@ export class RagService {
     });
     if (!res.ok) {
       throw new ServiceUnavailableException(
-        `PDFの取り込みに失敗しました (HTTP ${res.status})`,
+        `ファイルの取り込みに失敗しました (HTTP ${res.status})`,
       );
     }
     const body = (await res.json()) as {

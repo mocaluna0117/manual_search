@@ -178,7 +178,8 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
       // 2) ストレージへ直接PUT
       const putResponse = await fetch(uploadUrl, {
         method: 'PUT',
-        // 署名時と同じContent-Typeを送る。食い違うと署名が一致せず403になる
+        // 保存されるオブジェクトのContent-Typeはここで決まる。
+        // 形式に合った値を送っておく(PDF固定のままだと種別を誤って持つ)
         headers: {
           'Content-Type':
             fileTypeOf(item.file.name)?.mimeType ?? 'application/octet-stream',

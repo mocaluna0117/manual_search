@@ -68,8 +68,9 @@ export class StorageService {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: fileKey,
-      // 形式ごとに正しいContent-Typeで署名する。ここがPUT時のヘッダと
-      // 食い違うと署名が一致せず、アップロードが403で弾かれる
+      // 保存されるオブジェクトのContent-Type。署名対象はhostだけなので
+      // これ自体が検証されるわけではないが、フロントが同じ値をPUTするので
+      // 「Excelなのにapplication/pdfで保存される」状態を防げる
       ContentType: mimeTypeOf(fileName),
     });
     const uploadUrl = await getSignedUrl(this.presignS3, command, { expiresIn: 900 });

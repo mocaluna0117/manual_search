@@ -1,6 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Roles, UserRole } from '../auth/roles';
+import {
+  SUPPORTED_EXTENSIONS,
+  fileTypeOf,
+} from '../storage/file-types';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
 import {
@@ -42,8 +46,12 @@ export class ManualResolver {
   createManualUploadUrl(
     @Args('fileName') fileName: string,
   ): Promise<ManualUploadTarget> {
-    if (!fileName.toLowerCase().endsWith('.pdf')) {
-      throw new BadRequestException('PDFファイルのみアップロードできます');
+    // 対応形式の判定は file-types.ts に集約してある。
+    // ここで独自に拡張子を見ると、形式を増やしたときに取りこぼす
+    if (!fileTypeOf(fileName)) {
+      throw new BadRequestException(
+        `対応していない形式です。アップロードできるのは ${SUPPORTED_EXTENSIONS} です`,
+      );
     }
     return this.storageService.createUploadUrl(fileName);
   }

@@ -26,7 +26,7 @@ ALLOWED_DOWNLOAD_HOSTS = [
     if h.strip()
 ]
 
-# 取り込むPDFのサイズ上限(メモリ枯渇と巨大ファイルによる詰まりを防ぐ)
+# 取り込むファイルのサイズ上限(メモリ枯渇と巨大ファイルによる詰まりを防ぐ)
 MAX_DOWNLOAD_BYTES = int(os.environ.get("RAG_MAX_DOWNLOAD_BYTES", 100 * 1024 * 1024))
 
 # ダウンロードのタイムアウト(秒)
@@ -92,7 +92,7 @@ def validate_download_url(url: str) -> None:
 
 
 def fetch_file(url: str) -> bytes:
-    """検証済みURLからPDFを取得する(サイズ上限とタイムアウト付き)"""
+    """検証済みURLからファイルを取得する(サイズ上限とタイムアウト付き)"""
     import urllib.request
 
     validate_download_url(url)
@@ -108,8 +108,8 @@ def fetch_file(url: str) -> bytes:
         raise
     except Exception as e:
         # 例外の中身をそのまま返すと到達性や内部構成が漏れるのでログだけに残す
-        logger.warning("PDFの取得に失敗: %s", e)
-        raise HTTPException(status_code=400, detail="PDFを取得できませんでした")
+        logger.warning("ファイルの取得に失敗: %s", e)
+        raise HTTPException(status_code=400, detail="ファイルを取得できませんでした")
 
     if len(data) > MAX_DOWNLOAD_BYTES:
         raise HTTPException(status_code=413, detail="ファイルが大きすぎます")
