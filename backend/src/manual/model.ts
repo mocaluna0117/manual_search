@@ -130,6 +130,34 @@ export class EmptiedCategory {
   createdByAi!: boolean;
 }
 
+// 選んだマニュアルを分類し直した結果
+@ObjectType()
+export class ReclassifiedManual {
+  @Field()
+  title!: string;
+
+  @Field()
+  categoryName!: string;
+}
+
+@ObjectType()
+export class ReclassifySelectedResult {
+  @Field(() => Int)
+  movedCount!: number;
+
+  // 実際にどこへ入ったか(1件ずつ画面で見せる)
+  @Field(() => [ReclassifiedManual])
+  moved!: ReclassifiedManual[];
+
+  // ピン留めされていて動かさなかったマニュアルの名前
+  @Field(() => [String])
+  skippedPinned!: string[];
+
+  // 取り込みが終わっておらず、中身を読めなかったマニュアルの名前
+  @Field(() => [String])
+  skippedNotReady!: string[];
+}
+
 // 空フォルダの片付け結果
 @ObjectType()
 export class DeleteEmptyCategoriesResult {

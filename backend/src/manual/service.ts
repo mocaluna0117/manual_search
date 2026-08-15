@@ -455,7 +455,12 @@ export class ManualService implements OnApplicationBootstrap {
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
     if (manuals.length === 0) {
-      return { movedCount: 0, createdCategories: [], emptiedCategories: [] };
+      return {
+        movedCount: 0,
+        createdCategories: [],
+        emptiedCategories: [],
+        moved: [],
+      };
     }
 
     // 1回の呼び出し時間とレスポンスJSONのトークン量の両方に余裕を持たせる。
@@ -470,6 +475,7 @@ export class ManualService implements OnApplicationBootstrap {
     const BATCH_SIZE = 50;
     let movedCount = 0;
     const createdCategories: string[] = [];
+    const moved: { manualId: string; categoryName: string }[] = [];
     for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
       const batch = manuals.slice(i, i + BATCH_SIZE);
       // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)。
@@ -491,9 +497,10 @@ export class ManualService implements OnApplicationBootstrap {
       const result = await this.applyAssignments(assignments, allowNew);
       movedCount += result.movedCount;
       createdCategories.push(...result.createdCategories);
+      moved.push(...result.moved);
     }
     const emptiedCategories = await this.findEmptiedCategories(countsBefore);
-    return { movedCount, createdCategories, emptiedCategories };
+    return { movedCount, createdCategories, emptiedCategories, moved };
   }
 
   /** 生きているフォルダごとの、生きているマニュアル件数 */
@@ -527,6 +534,51 @@ export class ManualService implements OnApplicationBootstrap {
       select: { id: true, name: true, createdByAi: true },
     });
     return categories;
+  }
+
+  /**
+   * 選んだマニュアルだけをAIで分類し直す。
+   *
+   * 既存のフォルダの中からだけ選ばせる(allowNew=false)。数件を直すための
+   * 操作で新しいフォルダが増えると、かえって散らかるため。
+   * ピン留めされたものは動かさない(ピン留めは「AIに動かされたくない」という
+   * 意思表示なので、まとめて選ばれても尊重する)。黙って残すと直ったように
+   * 見えてしまうので、件数を返して画面で伝える。
+   */
+  async reclassifySelected(ids: string[]) {
+    if (ids.length === 0) {
+      return { movedCount: 0, skippedPinned: [], skippedNotReady: [], moved: [] };
+    }
+    // 対象になり得るものと、ならないものを先に分ける(理由を伝えるため)
+    const targets = await this.prisma.manual.findMany({
+      where: { id: { in: ids }, ...ALIVE },
+      select: {
+        id: true,
+        title: true,
+        categoryPinned: true,
+        ingestStatus: true,
+      },
+    });
+    const skippedPinned = targets
+      .filter((m) => m.categoryPinned)
+      .map((m) => m.title);
+    // 取り込みが終わっていないものは中身が読めないので分類できない
+    const skippedNotReady = targets
+      .filter((m) => !m.categoryPinned && m.ingestStatus !== IngestStatus.COMPLETED)
+      .map((m) => m.title);
+
+    const result = await this.organizeManuals({ id: { in: ids } }, false);
+
+    const titleById = new Map(targets.map((m) => [m.id, m.title]));
+    return {
+      movedCount: result.movedCount,
+      skippedPinned,
+      skippedNotReady,
+      moved: result.moved.map((m) => ({
+        title: titleById.get(m.manualId) ?? '',
+        categoryName: m.categoryName,
+      })),
+    };
   }
 
   /** 1件だけAIで分類する(アップロード時の「AIにおまかせ」用)。失敗しても取り込みは成功扱い */
@@ -575,7 +627,9 @@ export class ManualService implements OnApplicationBootstrap {
     allowNew = true,
   ) {
     const createdCategories: string[] = [];
-    let movedCount = 0;
+    // どのマニュアルをどのフォルダへ入れたか。選んだファイルだけを
+    // 分類したときに、1件ずつ結果を見せられるようにする
+    const moved: { manualId: string; categoryName: string }[] = [];
     for (const assignment of assignments) {
       const name = assignment.category.trim();
       if (!name) continue;
@@ -598,9 +652,9 @@ export class ManualService implements OnApplicationBootstrap {
         where: { id: assignment.manualId },
         data: { categoryId: category.id },
       });
-      movedCount++;
+      moved.push({ manualId: assignment.manualId, categoryName: category.name });
     }
-    return { movedCount, createdCategories };
+    return { movedCount: moved.length, createdCategories, moved };
   }
 
   /** マニュアルを別カテゴリへ移動する(categoryId=nullで未分類へ) */

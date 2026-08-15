@@ -16,6 +16,7 @@ import {
   ManualUploadTarget,
   ManualViewTarget,
   ReclassifyCounts,
+  ReclassifySelectedResult,
   ReclassifyStatus,
   RegisterManualResult,
   RestoreCategoriesResult,
@@ -181,6 +182,16 @@ export class ManualResolver {
   @Mutation(() => Int)
   restoreManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
     return this.manualService.restoreMany(ids);
+  }
+
+  // 選んだマニュアルだけをAIで分類し直す。
+  // 既存のフォルダの中から選ばせる(新しいフォルダは作らない)
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => ReclassifySelectedResult)
+  reclassifySelectedManuals(
+    @Args('ids', { type: () => [ID] }) ids: string[],
+  ) {
+    return this.manualService.reclassifySelected(ids);
   }
 
   // 空のフォルダだけをゴミ箱へ移す(再分類後の片付け)。

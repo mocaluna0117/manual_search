@@ -25,6 +25,7 @@ import {
   MANUALS_QUERY,
   DELETE_MANUALS_MUTATION,
   MOVE_MANUAL_MUTATION,
+  RECLASSIFY_SELECTED_MUTATION,
   SET_MANUAL_PINNED_MUTATION,
   type Manual,
 } from '../../graphql/manuals'
@@ -257,6 +258,11 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const [deleteCategory] = useMutation(DELETE_CATEGORY_MUTATION, {
     refetchQueries: ['Manuals', 'ManualCategories'],
   })
+  const [reclassifying, setReclassifying] = useState(false)
+  const [reclassifySelected] = useMutation(RECLASSIFY_SELECTED_MUTATION, {
+    // 分類先が変わるので、一覧とフォルダの件数を取り直す
+    refetchQueries: ['Manuals', 'ManualCategories'],
+  })
   const [autoOrganize, { loading: organizing }] = useMutation(
     AUTO_ORGANIZE_MUTATION,
     { refetchQueries: ['Manuals', 'ManualCategories'] },
@@ -361,6 +367,45 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     }
   }
 
+  /** チェックしたファイルだけをAIで分類し直す */
+  const reclassifyChecked = async () => {
+    const ids = [...checkedIds]
+    if (ids.length === 0) return
+    if (
+      !window.confirm(
+        `選択した${ids.length}件を、AIが内容から分類し直します。\n` +
+          '入れ先は今あるフォルダの中から選びます(新しいフォルダは作りません)。\n' +
+          'ピン留めしたファイルは動かしません。よろしいですか？',
+      )
+    )
+      return
+    setReclassifying(true)
+    try {
+      const { data } = await reclassifySelected({ variables: { ids } })
+      const r = data?.reclassifySelectedManuals
+      if (!r) return
+      setCheckedIds(new Set())
+      window.alert(
+        (r.movedCount > 0
+          ? `${r.movedCount}件を分類し直しました。\n\n` +
+            r.moved.map((m) => `・${m.title} → 📁 ${m.categoryName}`).join('\n')
+          : '移動したファイルはありません。今の分類のままです。') +
+          // 動かさなかった分は理由と一緒に伝える(黙っていると直ったように見える)
+          (r.skippedPinned.length > 0
+            ? `\n\nピン留めのため動かしませんでした: ${r.skippedPinned.join('、')}` +
+              '\n(右クリックのメニューからピン留めを外せます)'
+            : '') +
+          (r.skippedNotReady.length > 0
+            ? `\n\n取り込みが終わっていないため分類できませんでした: ${r.skippedNotReady.join('、')}`
+            : ''),
+      )
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '分類し直せませんでした')
+    } finally {
+      setReclassifying(false)
+    }
+  }
+
   const handleAutoOrganize = async () => {
     if (
       !window.confirm(
@@ -445,6 +490,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           </Button>
         )}
         {/* 一括ダウンロード。選択があれば選択分、無ければ表示中/全件 */}
+        {checkedIds.size > 0 && isAdmin && (
+          <Button
+            size="xs"
+            colorPalette="purple"
+            variant="outline"
+            loading={reclassifying}
+            onClick={() => void reclassifyChecked()}
+          >
+            <LuBot /> 選択した{checkedIds.size}件を再分類
+          </Button>
+        )}
         {checkedCount > 0 && isAdmin && (
           <Button
             size="xs"

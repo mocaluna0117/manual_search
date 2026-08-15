@@ -413,6 +413,36 @@ export const MOVE_MANUAL_MUTATION: TypedDocumentNode<
   }
 `
 
+// --- 選んだマニュアルだけを分類し直す(ADMIN専用) ---
+
+interface ReclassifySelectedData {
+  reclassifySelectedManuals: {
+    movedCount: number
+    moved: { title: string; categoryName: string }[]
+    /** ピン留めされていて動かさなかった分 */
+    skippedPinned: string[]
+    /** 取り込みが終わっておらず中身を読めなかった分 */
+    skippedNotReady: string[]
+  }
+}
+
+export const RECLASSIFY_SELECTED_MUTATION: TypedDocumentNode<
+  ReclassifySelectedData,
+  { ids: string[] }
+> = gql`
+  mutation ReclassifySelectedManuals($ids: [ID!]!) {
+    reclassifySelectedManuals(ids: $ids) {
+      movedCount
+      moved {
+        title
+        categoryName
+      }
+      skippedPinned
+      skippedNotReady
+    }
+  }
+`
+
 // --- AIによる自動分類(ADMIN専用) ---
 
 interface AutoOrganizeData {

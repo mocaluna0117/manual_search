@@ -136,6 +136,18 @@ type EmptiedCategory {
   createdByAi: Boolean!
 }
 
+type ReclassifiedManual {
+  title: String!
+  categoryName: String!
+}
+
+type ReclassifySelectedResult {
+  movedCount: Int!
+  moved: [ReclassifiedManual!]!
+  skippedPinned: [String!]!
+  skippedNotReady: [String!]!
+}
+
 type DeleteEmptyCategoriesResult {
   deletedIds: [ID!]!
   skipped: [String!]!
@@ -265,6 +277,7 @@ type Mutation {
   deleteManual(id: ID!): Manual!
   deleteManuals(ids: [ID!]!): Int!
   restoreManuals(ids: [ID!]!): Int!
+  reclassifySelectedManuals(ids: [ID!]!): ReclassifySelectedResult!
   deleteEmptyCategories(ids: [ID!]!): DeleteEmptyCategoriesResult!
   restoreCategories(ids: [ID!]!): RestoreCategoriesResult!
   purgeCategories(ids: [ID!]!): Int!
