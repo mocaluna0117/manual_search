@@ -38,6 +38,7 @@ import {
   type SortKey,
 } from './ManualItemList'
 import { extensionOf } from '../../lib/fileTypes'
+import { updatedDateOf } from '../../lib/manualDate'
 import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './ManualViewerProvider'
 import { Tooltip } from '../ui/Tooltip'
@@ -144,16 +145,19 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         extensionOf(a.fileName).localeCompare(extensionOf(b.fileName)) * dir ||
         a.title.localeCompare(b.title, 'ja')
       )
-    if (sortKey === 'createdAt')
-      // PDFの作成日が読めていないものは末尾へ寄せる
-      return (a.pdfCreatedAt ?? '').localeCompare(b.pdfCreatedAt ?? '') * dir
+    if (sortKey === 'updatedAt')
+      return (
+        (updatedDateOf(a).date ?? '').localeCompare(
+          updatedDateOf(b).date ?? '',
+        ) * dir
+      )
     return a.title.localeCompare(b.title, 'ja') * (sortKey ? dir : 1)
   })
   // フォルダは常にファイルより先(Windowsと同じ)。
   // 列で並べ替えていないときは、サーバーから来た順(管理者が決めた並び)のまま
   const categories = sortKey
     ? [...(categoriesData?.manualCategories ?? [])].sort((a, b) => {
-        if (sortKey === 'createdAt')
+        if (sortKey === 'updatedAt')
           return (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '') * dir
         if (sortKey === 'size')
           return ((a.totalSize ?? 0) - (b.totalSize ?? 0)) * dir

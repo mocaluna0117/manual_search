@@ -16,6 +16,7 @@ import {
 } from 'react-icons/fc'
 import { LuMail } from 'react-icons/lu'
 import { extensionOf, fileIconOf } from '../../lib/fileTypes'
+import { updatedDateOf } from '../../lib/manualDate'
 
 /** ファイル形式ごとのアイコン。一目で種類が分かるようにする */
 function FileIcon({ fileName, size }: { fileName: string; size: number }) {
@@ -63,7 +64,7 @@ import { Tooltip } from '../ui/Tooltip'
 export type ViewMode = 'details' | 'icons'
 const VIEW_MODE_KEY = 'manualSearch.explorerViewMode'
 
-export type SortKey = 'name' | 'type' | 'createdAt' | 'size'
+export type SortKey = 'name' | 'type' | 'updatedAt' | 'size'
 
 /** 表示形式をlocalStorageに保存して共有する(一覧をどこで開いても同じ形式) */
 export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
@@ -417,7 +418,7 @@ export function ManualItemList({
             )}
             {sortHeader('名前', 'name')}
             {sortHeader('種類', 'type', '70px')}
-            {sortHeader('作成日', 'createdAt', '140px')}
+            {sortHeader('更新日', 'updatedAt', '140px')}
             {sortHeader('サイズ', 'size', '80px')}
           </HStack>
 
@@ -504,9 +505,24 @@ export function ManualItemList({
                 <Text w="70px" fontSize="sm" color="fg.muted" flexShrink={0}>
                   {extensionOf(manual.fileName)}
                 </Text>
-                <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
-                  {formatDateTime(manual.pdfCreatedAt ?? undefined)}
-                </Text>
+                {(() => {
+                  const { date, isFallback } = updatedDateOf(manual)
+                  return (
+                    <Text
+                      w="140px"
+                      fontSize="sm"
+                      color={isFallback ? 'fg.subtle' : 'fg.muted'}
+                      flexShrink={0}
+                      title={
+                        isFallback
+                          ? '元ファイルの更新日が分からないため、登録した日を表示しています'
+                          : '元ファイルの最終更新日'
+                      }
+                    >
+                      {formatDateTime(date ?? undefined)}
+                    </Text>
+                  )
+                })()}
                 <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0}>
                   {formatSize(manual.size)}
                 </Text>

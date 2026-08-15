@@ -39,7 +39,11 @@ export interface Manual {
   ingestError: string | null
   chunkCount: number | null
   updatedAt: string // DBの更新時刻(並べ替えの保険用)
-  pdfCreatedAt: string | null // PDF自体が持つ作成日(「作成日」列)
+  // 元ファイル自体の最終更新日(「更新日」列)。この項目より前に
+  // 登録されたものはnullなので、その場合は登録日で代用する
+  fileLastModified: string | null
+  createdAt: string // このアプリに登録した日時
+  pdfCreatedAt: string | null // PDF自体が持つ作成日
   categoryPinned: boolean // ピン留め済み(AIの再分類で動かない)
   deletedAt?: string | null // ゴミ箱に入れた日時
 }
@@ -113,6 +117,8 @@ export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
       ingestError
       chunkCount
       updatedAt
+      fileLastModified
+      createdAt
       pdfCreatedAt
       categoryPinned
     }
@@ -192,7 +198,9 @@ export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
         ingestError
         chunkCount
         updatedAt
-        pdfCreatedAt
+        fileLastModified
+      createdAt
+      pdfCreatedAt
         categoryPinned
       }
       snippet
@@ -237,6 +245,8 @@ export const TRASHED_MANUALS_QUERY: TypedDocumentNode<TrashedManualsData> = gql`
       ingestError
       chunkCount
       updatedAt
+      fileLastModified
+      createdAt
       pdfCreatedAt
       categoryPinned
       deletedAt
