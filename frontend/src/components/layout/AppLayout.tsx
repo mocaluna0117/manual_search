@@ -1,4 +1,4 @@
-import { Box, Flex, IconButton } from '@chakra-ui/react'
+import { Box, Flex, HStack, IconButton, Image } from '@chakra-ui/react'
 import { useState, type ReactNode } from 'react'
 import { LuPanelLeft, LuPanelRight } from 'react-icons/lu'
 import type { Category } from '../../graphql/categories'
@@ -97,24 +97,39 @@ export function AppLayout({ children, ...props }: AppLayoutProps) {
         />
       )}
 
-      {/* 閉じているときに出す「開く」ボタン(PCのみ。スマホはハンバーガー) */}
+      {/* 閉じているときに出す「開く」ボタンとホーム(PCのみ。スマホはハンバーガー)。
+          サイドバーを閉じていてもホーム(新しいチャット)に戻れるようにする */}
       {leftCollapsed && (
-        <IconButton
-          aria-label="サイドバーを開く"
-          title="サイドバーを開く"
-          size="sm"
-          variant="ghost"
-          color="fg.muted"
-          _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+        <HStack
           position="fixed"
           top={3}
           left={3}
           zIndex={20}
+          gap={0}
           display={{ base: 'none', md: 'flex' }}
-          onClick={toggleLeft}
         >
-          <LuPanelLeft />
-        </IconButton>
+          <IconButton
+            aria-label="サイドバーを開く"
+            title="サイドバーを開く"
+            size="sm"
+            variant="ghost"
+            color="fg.muted"
+            _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+            onClick={toggleLeft}
+          >
+            <LuPanelLeft />
+          </IconButton>
+          <IconButton
+            aria-label="新しいチャット(ホーム)"
+            title="新しいチャット(ホーム)"
+            size="sm"
+            variant="ghost"
+            _hover={{ bg: 'bg.emphasized' }}
+            onClick={() => props.onSelectCategory(null)}
+          >
+            <Image src="/favicon.svg" alt="" boxSize="20px" />
+          </IconButton>
+        </HStack>
       )}
       {hasRight && rightCollapsed && (
         <IconButton

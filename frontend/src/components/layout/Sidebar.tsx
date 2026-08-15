@@ -10,6 +10,7 @@ import {
   Drawer,
   HStack,
   IconButton,
+  Image,
   Input,
   Portal,
   Separator,
@@ -88,6 +89,29 @@ export interface SidebarProps {
 
 /** サイドバーに出す内容の範囲 */
 export type SidebarSections = 'both' | 'chat' | 'manuals'
+
+/**
+ * 左上のアプリ名。押すと新しいチャット(=ホーム)へ戻る。
+ * ChatGPTと同じで、ロゴがホームへの入口を兼ねる
+ */
+function AppBrand({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      px={2}
+      gap={2}
+      fontWeight="bold"
+      color="fg"
+      title="新しいチャット(ホーム)"
+      _hover={{ bg: 'bg.emphasized' }}
+      onClick={onClick}
+    >
+      <Image src="/favicon.svg" alt="" boxSize="20px" />
+      Manualy
+    </Button>
+  )
+}
 
 /** サイドバーの中身。PC(常設)とスマホ(Drawer)の両方から使う */
 export function SidebarContent({
@@ -930,25 +954,31 @@ export function SidebarPanel({
       flexDirection="column"
       position="relative"
     >
-      {/* 開閉ボタン(パネル上部。外側の端に寄せる) */}
-      {onToggleCollapse && (
-        <HStack
-          px={3}
-          pt={3}
-          flexShrink={0}
-          justify={side === 'left' ? 'flex-start' : 'flex-end'}
-        >
-          <IconButton
-            aria-label="サイドバーを閉じる"
-            title="サイドバーを閉じる"
-            size="sm"
-            variant="ghost"
-            color="fg.muted"
-            _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-            onClick={onToggleCollapse}
-          >
-            {side === 'left' ? <LuPanelLeft /> : <LuPanelRight />}
-          </IconButton>
+      {/* パネル上部。左パネルにはアプリ名(ホームへの入口)を置く */}
+      {(onToggleCollapse || side === 'left') && (
+        <HStack px={3} pt={3} flexShrink={0} gap={1}>
+          {side === 'left' && (
+            <AppBrand
+              onClick={() => {
+                props.onSelectCategory(null) // ホーム=新しいチャット
+                props.onNavigate?.()
+              }}
+            />
+          )}
+          <Box flex="1" />
+          {onToggleCollapse && (
+            <IconButton
+              aria-label="サイドバーを閉じる"
+              title="サイドバーを閉じる"
+              size="sm"
+              variant="ghost"
+              color="fg.muted"
+              _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+              onClick={onToggleCollapse}
+            >
+              {side === 'left' ? <LuPanelLeft /> : <LuPanelRight />}
+            </IconButton>
+          )}
         </HStack>
       )}
       <Box flex="1" minH={0}>
@@ -1006,7 +1036,13 @@ export function MobileSidebar(props: SidebarProps) {
               {/* 閉じるボタンは専用の行に置く。
                   Drawer.CloseTriggerはChakraのレシピで絶対配置になり中身と重なるため、
                   通常のボタンで自前に閉じる */}
-              <HStack justify="flex-end" px={2} pt={2} flexShrink={0}>
+              <HStack justify="space-between" px={2} pt={2} flexShrink={0}>
+                <AppBrand
+                  onClick={() => {
+                    props.onSelectCategory(null)
+                    setOpen(false)
+                  }}
+                />
                 <IconButton
                   aria-label="メニューを閉じる"
                   variant="ghost"
