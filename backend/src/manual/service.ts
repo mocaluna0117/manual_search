@@ -733,14 +733,20 @@ export class ManualService implements OnApplicationBootstrap {
       orderBy: { deletedAt: 'desc' },
     });
     return Promise.all(
-      categories.map(async (category) => ({
-        ...category,
-        // 一緒に捨てられた=同じ日時のものを数える
-        manualCount: await this.prisma.manual.count({
+      categories.map(async (category) => {
+        // 一緒に捨てられた=同じ日時のものだけを数える。
+        // フォルダを捨てる前から個別にゴミ箱にあった分は別扱い
+        const stats = await this.prisma.manual.aggregate({
           where: { categoryId: category.id, deletedAt: category.deletedAt },
-        }),
-        totalSize: 0,
-      })),
+          _count: { _all: true },
+          _sum: { size: true },
+        });
+        return {
+          ...category,
+          manualCount: stats._count._all,
+          totalSize: stats._sum.size ?? 0,
+        };
+      }),
     );
   }
 
