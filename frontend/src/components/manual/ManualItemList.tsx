@@ -7,33 +7,10 @@ import {
   Text,
 } from '@chakra-ui/react'
 import { useEffect, useState, type ReactNode } from 'react'
-import {
-  FcDataSheet,
-  FcDocument,
-  FcFile,
-  FcFolder,
-  FcVoicePresentation,
-} from 'react-icons/fc'
-import { LuMail } from 'react-icons/lu'
-import { extensionOf, fileIconOf } from '../../lib/fileTypes'
+import { FcFolder } from 'react-icons/fc'
+import { extensionOf } from '../../lib/fileTypes'
 import { updatedDateOf } from '../../lib/manualDate'
-
-/** ファイル形式ごとのアイコン。一目で種類が分かるようにする */
-function FileIcon({ fileName, size }: { fileName: string; size: number }) {
-  switch (fileIconOf(fileName)) {
-    case 'word':
-      return <FcDocument size={size} />
-    case 'excel':
-      return <FcDataSheet size={size} />
-    case 'powerpoint':
-      return <FcVoicePresentation size={size} />
-    case 'mail':
-      return <LuMail size={size} color="#0a66c2" />
-    default:
-      // PDFと未知の形式は共通の書類アイコン
-      return <FcFile size={size} />
-  }
-}
+import { FileIcon } from './FileIcon'
 import {
   LuBookOpen,
   LuChevronDown,

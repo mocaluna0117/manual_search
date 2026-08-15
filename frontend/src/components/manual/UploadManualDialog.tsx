@@ -24,6 +24,7 @@ import {
   type RegisterOutcome,
 } from '../../graphql/manuals'
 import { formatSize } from '../../lib/format'
+import { FileIcon } from './FileIcon'
 import {
   ACCEPT_ATTR,
   SUPPORTED_LABEL,
@@ -377,6 +378,10 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                       <Box key={`${item.file.name}-${i}`}>
                         <HStack gap={2}>
                           <StatusBadge item={item} />
+                          {/* どの形式として扱われるかを、上げる前に確かめられる */}
+                          <Box flexShrink={0}>
+                            <FileIcon fileName={item.file.name} size={16} />
+                          </Box>
                           <Input
                             size="sm"
                             flex="1"
