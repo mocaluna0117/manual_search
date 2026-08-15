@@ -1,8 +1,18 @@
-import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
+import {
+  useApolloClient,
+  useLazyQuery,
+  useMutation,
+  useQuery,
+} from '@apollo/client/react'
 import { Box, Button, HStack, Spinner, Text } from '@chakra-ui/react'
 import { useEffect, useRef, useState } from 'react'
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
-import { LuArrowLeft, LuBot, LuFolderTree } from 'react-icons/lu'
+import {
+  LuArrowLeft,
+  LuBot,
+  LuDownload,
+  LuFolderTree,
+} from 'react-icons/lu'
 import { CATEGORIES_QUERY } from '../../graphql/categories'
 import {
   AUTO_ORGANIZE_MUTATION,
@@ -20,6 +30,7 @@ import {
   useViewMode,
   type SortKey,
 } from './ManualItemList'
+import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './ManualViewerProvider'
 
 /** 表示中の場所。null=ルート(全フォルダ+未分類のマニュアル) */
@@ -136,6 +147,43 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     : (categoriesData?.manualCategories ?? [])
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // 一括ダウンロード用のチェック。フォルダを移動したら選択は解除する
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    setCheckedIds(new Set())
+  }, [folder])
+  const toggleCheck = (id: string) =>
+    setCheckedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const toggleCheckAll = () =>
+    setCheckedIds((prev) =>
+      manuals.every((m) => prev.has(m.id))
+        ? new Set()
+        : new Set(manuals.map((m) => m.id)),
+    )
+  const { download, progress } = useBulkDownload()
+
+  /** 表示中の場所の名前(ZIPのファイル名に使う) */
+  const locationName = isRoot
+    ? 'マニュアル'
+    : isUncategorized
+      ? '未分類'
+      : folder.name
+
+  /** ルートでは「全フォルダのマニュアル」を対象にするため、全件を取り直す */
+  const [fetchAllManuals] = useLazyQuery(MANUALS_QUERY, {
+    fetchPolicy: 'network-only',
+  })
+  const downloadAll = async () => {
+    const { data: all } = await fetchAllManuals()
+    const ids = (all?.manuals ?? []).map((m) => m.id)
+    await download(ids, 'マニュアル(全件)')
+  }
 
   const [moveManual] = useMutation(MOVE_MANUAL_MUTATION, {
     refetchQueries: ['Manuals'],
@@ -262,6 +310,45 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             <LuBot /> 未分類をAIで自動分類
           </Button>
         )}
+        {/* 一括ダウンロード。選択があれば選択分、無ければ表示中/全件 */}
+        {checkedIds.size > 0 ? (
+          <Button
+            size="xs"
+            colorPalette="blue"
+            variant="outline"
+            loading={progress !== null}
+            onClick={() =>
+              void download([...checkedIds], `${locationName}(選択${checkedIds.size}件)`)
+            }
+          >
+            <LuDownload /> 選択した{checkedIds.size}件をダウンロード
+          </Button>
+        ) : isRoot ? (
+          <Button
+            size="xs"
+            variant="outline"
+            loading={progress !== null}
+            onClick={() => void downloadAll()}
+          >
+            <LuDownload /> すべてダウンロード
+          </Button>
+        ) : (
+          manuals.length > 0 && (
+            <Button
+              size="xs"
+              variant="outline"
+              loading={progress !== null}
+              onClick={() =>
+                void download(
+                  manuals.map((m) => m.id),
+                  locationName,
+                )
+              }
+            >
+              <LuDownload /> このフォルダをダウンロード
+            </Button>
+          )
+        )}
         <ViewModeSwitch viewMode={viewMode} onChange={changeViewMode} />
       </HStack>
 
@@ -307,6 +394,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             variables: { id: manual.id, pinned: !manual.categoryPinned },
           })
         }
+        checkedIds={checkedIds}
+        onToggleCheck={toggleCheck}
+        onToggleCheckAll={toggleCheckAll}
         sortKey={sortKey ?? undefined}
         sortAsc={sortAsc}
         onSort={toggleSort}

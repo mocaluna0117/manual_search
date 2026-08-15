@@ -199,6 +199,37 @@ export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
   }
 `
 
+// --- 一括ダウンロード用のURL発行 ---
+
+export interface ManualDownloadTarget {
+  id: string
+  title: string
+  fileName: string
+  url: string
+}
+
+interface DownloadUrlsData {
+  manualDownloadUrls: ManualDownloadTarget[]
+}
+
+interface DownloadUrlsVars {
+  ids: string[]
+}
+
+export const MANUAL_DOWNLOAD_URLS_QUERY: TypedDocumentNode<
+  DownloadUrlsData,
+  DownloadUrlsVars
+> = gql`
+  query ManualDownloadUrls($ids: [ID!]!) {
+    manualDownloadUrls(ids: $ids) {
+      id
+      title
+      fileName
+      url
+    }
+  }
+`
+
 // --- 閲覧用URLの発行 ---
 
 interface DownloadUrlData {

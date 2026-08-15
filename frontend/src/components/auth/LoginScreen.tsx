@@ -7,7 +7,7 @@ export function LoginScreen() {
 
   return (
     <VStack h="100vh" justify="center" gap={6} px={4}>
-      <Heading size="2xl">社内マニュアル検索</Heading>
+      <Heading size="2xl">Manualy</Heading>
       <Text color="fg.muted">
         このサイトは社内向けです。アカウントでサインインしてください
       </Text>

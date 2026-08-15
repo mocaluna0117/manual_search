@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@apollo/client/react'
-import { Box, Heading, HStack, Spinner, Text } from '@chakra-ui/react'
-import { Fragment, useState } from 'react'
-import { LuSearch } from 'react-icons/lu'
+import { Box, Button, Heading, HStack, Spinner, Text } from '@chakra-ui/react'
+import { Fragment, useEffect, useState } from 'react'
+import { LuDownload, LuSearch } from 'react-icons/lu'
 import {
   DELETE_MANUAL_MUTATION,
   INGEST_MANUAL_MUTATION,
@@ -15,6 +15,7 @@ import {
   ViewModeSwitch,
   useViewMode,
 } from './ManualItemList'
+import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './ManualViewerProvider'
 
 interface ManualSearchResultsProps {
@@ -55,6 +56,13 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
   const { openManual } = useManualViewer()
   const [viewMode, changeViewMode] = useViewMode()
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // 検索結果からもまとめてダウンロードできるようにする(キーワードで絞ってから一括)
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    setCheckedIds(new Set())
+  }, [keyword])
+  const { download, progress } = useBulkDownload()
 
   const [deleteManual] = useMutation(DELETE_MANUAL_MUTATION, {
     refetchQueries: ['SearchManuals', 'Manuals'],
@@ -103,6 +111,19 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
           </Text>
         )}
         <Box flex="1" />
+        {checkedIds.size > 0 && (
+          <Button
+            size="xs"
+            colorPalette="blue"
+            variant="outline"
+            loading={progress !== null}
+            onClick={() =>
+              void download([...checkedIds], `検索結果(${keyword})`)
+            }
+          >
+            <LuDownload /> 選択した{checkedIds.size}件をダウンロード
+          </Button>
+        )}
         <ViewModeSwitch viewMode={viewMode} onChange={changeViewMode} />
       </HStack>
 
@@ -123,6 +144,22 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
           void setManualPinned({
             variables: { id: manual.id, pinned: !manual.categoryPinned },
           })
+        }
+        checkedIds={checkedIds}
+        onToggleCheck={(id) =>
+          setCheckedIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+          })
+        }
+        onToggleCheckAll={() =>
+          setCheckedIds((prev) =>
+            manuals.every((m) => prev.has(m.id))
+              ? new Set()
+              : new Set(manuals.map((m) => m.id)),
+          )
         }
         renderTitle={(manual) => (
           <HighlightedText text={manual.title} keyword={keyword} />

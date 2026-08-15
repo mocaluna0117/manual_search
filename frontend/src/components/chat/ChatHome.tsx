@@ -514,7 +514,7 @@ export function ChatHome({
   if (messages.length === 0 && !loadingHistory) {
     return (
       <VStack h="100%" justify="center" gap={6} px={4} pt={{ base: 12, md: 0 }}>
-        <Heading size="2xl">社内マニュアル検索</Heading>
+        <Heading size="2xl">Manualy</Heading>
         <Text color="fg.muted">
           知りたいことを入力すると、AIが最適なマニュアルを案内します
         </Text>

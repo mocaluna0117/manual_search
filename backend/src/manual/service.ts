@@ -593,6 +593,29 @@ export class ManualService implements OnApplicationBootstrap {
     return this.storage.createDownloadUrl(manual.fileKey, manual.fileName);
   }
 
+  /**
+   * 一括ダウンロード用に、複数マニュアルの署名付きURLをまとめて発行する。
+   * ブラウザ側がこのURLからファイルを取得してZIPにまとめる
+   */
+  async getDownloadTargets(ids: string[]) {
+    if (ids.length === 0) return [];
+    const manuals = await this.prisma.manual.findMany({
+      where: { id: { in: ids } },
+      orderBy: { title: 'asc' },
+    });
+    return Promise.all(
+      manuals.map(async (manual) => ({
+        id: manual.id,
+        title: manual.title,
+        fileName: manual.fileName,
+        url: await this.storage.createDownloadUrl(
+          manual.fileKey,
+          manual.fileName,
+        ),
+      })),
+    );
+  }
+
   async delete(id: string) {
     const manual = await this.prisma.manual.findUnique({ where: { id } });
     if (!manual) {

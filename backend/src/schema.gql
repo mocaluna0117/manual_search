@@ -105,6 +105,13 @@ type ReclassifyStatus {
   finishedAt: DateTime
 }
 
+type ManualDownloadTarget {
+  id: ID!
+  title: String!
+  fileName: String!
+  url: String!
+}
+
 type ReclassifyCounts {
   target: Int!
   pinned: Int!
@@ -168,6 +175,7 @@ type Query {
   manuals(categoryId: ID, uncategorized: Boolean): [Manual!]!
   searchManuals(keyword: String!): [ManualSearchResult!]!
   manualDownloadUrl(id: ID!): String!
+  manualDownloadUrls(ids: [ID!]!): [ManualDownloadTarget!]!
   reclassifyStatus: ReclassifyStatus!
   reclassifyCounts: ReclassifyCounts!
   classificationRules: [ClassificationRule!]!

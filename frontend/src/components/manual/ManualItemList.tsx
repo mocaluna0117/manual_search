@@ -143,6 +143,34 @@ interface ManualItemListProps {
   sortKey?: SortKey
   sortAsc?: boolean
   onSort?: (key: SortKey) => void
+  /** 一括ダウンロード用のチェック。省略するとチェックボックスを出さない */
+  checkedIds?: Set<string>
+  onToggleCheck?: (id: string) => void
+  onToggleCheckAll?: () => void
+}
+
+/** 一括操作用のチェックボックス(行やタイルのクリックとは独立させる) */
+function ItemCheckbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: () => void
+  label: string
+}) {
+  return (
+    <input
+      type="checkbox"
+      aria-label={label}
+      checked={checked}
+      // 行のクリック(選択)やダブルクリック(開く)を巻き込まない
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onChange={onChange}
+      style={{ width: 15, height: 15, cursor: 'pointer', flexShrink: 0 }}
+    />
+  )
 }
 
 export function ManualItemList({
@@ -163,7 +191,13 @@ export function ManualItemList({
   sortKey,
   sortAsc = true,
   onSort,
+  checkedIds,
+  onToggleCheck,
+  onToggleCheckAll,
 }: ManualItemListProps) {
+  const selectable = Boolean(checkedIds && onToggleCheck)
+  const allChecked =
+    manuals.length > 0 && manuals.every((m) => checkedIds?.has(m.id))
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -270,6 +304,13 @@ export function ManualItemList({
             color="fg.muted"
             fontSize="xs"
           >
+            {selectable && (
+              <ItemCheckbox
+                checked={allChecked}
+                onChange={() => onToggleCheckAll?.()}
+                label="すべて選択"
+              />
+            )}
             {sortHeader('名前', 'name')}
             {sortHeader('作成日', 'createdAt', '140px')}
             {sortHeader('サイズ', 'size', '80px')}
@@ -285,6 +326,8 @@ export function ManualItemList({
               {...highlight(folder.id, true)}
               {...folderItemProps(folder)}
             >
+              {/* フォルダは一括ダウンロードの対象外。列の位置を合わせるための余白 */}
+              {selectable && <Box w="15px" flexShrink={0} />}
               <HStack flex="1" gap={2} minW={0}>
                 <Box flexShrink={0}>
                   <FcFolder size={18} />
@@ -311,6 +354,13 @@ export function ManualItemList({
                 {...manualItemProps(manual)}
                 title={manual.title}
               >
+                {selectable && (
+                  <ItemCheckbox
+                    checked={checkedIds!.has(manual.id)}
+                    onChange={() => onToggleCheck!(manual.id)}
+                    label={`${manual.title} を選択`}
+                  />
+                )}
                 <HStack flex="1" gap={2} minW={0}>
                   <Box flexShrink={0}>
                     <FcFile size={18} />
@@ -385,18 +435,25 @@ export function ManualItemList({
               <Box display="flex" justifyContent="center">
                 <FcFile size={48} />
               </Box>
-              <Box position="absolute" top="1" right="4">
+              {/* 状態とピンは右上にまとめ、左上はチェックボックスに空ける */}
+              <HStack position="absolute" top="1" right="3" gap={1}>
+                {isAdmin && manual.categoryPinned && (
+                  <Box
+                    color="fg.muted"
+                    title="ピン留め済み(AIの再分類では動きません)"
+                  >
+                    <LuPin size={14} />
+                  </Box>
+                )}
                 <StatusIcon manual={manual} />
-              </Box>
-              {isAdmin && manual.categoryPinned && (
-                <Box
-                  position="absolute"
-                  top="1"
-                  left="4"
-                  color="fg.muted"
-                  title="ピン留め済み(AIの再分類では動きません)"
-                >
-                  <LuPin size={14} />
+              </HStack>
+              {selectable && (
+                <Box position="absolute" top="1" left="3">
+                  <ItemCheckbox
+                    checked={checkedIds!.has(manual.id)}
+                    onChange={() => onToggleCheck!(manual.id)}
+                    label={`${manual.title} を選択`}
+                  />
                 </Box>
               )}
               <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">

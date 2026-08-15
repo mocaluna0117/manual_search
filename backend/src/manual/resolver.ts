@@ -6,6 +6,7 @@ import { RegisterManualInput } from './input';
 import {
   AutoOrganizeResult,
   Manual,
+  ManualDownloadTarget,
   ManualSearchResult,
   ManualUploadTarget,
   ReclassifyCounts,
@@ -53,6 +54,13 @@ export class ManualResolver {
   @Query(() => String)
   manualDownloadUrl(@Args('id', { type: () => ID }) id: string) {
     return this.manualService.getDownloadUrl(id);
+  }
+
+  // 一括ダウンロード用。複数の署名付きURLをまとめて発行する
+  // (閲覧できる人はダウンロードもできるので、権限は通常の認証のみ)
+  @Query(() => [ManualDownloadTarget])
+  manualDownloadUrls(@Args('ids', { type: () => [ID] }) ids: string[]) {
+    return this.manualService.getDownloadTargets(ids);
   }
 
   // アップロード完了後にメタデータをDBへ登録。

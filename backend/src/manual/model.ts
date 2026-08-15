@@ -130,6 +130,22 @@ export class ReclassifyStatus {
   finishedAt!: Date | null;
 }
 
+// 一括ダウンロードの対象1件分(署名付きURL付き)
+@ObjectType()
+export class ManualDownloadTarget {
+  @Field(() => ID)
+  id!: string;
+
+  @Field()
+  title!: string;
+
+  @Field()
+  fileName!: string;
+
+  @Field()
+  url!: string;
+}
+
 // 再分類の確認ダイアログに出す件数
 @ObjectType()
 export class ReclassifyCounts {
