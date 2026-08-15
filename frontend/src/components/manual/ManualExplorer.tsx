@@ -36,6 +36,7 @@ import {
   useViewMode,
   type SortKey,
 } from './ManualItemList'
+import { extensionOf } from '../../lib/fileTypes'
 import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './ManualViewerProvider'
 import { Tooltip } from '../ui/Tooltip'
@@ -136,6 +137,12 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const dir = sortAsc ? 1 : -1
   const manuals = [...(data?.manuals ?? [])].sort((a, b) => {
     if (sortKey === 'size') return (a.size - b.size) * dir
+    if (sortKey === 'type')
+      // 同じ種類の中では名前順にして、まとまりが読みやすいようにする
+      return (
+        extensionOf(a.fileName).localeCompare(extensionOf(b.fileName)) * dir ||
+        a.title.localeCompare(b.title, 'ja')
+      )
     if (sortKey === 'createdAt')
       // PDFの作成日が読めていないものは末尾へ寄せる
       return (a.pdfCreatedAt ?? '').localeCompare(b.pdfCreatedAt ?? '') * dir
@@ -149,6 +156,8 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           return (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '') * dir
         if (sortKey === 'size')
           return ((a.totalSize ?? 0) - (b.totalSize ?? 0)) * dir
+        // フォルダに種類の違いは無いので、名前順のまま
+        if (sortKey === 'type') return a.name.localeCompare(b.name, 'ja') * dir
         return a.name.localeCompare(b.name, 'ja') * dir
       })
     : (categoriesData?.manualCategories ?? [])

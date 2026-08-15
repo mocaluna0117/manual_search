@@ -88,6 +88,17 @@ export function fileIconOf(fileName: string): FileIconName {
   }
 }
 
+/**
+ * 一覧の「種類」列に出す拡張子(.pdf など)。
+ * 未対応・拡張子なしのファイルは、実際の末尾から拾って出す
+ */
+export function extensionOf(fileName: string): string {
+  const known = fileTypeOf(fileName)
+  if (known) return known.ext
+  const dot = fileName.lastIndexOf('.')
+  return dot > 0 ? fileName.slice(dot).toLowerCase() : ''
+}
+
 /** タイトルの初期値に使う「拡張子を落としたファイル名」 */
 export function stripExtension(fileName: string): string {
   const type = fileTypeOf(fileName)

@@ -8,7 +8,7 @@ import {
   FcVoicePresentation,
 } from 'react-icons/fc'
 import { LuMail } from 'react-icons/lu'
-import { fileIconOf } from '../../lib/fileTypes'
+import { extensionOf, fileIconOf } from '../../lib/fileTypes'
 
 /** ファイル形式ごとのアイコン。一目で種類が分かるようにする */
 function FileIcon({ fileName, size }: { fileName: string; size: number }) {
@@ -55,7 +55,7 @@ import { Tooltip } from '../ui/Tooltip'
 export type ViewMode = 'details' | 'icons'
 const VIEW_MODE_KEY = 'manualSearch.explorerViewMode'
 
-export type SortKey = 'name' | 'createdAt' | 'size'
+export type SortKey = 'name' | 'type' | 'createdAt' | 'size'
 
 /** 表示形式をlocalStorageに保存して共有する(一覧をどこで開いても同じ形式) */
 export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
@@ -364,6 +364,7 @@ export function ManualItemList({
               />
             )}
             {sortHeader('名前', 'name')}
+            {sortHeader('種類', 'type', '70px')}
             {sortHeader('作成日', 'createdAt', '140px')}
             {sortHeader('サイズ', 'size', '80px')}
           </HStack>
@@ -397,6 +398,10 @@ export function ManualItemList({
                   {folder.name}
                 </Text>
               </HStack>
+              {/* フォルダに拡張子は無いので、列の位置合わせだけする */}
+              <Text w="70px" fontSize="sm" color="fg.subtle" flexShrink={0}>
+                フォルダ
+              </Text>
               <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
                 {formatDateTime(folder.updatedAt)}
               </Text>
@@ -446,6 +451,9 @@ export function ManualItemList({
                   )}
                   <StatusIcon manual={manual} />
                 </HStack>
+                <Text w="70px" fontSize="sm" color="fg.muted" flexShrink={0}>
+                  {extensionOf(manual.fileName)}
+                </Text>
                 <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
                   {formatDateTime(manual.pdfCreatedAt ?? undefined)}
                 </Text>
@@ -534,6 +542,10 @@ export function ManualItemList({
               )}
               <Text fontSize="xs" mt={1} lineClamp={2} wordBreak="break-all">
                 {renderTitle ? renderTitle(manual) : manual.title}
+              </Text>
+              {/* 名前だけでは種類が分からないので、拡張子を添える */}
+              <Text fontSize="10px" color="fg.subtle">
+                {extensionOf(manual.fileName)}
               </Text>
             </Box>
           ))}
