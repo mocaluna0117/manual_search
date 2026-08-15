@@ -42,6 +42,8 @@ interface UploadItem {
   title: string
   status: 'pending' | 'uploading' | 'done' | 'error'
   outcome?: RegisterOutcome // 完了後: 新規追加 / 既存を更新 / 古いのでスキップ
+  /** 登録できたマニュアルのID。格納先を後から追いかけるために持つ */
+  manualId?: string
   // スキップされたときに判定根拠を画面で説明するための日時
   existingDate?: string | null
   incomingDate?: string | null
@@ -115,13 +117,65 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
       }),
     [categoriesData],
   )
-  // 既存マニュアルのファイル名一覧(アップロード前に同名を知らせるため)
+  // 既存マニュアルの一覧。アップロード前は同名の予告に、
+  // アップロード後は「どのフォルダに入ったか」の確認に使う
+  const [watching, setWatching] = useState(false)
   const { data: existingData } = useQuery(MANUALS_QUERY, {
     fetchPolicy: 'cache-and-network',
+    // 「AIにおまかせ」は取り込みが終わってから振り分けるので、
+    // 決まるまで見に行く。決まったら止める(無駄に叩き続けない)
+    pollInterval: watching ? 3000 : 0,
   })
   const existingFileNames = new Set(
     existingData?.manuals.map((m) => m.fileName) ?? [],
   )
+
+  // 登録できたマニュアルの「今の状態」を引く。取り込みと自動分類が
+  // 終わっているかを見て、格納先を出す
+  const manualById = new Map(
+    (existingData?.manuals ?? []).map((m) => [m.id, m]),
+  )
+  const categoryNameById = new Map(
+    (categoriesData?.manualCategories ?? []).map((c) => [c.id, c.name]),
+  )
+
+  /** 1件の格納先を、今分かっている範囲で文章にする */
+  const placement = (item: UploadItem) => {
+    if (item.status !== 'done' || !item.manualId) return null
+    const manual = manualById.get(item.manualId)
+    // 一覧の取り直しが追いつく前は、まだ何も言えない
+    if (!manual) return { text: '格納先を確認しています…', tone: 'fg.muted' }
+    if (manual.ingestStatus === 'FAILED') {
+      return {
+        text: '取り込みに失敗したため、AI検索の対象になっていません',
+        tone: 'fg.error',
+      }
+    }
+    if (manual.ingestStatus !== 'COMPLETED') {
+      return {
+        text: categoryId === AUTO
+          ? '読み取り中… 終わるとAIが自動で振り分けます'
+          : '読み取り中…',
+        tone: 'fg.muted',
+      }
+    }
+    if (!manual.categoryId) {
+      return { text: '📁 未分類に入りました', tone: 'fg.muted' }
+    }
+    const name = categoryNameById.get(manual.categoryId)
+    return {
+      text: `📁 ${name ?? 'フォルダ'} に入りました`,
+      tone: 'green.fg',
+    }
+  }
+
+  // まだ決まっていないものが残っている間だけ見に行く
+  const pending = items.some((item) => {
+    if (item.status !== 'done' || !item.manualId) return false
+    const manual = manualById.get(item.manualId)
+    return !manual || manual.ingestStatus === 'PENDING' || manual.ingestStatus === 'PROCESSING'
+  })
+  if (pending !== watching) setWatching(pending)
 
   const [createUploadUrl] = useMutation(CREATE_UPLOAD_URL_MUTATION)
   const [registerManual] = useMutation(REGISTER_MANUAL_MUTATION, {
@@ -215,6 +269,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                 ...it,
                 status: 'done',
                 outcome: registered?.registerManual.outcome,
+                manualId: registered?.registerManual.manual.id,
                 existingDate: registered?.registerManual.existingFileLastModified,
                 incomingDate: registered?.registerManual.incomingFileLastModified,
               }
@@ -364,6 +419,16 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                               </Text>
                             </HStack>
                           )}
+
+                        {/* アップロード後: どのフォルダに入ったか */}
+                        {(() => {
+                          const p = placement(item)
+                          return p ? (
+                            <Text fontSize="xs" color={p.tone} mt={1}>
+                              {p.text}
+                            </Text>
+                          ) : null
+                        })()}
 
                         {/* アップロード後: 何が起きたかの説明 */}
                         {item.status === 'done' && outcomeNote(item) && (
