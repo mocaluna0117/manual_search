@@ -142,6 +142,13 @@ export class ManualResolver {
     return this.manualService.delete(id);
   }
 
+  // チェックしたファイルをまとめて削除。戻り値は削除できた件数
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  deleteManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
+    return this.manualService.deleteMany(ids);
+  }
+
   // PDFをRAGに取り込む(チャンク化)。開始したらすぐ返す
   @Roles(UserRole.ADMIN)
   @Mutation(() => Boolean)

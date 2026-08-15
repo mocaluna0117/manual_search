@@ -199,6 +199,25 @@ export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
   }
 `
 
+// --- まとめて削除(ADMIN専用) ---
+
+interface DeleteManualsData {
+  deleteManuals: number
+}
+
+interface DeleteManualsVars {
+  ids: string[]
+}
+
+export const DELETE_MANUALS_MUTATION: TypedDocumentNode<
+  DeleteManualsData,
+  DeleteManualsVars
+> = gql`
+  mutation DeleteManuals($ids: [ID!]!) {
+    deleteManuals(ids: $ids)
+  }
+`
+
 // --- 一括ダウンロード用のURL発行 ---
 
 export interface ManualDownloadTarget {

@@ -626,4 +626,22 @@ export class ManualService implements OnApplicationBootstrap {
     await this.storage.deleteObject(manual.fileKey);
     return this.prisma.manual.delete({ where: { id } });
   }
+
+  /**
+   * まとめて削除する(チェックした複数ファイルの削除)。戻り値は削除できた件数。
+   * 1件ずつ消して、途中で失敗しても残りは続ける(全部やり直しにしない)
+   */
+  async deleteMany(ids: string[]) {
+    let deleted = 0;
+    for (const id of ids) {
+      try {
+        await this.delete(id);
+        deleted++;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : '不明なエラー';
+        this.logger.error(`削除失敗 manual=${id}: ${message}`);
+      }
+    }
+    return deleted;
+  }
 }

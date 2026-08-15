@@ -202,6 +202,7 @@ type Mutation {
   autoOrganizeManuals: AutoOrganizeResult!
   moveManuals(ids: [ID!]!, categoryId: ID): Int!
   deleteManual(id: ID!): Manual!
+  deleteManuals(ids: [ID!]!): Int!
   ingestManual(id: ID!): Boolean!
   createClassificationRule(text: String!): ClassificationRule!
   updateClassificationRule(id: ID!, text: String!): ClassificationRule!

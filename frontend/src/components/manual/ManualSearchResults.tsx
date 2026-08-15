@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from '@apollo/client/react'
 import { Box, Button, Heading, HStack, Spinner, Text } from '@chakra-ui/react'
 import { Fragment, useEffect, useState } from 'react'
-import { LuDownload, LuSearch } from 'react-icons/lu'
+import { LuDownload, LuSearch, LuTrash2 } from 'react-icons/lu'
 import {
   DELETE_MANUAL_MUTATION,
+  DELETE_MANUALS_MUTATION,
   INGEST_MANUAL_MUTATION,
   SEARCH_MANUALS_QUERY,
   SET_MANUAL_PINNED_MUTATION,
@@ -73,6 +74,32 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
   const [setManualPinned] = useMutation(SET_MANUAL_PINNED_MUTATION, {
     refetchQueries: ['SearchManuals', 'Manuals'],
   })
+  const [deleteManuals] = useMutation(DELETE_MANUALS_MUTATION, {
+    refetchQueries: ['SearchManuals', 'Manuals', 'ManualCategories'],
+  })
+  const [deleting, setDeleting] = useState(false)
+
+  /** チェックした検索結果をまとめて削除する(管理者のみ) */
+  const deleteChecked = async () => {
+    if (
+      !window.confirm(
+        `選択した${checkedIds.size}件のファイルを削除します。\n元に戻せません。よろしいですか？`,
+      )
+    )
+      return
+    setDeleting(true)
+    try {
+      const { data: result } = await deleteManuals({
+        variables: { ids: [...checkedIds] },
+      })
+      setCheckedIds(new Set())
+      window.alert(`${result?.deleteManuals ?? 0}件を削除しました。`)
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const results = data?.searchManuals ?? []
   const manuals = results.map((r) => r.manual)
@@ -111,6 +138,17 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
           </Text>
         )}
         <Box flex="1" />
+        {checkedIds.size > 0 && isAdmin && (
+          <Button
+            size="xs"
+            colorPalette="red"
+            variant="outline"
+            loading={deleting}
+            onClick={() => void deleteChecked()}
+          >
+            <LuTrash2 /> 選択した{checkedIds.size}件を削除
+          </Button>
+        )}
         {checkedIds.size > 0 && (
           <Button
             size="xs"

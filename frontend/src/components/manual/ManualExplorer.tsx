@@ -12,13 +12,18 @@ import {
   LuBot,
   LuDownload,
   LuFolderTree,
+  LuTrash2,
 } from 'react-icons/lu'
-import { CATEGORIES_QUERY } from '../../graphql/categories'
+import {
+  CATEGORIES_QUERY,
+  DELETE_CATEGORY_MUTATION,
+} from '../../graphql/categories'
 import {
   AUTO_ORGANIZE_MUTATION,
   DELETE_MANUAL_MUTATION,
   INGEST_MANUAL_MUTATION,
   MANUALS_QUERY,
+  DELETE_MANUALS_MUTATION,
   MOVE_MANUAL_MUTATION,
   SET_MANUAL_PINNED_MUTATION,
   type Manual,
@@ -240,6 +245,12 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const [setManualPinned] = useMutation(SET_MANUAL_PINNED_MUTATION, {
     refetchQueries: ['Manuals'],
   })
+  const [deleteManuals] = useMutation(DELETE_MANUALS_MUTATION, {
+    refetchQueries: ['Manuals', 'ManualCategories'],
+  })
+  const [deleteCategory] = useMutation(DELETE_CATEGORY_MUTATION, {
+    refetchQueries: ['Manuals', 'ManualCategories'],
+  })
   const [autoOrganize, { loading: organizing }] = useMutation(
     AUTO_ORGANIZE_MUTATION,
     { refetchQueries: ['Manuals', 'ManualCategories'] },
@@ -263,6 +274,68 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       window.alert(
         e instanceof Error ? e.message : '再取り込みを開始できませんでした',
       )
+    }
+  }
+
+  /**
+   * チェックした分をまとめて削除する(管理者のみ)。
+   * フォルダは中身が残っていると消せない(サーバー側で拒否される)ので、
+   * ファイルを消してからフォルダを消し、結果をまとめて知らせる
+   */
+  const [deleting, setDeleting] = useState(false)
+  const deleteChecked = async () => {
+    const fileCount = checkedIds.size
+    const folderCount = checkedFolderIds.size
+    if (
+      !window.confirm(
+        `選択した${fileCount > 0 ? `ファイル${fileCount}件` : ''}` +
+          `${fileCount > 0 && folderCount > 0 ? 'と' : ''}` +
+          `${folderCount > 0 ? `フォルダ${folderCount}件` : ''}を削除します。\n` +
+          '元に戻せません。よろしいですか？' +
+          (folderCount > 0
+            ? '\n\n(中にファイルが残っているフォルダは削除されません)'
+            : ''),
+      )
+    )
+      return
+
+    setDeleting(true)
+    try {
+      let deletedFiles = 0
+      if (fileCount > 0) {
+        const { data: result } = await deleteManuals({
+          variables: { ids: [...checkedIds] },
+        })
+        deletedFiles = result?.deleteManuals ?? 0
+      }
+
+      // フォルダは1件ずつ。空でないものは理由付きで拒否される
+      const keptFolders: string[] = []
+      let deletedFolders = 0
+      for (const id of checkedFolderIds) {
+        const name = categories.find((c) => c.id === id)?.name ?? ''
+        try {
+          await deleteCategory({ variables: { id } })
+          deletedFolders++
+        } catch {
+          keptFolders.push(name)
+        }
+      }
+
+      setCheckedIds(new Set())
+      setCheckedFolderIds(new Set())
+      const lines = [
+        deletedFiles > 0 ? `ファイル${deletedFiles}件を削除しました。` : '',
+        deletedFolders > 0 ? `フォルダ${deletedFolders}件を削除しました。` : '',
+        keptFolders.length > 0
+          ? `次のフォルダは中にファイルが残っているため削除しませんでした: ${keptFolders.join('、')}`
+          : '',
+      ].filter(Boolean)
+      window.alert(lines.join('\n') || '削除できるものがありませんでした。')
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : '削除できませんでした')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -354,6 +427,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           </Button>
         )}
         {/* 一括ダウンロード。選択があれば選択分、無ければ表示中/全件 */}
+        {checkedCount > 0 && isAdmin && (
+          <Button
+            size="xs"
+            colorPalette="red"
+            variant="outline"
+            loading={deleting}
+            onClick={() => void deleteChecked()}
+          >
+            <LuTrash2 /> 選択した{checkedCount}件を削除
+          </Button>
+        )}
         {checkedCount > 0 ? (
           <Button
             size="xs"
