@@ -495,11 +495,6 @@ export class ChatService {
             (result.createdCategories.length > 0
               ? `\n新しく作られたフォルダ: ${result.createdCategories.join('、')}`
               : '') +
-            // 未分類のまま残った理由は必ず伝える(黙っていると「効かない」に見える)
-            (result.trashedCategories.length > 0
-              ? `\n\n⚠️ 次のフォルダは同じ名前がゴミ箱にあるため作れず、対象のマニュアルは未分類のままです: ${result.trashedCategories.join('、')}` +
-                '\nゴミ箱から復元するか、完全に削除してからもう一度実行してください。'
-              : '') +
             '\nサイドバーのフォルダを開いて結果を確認してください。空になったフォルダは🗑から削除できます。'
           : `再分類に失敗しました: ${result.error ?? '不明なエラー'}`;
         void this.appendAssistantMessage(conversationId, content).catch(

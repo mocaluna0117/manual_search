@@ -79,14 +79,28 @@ export function TrashView() {
     }
   }
 
-  const handleRestore = () =>
-    run(async () => {
+  const handleRestore = () => {
+    // 同名のフォルダが既にある場合は中身だけがそちらへ入る。
+    // 黙って別の場所に入ると探せなくなるので、戻した後に伝える
+    let merged: string[] = []
+    return run(async () => {
       if (checkedIds.size > 0)
         await restoreManuals({ variables: { ids: [...checkedIds] } })
       // フォルダは中身ごと戻る
-      if (checkedFolderIds.size > 0)
-        await restoreCategories({ variables: { ids: [...checkedFolderIds] } })
-    }, `${checkedCount}件を元に戻しました。`)
+      if (checkedFolderIds.size > 0) {
+        const { data } = await restoreCategories({
+          variables: { ids: [...checkedFolderIds] },
+        })
+        merged = data?.restoreCategories.mergedInto ?? []
+      }
+    }, `${checkedCount}件を元に戻しました。`).then(() => {
+      if (merged.length > 0) {
+        window.alert(
+          `次のフォルダは同じ名前のフォルダが既にあったため、中身をそちらへ戻しました: ${merged.join('、')}`,
+        )
+      }
+    })
+  }
 
   const handlePurge = () => {
     if (

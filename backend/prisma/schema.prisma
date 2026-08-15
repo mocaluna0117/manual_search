@@ -11,7 +11,12 @@ datasource db {
 
 model ManualCategory {
   id        String    @id @default(uuid())
-  name      String    @unique
+  // 一意制約はマイグレーションで書いた部分インデックス
+  // (ManualCategory_name_alive_key)で、生きているフォルダの中だけに効かせている。
+  // ゴミ箱のフォルダが名前を占有すると、再分類が同じ名前のフォルダを
+  // 作れず対象が未分類のまま残ってしまうため。Prismaは部分インデックスを
+  // 表現できないので、ここには@uniqueを書かない
+  name      String
   manuals   Manual[]
   // 管理者がドラッグで決めた並び順(小さいほど上)。同値なら名前順
   sortOrder Int       @default(0) @map("sort_order")

@@ -92,17 +92,17 @@ export class CategoryService {
     if (!trimmed) {
       throw new BadRequestException('カテゴリ名を入力してください');
     }
+    // 名前の一意性は「生きているフォルダ」の中だけ(部分インデックス)。
+    // ゴミ箱の中に同名があっても新しく作れる
     const duplicate = await this.prisma.manualCategory.findFirst({
-      where: { name: trimmed, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+      where: {
+        name: trimmed,
+        deletedAt: null,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
     });
     if (duplicate) {
-      // 名前はDBで一意なので、ゴミ箱の中の同名とも衝突する。
-      // 「既に存在します」だけだと画面上どこにも無くて混乱するため区別して伝える
-      throw new BadRequestException(
-        duplicate.deletedAt
-          ? `フォルダ「${trimmed}」がゴミ箱にあります。復元するか、完全に削除してください`
-          : `フォルダ「${trimmed}」は既に存在します`,
-      );
+      throw new BadRequestException(`フォルダ「${trimmed}」は既に存在します`);
     }
     return trimmed;
   }

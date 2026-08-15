@@ -99,16 +99,19 @@ enum RegisterOutcome {
 type AutoOrganizeResult {
   movedCount: Int!
   createdCategories: [String!]!
-  trashedCategories: [String!]!
 }
 
 type ReclassifyStatus {
   running: Boolean!
   movedCount: Int!
   createdCategories: [String!]!
-  trashedCategories: [String!]!
   error: String
   finishedAt: DateTime
+}
+
+type RestoreCategoriesResult {
+  restoredCount: Int!
+  mergedInto: [String!]!
 }
 
 type ManualDownloadTarget {
@@ -211,7 +214,7 @@ type Mutation {
   deleteManual(id: ID!): Manual!
   deleteManuals(ids: [ID!]!): Int!
   restoreManuals(ids: [ID!]!): Int!
-  restoreCategories(ids: [ID!]!): Int!
+  restoreCategories(ids: [ID!]!): RestoreCategoriesResult!
   purgeCategories(ids: [ID!]!): Int!
   purgeManuals(ids: [ID!]!): Int!
   emptyTrash: Int!

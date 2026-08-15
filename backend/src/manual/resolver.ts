@@ -12,6 +12,7 @@ import {
   ReclassifyCounts,
   ReclassifyStatus,
   RegisterManualResult,
+  RestoreCategoriesResult,
 } from './model';
 import { ManualCategory } from '../category/model';
 import { ManualService } from './service';
@@ -173,7 +174,7 @@ export class ManualResolver {
 
   // フォルダを中身ごと元に戻す
   @Roles(UserRole.ADMIN)
-  @Mutation(() => Int)
+  @Mutation(() => RestoreCategoriesResult)
   restoreCategories(@Args('ids', { type: () => [ID] }) ids: string[]) {
     return this.manualService.restoreCategories(ids);
   }

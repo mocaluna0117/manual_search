@@ -112,11 +112,6 @@ export class AutoOrganizeResult {
 
   @Field(() => [String])
   createdCategories!: string[];
-
-  // AIが入れようとしたが、同名フォルダがゴミ箱にあって作れなかった名前。
-  // 未分類のまま残った理由を画面で伝えるために返す
-  @Field(() => [String])
-  trashedCategories!: string[];
 }
 
 // 全件再分類の進行状況。数分かかるためリクエストは待たせず、
@@ -132,15 +127,22 @@ export class ReclassifyStatus {
   @Field(() => [String])
   createdCategories!: string[];
 
-  // 同名フォルダがゴミ箱にあって使えなかった名前(AutoOrganizeResultと同じ)
-  @Field(() => [String])
-  trashedCategories!: string[];
-
   @Field(() => String, { nullable: true })
   error!: string | null;
 
   @Field(() => Date, { nullable: true })
   finishedAt!: Date | null;
+}
+
+// フォルダの復元結果。同名のフォルダが既にあった場合は、中身だけを
+// そちらへ移すため、どのフォルダがそうなったかを画面に伝える
+@ObjectType()
+export class RestoreCategoriesResult {
+  @Field(() => Int)
+  restoredCount!: number;
+
+  @Field(() => [String])
+  mergedInto!: string[];
 }
 
 // 一括ダウンロードの対象1件分(署名付きURL付き)

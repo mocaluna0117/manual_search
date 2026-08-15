@@ -340,7 +340,6 @@ export class ManualService implements OnApplicationBootstrap {
     running: false,
     movedCount: 0,
     createdCategories: [],
-    trashedCategories: [],
     error: null,
     finishedAt: null,
   };
@@ -359,7 +358,6 @@ export class ManualService implements OnApplicationBootstrap {
       ok: boolean;
       movedCount: number;
       createdCategories: string[];
-      trashedCategories: string[];
       error?: string;
     }) => void,
   ): boolean {
@@ -368,21 +366,19 @@ export class ManualService implements OnApplicationBootstrap {
       running: true,
       movedCount: 0,
       createdCategories: [],
-      trashedCategories: [],
       error: null,
       finishedAt: null,
     };
     void this.reclassifyAll(instruction)
-      .then(({ movedCount, createdCategories, trashedCategories }) => {
+      .then(({ movedCount, createdCategories }) => {
         this.reclassifyJob = {
           running: false,
           movedCount,
           createdCategories,
-          trashedCategories,
           error: null,
           finishedAt: new Date(),
         };
-        onFinish?.({ ok: true, movedCount, createdCategories, trashedCategories });
+        onFinish?.({ ok: true, movedCount, createdCategories });
       })
       .catch((e: unknown) => {
         const error = e instanceof Error ? e.message : '不明なエラー';
@@ -390,17 +386,10 @@ export class ManualService implements OnApplicationBootstrap {
           running: false,
           movedCount: 0,
           createdCategories: [],
-          trashedCategories: [],
           error,
           finishedAt: new Date(),
         };
-        onFinish?.({
-          ok: false,
-          movedCount: 0,
-          createdCategories: [],
-          trashedCategories: [],
-          error,
-        });
+        onFinish?.({ ok: false, movedCount: 0, createdCategories: [], error });
       });
     return true;
   }
@@ -447,7 +436,7 @@ export class ManualService implements OnApplicationBootstrap {
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
     if (manuals.length === 0) {
-      return { movedCount: 0, createdCategories: [], trashedCategories: [] };
+      return { movedCount: 0, createdCategories: [] };
     }
 
     // 1回の呼び出し時間とレスポンスJSONのトークン量の両方に余裕を持たせる。
@@ -458,7 +447,6 @@ export class ManualService implements OnApplicationBootstrap {
     const BATCH_SIZE = 50;
     let movedCount = 0;
     const createdCategories: string[] = [];
-    const trashedCategories: string[] = [];
     for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
       const batch = manuals.slice(i, i + BATCH_SIZE);
       // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)。
@@ -480,11 +468,8 @@ export class ManualService implements OnApplicationBootstrap {
       const result = await this.applyAssignments(assignments, allowNew);
       movedCount += result.movedCount;
       createdCategories.push(...result.createdCategories);
-      for (const name of result.trashedCategories) {
-        if (!trashedCategories.includes(name)) trashedCategories.push(name);
-      }
     }
-    return { movedCount, createdCategories, trashedCategories };
+    return { movedCount, createdCategories };
   }
 
   /** 1件だけAIで分類する(アップロード時の「AIにおまかせ」用)。失敗しても取り込みは成功扱い */
@@ -533,8 +518,6 @@ export class ManualService implements OnApplicationBootstrap {
     allowNew = true,
   ) {
     const createdCategories: string[] = [];
-    // ゴミ箱にあるせいで入れられなかったフォルダ名(重複なし)
-    const trashedCategories: string[] = [];
     let movedCount = 0;
     for (const assignment of assignments) {
       const name = assignment.category.trim();
@@ -548,20 +531,7 @@ export class ManualService implements OnApplicationBootstrap {
       if (!category) {
         // 既存カテゴリ限定モードでは、AIが指示を破って作った未知の名前は無視する
         if (!allowNew) continue;
-        // 名前はDBで一意。同名がゴミ箱にあると作れないので、未分類のまま残す。
-        // 捨てたはずのフォルダを黙って復活させるより、画面で見える方を選ぶ
-        const inTrash = await this.prisma.manualCategory.findFirst({
-          where: { name, deletedAt: { not: null } },
-        });
-        if (inTrash) {
-          this.logger.warn(
-            `フォルダ「${name}」はゴミ箱にあるため分類をスキップしました(未分類のまま)`,
-          );
-          // 黙って未分類に残すと「押しても分類されない」ようにしか見えないので、
-          // 呼び出し元まで理由を運んで画面で伝える
-          if (!trashedCategories.includes(name)) trashedCategories.push(name);
-          continue;
-        }
+        // 同名がゴミ箱にあっても作れる(一意なのは生きているフォルダの中だけ)
         category = await this.prisma.manualCategory.create({
           data: { name },
         });
@@ -573,7 +543,7 @@ export class ManualService implements OnApplicationBootstrap {
       });
       movedCount++;
     }
-    return { movedCount, createdCategories, trashedCategories };
+    return { movedCount, createdCategories };
   }
 
   /** マニュアルを別カテゴリへ移動する(categoryId=nullで未分類へ) */
@@ -779,7 +749,27 @@ export class ManualService implements OnApplicationBootstrap {
     const categories = await this.prisma.manualCategory.findMany({
       where: { id: { in: ids }, deletedAt: { not: null } },
     });
+    // 同名の生きているフォルダがあったため、中身だけをそちらへ戻した分
+    const mergedInto: string[] = [];
     for (const category of categories) {
+      // 捨てている間に同じ名前のフォルダが作られていることがある
+      // (再分類が作り直すなど)。フォルダ名は生きている中で一意なので
+      // そのままでは戻せない。中身だけを既存のフォルダへ入れ、
+      // 空になったゴミ箱側のフォルダは片付ける
+      const live = await this.prisma.manualCategory.findFirst({
+        where: { name: category.name, ...ALIVE },
+      });
+      if (live) {
+        await this.prisma.$transaction([
+          this.prisma.manual.updateMany({
+            where: { categoryId: category.id, deletedAt: category.deletedAt },
+            data: { deletedAt: null, categoryId: live.id },
+          }),
+          this.prisma.manualCategory.delete({ where: { id: category.id } }),
+        ]);
+        mergedInto.push(category.name);
+        continue;
+      }
       await this.prisma.$transaction([
         // 一緒に捨てたマニュアルだけを戻す
         this.prisma.manual.updateMany({
@@ -792,7 +782,7 @@ export class ManualService implements OnApplicationBootstrap {
         }),
       ]);
     }
-    return categories.length;
+    return { restoredCount: categories.length, mergedInto };
   }
 
   /** ゴミ箱のフォルダを中身ごと完全に削除する */
