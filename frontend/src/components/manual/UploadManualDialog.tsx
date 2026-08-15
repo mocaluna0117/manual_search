@@ -31,7 +31,7 @@ import {
   fileTypeOf,
   stripExtension,
 } from '../../lib/fileTypes'
-import { toastError } from '../../lib/toast'
+import { toastError, toastInfo, toastSuccess } from '../../lib/toast'
 
 interface UploadManualDialogProps {
   open: boolean
@@ -216,9 +216,12 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   }
 
   /** 指定した1件をアップロードして登録する(強制差し替えの再実行にも使う) */
-  const uploadOne = async (index: number, forceReplace = false) => {
+  const uploadOne = async (
+    index: number,
+    forceReplace = false,
+  ): Promise<RegisterOutcome | 'error' | null> => {
     const item = items[index]
-    if (!item) return
+    if (!item) return null
     setItems((prev) =>
       prev.map((it, idx) => (idx === index ? { ...it, status: 'uploading' } : it)),
     )
@@ -277,6 +280,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
             : it,
         ),
       )
+      return registered?.registerManual.outcome ?? null
     } catch (e) {
       setItems((prev) =>
         prev.map((it, idx) =>
@@ -289,6 +293,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
             : it,
         ),
       )
+      return 'error'
     }
   }
 
@@ -296,11 +301,48 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const handleUpload = async () => {
     if (items.length === 0) return
     setUploading(true)
+    // 画面の外からでも終わりが分かるよう、まとめて通知する。
+    // 件数は各回の結果を数える(itemsの状態は反映が遅れることがあるため)
+    let created = 0
+    let updated = 0
+    let skipped = 0
+    let failed = 0
     for (let i = 0; i < items.length; i++) {
       if (items[i].status === 'done') continue
-      await uploadOne(i)
+      const outcome = await uploadOne(i)
+      if (outcome === 'error') failed++
+      else if (outcome === 'UPDATED') updated++
+      else if (outcome === 'SKIPPED_OLDER') skipped++
+      else if (outcome === 'CREATED') created++
     }
     setUploading(false)
+
+    const detail = [
+      updated > 0 ? `${updated}件は既存を更新` : '',
+      skipped > 0 ? `${skipped}件は既存の方が新しいためスキップ` : '',
+      // 「AIにおまかせ」は取り込みのあとに振り分けるので、その旨を添える
+      created + updated > 0 && categoryId === AUTO
+        ? '読み取りが終わると、AIが自動でフォルダへ振り分けます'
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    if (failed > 0) {
+      toastError(
+        `${failed}件のアップロードに失敗しました`,
+        [created + updated > 0 ? `${created + updated}件は成功` : '', detail]
+          .filter(Boolean)
+          .join('\n') || undefined,
+      )
+    } else if (created + updated > 0) {
+      toastSuccess(
+        `${created + updated}件のアップロードが完了しました`,
+        detail || undefined,
+      )
+    } else if (skipped > 0) {
+      toastInfo('アップロードしたファイルはありません', detail || undefined)
+    }
   }
 
   /** スキップされた1件を、判定を無視して差し替える */
