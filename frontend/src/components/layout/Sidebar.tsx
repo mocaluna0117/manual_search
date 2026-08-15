@@ -64,6 +64,7 @@ import {
   START_RECLASSIFY_MUTATION,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
+import { trashedCategoriesNote } from '../../lib/format'
 import { useManualViewer } from '../manual/ManualViewerProvider'
 import { HelpDialog } from './HelpDialog'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
@@ -290,7 +291,8 @@ export function SidebarContent({
             : `再分類が完了しました（${status.movedCount}件を割り当て）` +
                 (status.createdCategories.length > 0
                   ? `\n新しく作られたフォルダ: ${status.createdCategories.join('、')}`
-                  : ''),
+                  : '') +
+                trashedCategoriesNote(status.trashedCategories),
         )
       }
       startedHereRef.current = false

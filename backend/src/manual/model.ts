@@ -112,6 +112,11 @@ export class AutoOrganizeResult {
 
   @Field(() => [String])
   createdCategories!: string[];
+
+  // AIが入れようとしたが、同名フォルダがゴミ箱にあって作れなかった名前。
+  // 未分類のまま残った理由を画面で伝えるために返す
+  @Field(() => [String])
+  trashedCategories!: string[];
 }
 
 // 全件再分類の進行状況。数分かかるためリクエストは待たせず、
@@ -126,6 +131,10 @@ export class ReclassifyStatus {
 
   @Field(() => [String])
   createdCategories!: string[];
+
+  // 同名フォルダがゴミ箱にあって使えなかった名前(AutoOrganizeResultと同じ)
+  @Field(() => [String])
+  trashedCategories!: string[];
 
   @Field(() => String, { nullable: true })
   error!: string | null;

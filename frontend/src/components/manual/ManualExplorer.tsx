@@ -29,6 +29,7 @@ import {
   type Manual,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
+import { trashedCategoriesNote } from '../../lib/format'
 import {
   ManualItemList,
   ViewModeSwitch,
@@ -370,12 +371,14 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     try {
       const { data: result } = await autoOrganize()
       if (result) {
-        const { movedCount, createdCategories } = result.autoOrganizeManuals
+        const { movedCount, createdCategories, trashedCategories } =
+          result.autoOrganizeManuals
         window.alert(
           `${movedCount}件を分類しました` +
             (createdCategories.length > 0
               ? `\n新しく作られたカテゴリ: ${createdCategories.join('、')}`
-              : ''),
+              : '') +
+            trashedCategoriesNote(trashedCategories),
         )
       }
     } catch (e) {

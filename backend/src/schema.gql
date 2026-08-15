@@ -99,12 +99,14 @@ enum RegisterOutcome {
 type AutoOrganizeResult {
   movedCount: Int!
   createdCategories: [String!]!
+  trashedCategories: [String!]!
 }
 
 type ReclassifyStatus {
   running: Boolean!
   movedCount: Int!
   createdCategories: [String!]!
+  trashedCategories: [String!]!
   error: String
   finishedAt: DateTime
 }

@@ -340,6 +340,7 @@ export class ManualService implements OnApplicationBootstrap {
     running: false,
     movedCount: 0,
     createdCategories: [],
+    trashedCategories: [],
     error: null,
     finishedAt: null,
   };
@@ -358,6 +359,7 @@ export class ManualService implements OnApplicationBootstrap {
       ok: boolean;
       movedCount: number;
       createdCategories: string[];
+      trashedCategories: string[];
       error?: string;
     }) => void,
   ): boolean {
@@ -366,19 +368,21 @@ export class ManualService implements OnApplicationBootstrap {
       running: true,
       movedCount: 0,
       createdCategories: [],
+      trashedCategories: [],
       error: null,
       finishedAt: null,
     };
     void this.reclassifyAll(instruction)
-      .then(({ movedCount, createdCategories }) => {
+      .then(({ movedCount, createdCategories, trashedCategories }) => {
         this.reclassifyJob = {
           running: false,
           movedCount,
           createdCategories,
+          trashedCategories,
           error: null,
           finishedAt: new Date(),
         };
-        onFinish?.({ ok: true, movedCount, createdCategories });
+        onFinish?.({ ok: true, movedCount, createdCategories, trashedCategories });
       })
       .catch((e: unknown) => {
         const error = e instanceof Error ? e.message : '不明なエラー';
@@ -386,10 +390,17 @@ export class ManualService implements OnApplicationBootstrap {
           running: false,
           movedCount: 0,
           createdCategories: [],
+          trashedCategories: [],
           error,
           finishedAt: new Date(),
         };
-        onFinish?.({ ok: false, movedCount: 0, createdCategories: [], error });
+        onFinish?.({
+          ok: false,
+          movedCount: 0,
+          createdCategories: [],
+          trashedCategories: [],
+          error,
+        });
       });
     return true;
   }
@@ -436,7 +447,7 @@ export class ManualService implements OnApplicationBootstrap {
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
     if (manuals.length === 0) {
-      return { movedCount: 0, createdCategories: [] };
+      return { movedCount: 0, createdCategories: [], trashedCategories: [] };
     }
 
     // 1回の呼び出し時間とレスポンスJSONのトークン量の両方に余裕を持たせる。
@@ -447,6 +458,7 @@ export class ManualService implements OnApplicationBootstrap {
     const BATCH_SIZE = 50;
     let movedCount = 0;
     const createdCategories: string[] = [];
+    const trashedCategories: string[] = [];
     for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
       const batch = manuals.slice(i, i + BATCH_SIZE);
       // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)。
@@ -468,8 +480,11 @@ export class ManualService implements OnApplicationBootstrap {
       const result = await this.applyAssignments(assignments, allowNew);
       movedCount += result.movedCount;
       createdCategories.push(...result.createdCategories);
+      for (const name of result.trashedCategories) {
+        if (!trashedCategories.includes(name)) trashedCategories.push(name);
+      }
     }
-    return { movedCount, createdCategories };
+    return { movedCount, createdCategories, trashedCategories };
   }
 
   /** 1件だけAIで分類する(アップロード時の「AIにおまかせ」用)。失敗しても取り込みは成功扱い */
@@ -518,6 +533,8 @@ export class ManualService implements OnApplicationBootstrap {
     allowNew = true,
   ) {
     const createdCategories: string[] = [];
+    // ゴミ箱にあるせいで入れられなかったフォルダ名(重複なし)
+    const trashedCategories: string[] = [];
     let movedCount = 0;
     for (const assignment of assignments) {
       const name = assignment.category.trim();
@@ -540,6 +557,9 @@ export class ManualService implements OnApplicationBootstrap {
           this.logger.warn(
             `フォルダ「${name}」はゴミ箱にあるため分類をスキップしました(未分類のまま)`,
           );
+          // 黙って未分類に残すと「押しても分類されない」ようにしか見えないので、
+          // 呼び出し元まで理由を運んで画面で伝える
+          if (!trashedCategories.includes(name)) trashedCategories.push(name);
           continue;
         }
         category = await this.prisma.manualCategory.create({
@@ -553,7 +573,7 @@ export class ManualService implements OnApplicationBootstrap {
       });
       movedCount++;
     }
-    return { movedCount, createdCategories };
+    return { movedCount, createdCategories, trashedCategories };
   }
 
   /** マニュアルを別カテゴリへ移動する(categoryId=nullで未分類へ) */

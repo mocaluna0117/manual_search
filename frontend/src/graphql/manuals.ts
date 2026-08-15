@@ -399,6 +399,8 @@ interface AutoOrganizeData {
   autoOrganizeManuals: {
     movedCount: number
     createdCategories: string[]
+    // 同名フォルダがゴミ箱にあって作れず、未分類のまま残った分の名前
+    trashedCategories: string[]
   }
 }
 
@@ -407,6 +409,7 @@ export const AUTO_ORGANIZE_MUTATION: TypedDocumentNode<AutoOrganizeData> = gql`
     autoOrganizeManuals {
       movedCount
       createdCategories
+      trashedCategories
     }
   }
 `
@@ -427,6 +430,8 @@ export interface ReclassifyStatus {
   running: boolean
   movedCount: number
   createdCategories: string[]
+  // 同名フォルダがゴミ箱にあって作れず、未分類のまま残った分の名前
+  trashedCategories: string[]
   error: string | null
   finishedAt: string | null
 }
@@ -441,6 +446,7 @@ export const RECLASSIFY_STATUS_QUERY: TypedDocumentNode<ReclassifyStatusData> = 
       running
       movedCount
       createdCategories
+      trashedCategories
       error
       finishedAt
     }
