@@ -18,6 +18,8 @@ export const CATEGORIES_QUERY: TypedDocumentNode<CategoriesData> = gql`
       id
       name
       updatedAt
+      totalSize
+      manualCount
     }
   }
 `
