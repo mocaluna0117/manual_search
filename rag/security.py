@@ -91,7 +91,7 @@ def validate_download_url(url: str) -> None:
             raise HTTPException(status_code=400, detail="URLの形式が不正です")
 
 
-def fetch_pdf(url: str) -> bytes:
+def fetch_file(url: str) -> bytes:
     """検証済みURLからPDFを取得する(サイズ上限とタイムアウト付き)"""
     import urllib.request
 

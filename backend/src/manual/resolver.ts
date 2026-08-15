@@ -10,6 +10,7 @@ import {
   ManualDownloadTarget,
   ManualSearchResult,
   ManualUploadTarget,
+  ManualViewTarget,
   ReclassifyCounts,
   ReclassifyStatus,
   RegisterManualResult,
@@ -53,8 +54,8 @@ export class ManualResolver {
     return this.manualService.search(keyword);
   }
 
-  // PDFを開くための署名付きURL(15分有効)を発行
-  @Query(() => String)
+  // マニュアルを開くための署名付きURL(15分有効)と、形式の情報を返す
+  @Query(() => ManualViewTarget)
   manualDownloadUrl(@Args('id', { type: () => ID }) id: string) {
     return this.manualService.getDownloadUrl(id);
   }

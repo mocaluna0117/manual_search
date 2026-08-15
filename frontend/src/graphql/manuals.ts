@@ -365,7 +365,12 @@ export const MANUAL_DOWNLOAD_URLS_QUERY: TypedDocumentNode<
 // --- 閲覧用URLの発行 ---
 
 interface DownloadUrlData {
-  manualDownloadUrl: string
+  manualDownloadUrl: {
+    url: string
+    fileName: string
+    /** trueならタブで開ける(PDF)。falseならダウンロードして開いてもらう */
+    viewableInBrowser: boolean
+  }
 }
 
 interface DownloadUrlVars {
@@ -377,7 +382,11 @@ export const MANUAL_DOWNLOAD_URL_QUERY: TypedDocumentNode<
   DownloadUrlVars
 > = gql`
   query ManualDownloadUrl($id: ID!) {
-    manualDownloadUrl(id: $id)
+    manualDownloadUrl(id: $id) {
+      url
+      fileName
+      viewableInBrowser
+    }
   }
 `
 

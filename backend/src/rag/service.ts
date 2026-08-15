@@ -90,10 +90,12 @@ export class RagService {
   async ingest(
     manualId: string,
     downloadUrl: string,
+    fileName: string,
   ): Promise<{ chunkCount: number; pdfCreatedAt: Date | null }> {
     const res = await this.request('/ingest', TIMEOUT_MS.ingest, {
       manual_id: manualId,
       download_url: downloadUrl,
+      file_name: fileName,
     });
     if (!res.ok) {
       throw new ServiceUnavailableException(

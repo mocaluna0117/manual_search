@@ -179,6 +179,21 @@ export class RestoreCategoriesResult {
   mergedInto!: string[];
 }
 
+// マニュアルを開くための情報。ブラウザで表示できない形式(Word/Excel等)は
+// ダウンロードさせるので、画面が判断できるよう形式も一緒に返す
+@ObjectType()
+export class ManualViewTarget {
+  @Field()
+  url!: string;
+
+  @Field()
+  fileName!: string;
+
+  // trueならタブで開ける(PDF)。falseならダウンロードして開いてもらう
+  @Field()
+  viewableInBrowser!: boolean;
+}
+
 // 一括ダウンロードの対象1件分(署名付きURL付き)
 @ObjectType()
 export class ManualDownloadTarget {

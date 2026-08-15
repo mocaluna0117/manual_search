@@ -1,6 +1,31 @@
 import { Box, HStack, IconButton, Portal, Text } from '@chakra-ui/react'
 import { useEffect, useState, type ReactNode } from 'react'
-import { FcFile, FcFolder } from 'react-icons/fc'
+import {
+  FcDataSheet,
+  FcDocument,
+  FcFile,
+  FcFolder,
+  FcVoicePresentation,
+} from 'react-icons/fc'
+import { LuMail } from 'react-icons/lu'
+import { fileIconOf } from '../../lib/fileTypes'
+
+/** ファイル形式ごとのアイコン。一目で種類が分かるようにする */
+function FileIcon({ fileName, size }: { fileName: string; size: number }) {
+  switch (fileIconOf(fileName)) {
+    case 'word':
+      return <FcDocument size={size} />
+    case 'excel':
+      return <FcDataSheet size={size} />
+    case 'powerpoint':
+      return <FcVoicePresentation size={size} />
+    case 'mail':
+      return <LuMail size={size} color="#0a66c2" />
+    default:
+      // PDFと未知の形式は共通の書類アイコン
+      return <FcFile size={size} />
+  }
+}
 import {
   LuBookOpen,
   LuChevronDown,
@@ -407,7 +432,7 @@ export function ManualItemList({
                 )}
                 <HStack flex="1" gap={2} minW={0}>
                   <Box flexShrink={0}>
-                    <FcFile size={18} />
+                    <FileIcon fileName={manual.fileName} size={18} />
                   </Box>
                   <Text fontSize="sm" truncate>
                     {renderTitle ? renderTitle(manual) : manual.title}
@@ -485,7 +510,7 @@ export function ManualItemList({
               title={manual.title}
             >
               <Box display="flex" justifyContent="center">
-                <FcFile size={48} />
+                <FileIcon fileName={manual.fileName} size={48} />
               </Box>
               {/* 状態とピンは右上にまとめ、左上はチェックボックスに空ける */}
               <HStack position="absolute" top="1" right="3" gap={1}>

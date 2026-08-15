@@ -24,6 +24,12 @@ import {
   type RegisterOutcome,
 } from '../../graphql/manuals'
 import { formatSize } from '../../lib/format'
+import {
+  ACCEPT_ATTR,
+  SUPPORTED_LABEL,
+  fileTypeOf,
+  stripExtension,
+} from '../../lib/fileTypes'
 
 interface UploadManualDialogProps {
   open: boolean
@@ -123,20 +129,25 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
     refetchQueries: ['Manuals'],
   })
 
-  /** 選択/ドロップされたファイルをリストに追加(PDF以外は弾く) */
+  /** 選択/ドロップされたファイルをリストに追加(対応していない形式は弾く) */
   const addFiles = (fileList: FileList | null) => {
     if (!fileList) return
     const files = Array.from(fileList)
-    const pdfs = files.filter((f) => f.name.toLowerCase().endsWith('.pdf'))
-    if (pdfs.length < files.length) {
-      window.alert('PDF以外のファイルはスキップしました')
+    const accepted = files.filter((f) => fileTypeOf(f.name))
+    const rejected = files.filter((f) => !fileTypeOf(f.name))
+    if (rejected.length > 0) {
+      window.alert(
+        `次のファイルは対応していない形式のためスキップしました:\n` +
+          `${rejected.map((f) => f.name).join('\n')}\n\n` +
+          `対応形式: ${SUPPORTED_LABEL}`,
+      )
     }
     setItems((prev) => [
       ...prev,
-      ...pdfs.map((file) => ({
+      ...accepted.map((file) => ({
         file,
         // タイトルの初期値はファイル名(拡張子なし)。あとから編集できる
-        title: file.name.replace(/\.pdf$/i, ''),
+        title: stripExtension(file.name),
         status: 'pending' as const,
       })),
     ])
@@ -167,7 +178,11 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
       // 2) ストレージへ直接PUT
       const putResponse = await fetch(uploadUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/pdf' },
+        // 署名時と同じContent-Typeを送る。食い違うと署名が一致せず403になる
+        headers: {
+          'Content-Type':
+            fileTypeOf(item.file.name)?.mimeType ?? 'application/octet-stream',
+        },
         body: item.file,
       })
       if (!putResponse.ok) {
@@ -281,15 +296,15 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                   }}
                 >
                   <Text color="fg.muted">
-                    クリックして選択、またはここにPDFをドラッグ&ドロップ
+                    クリックして選択、またはここにファイルをドラッグ&ドロップ
                   </Text>
                   <Text fontSize="xs" color="fg.subtle" mt={1}>
-                    複数ファイルをまとめて選択できます
+                    {SUPPORTED_LABEL}に対応。複数まとめて選択できます
                   </Text>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="application/pdf"
+                    accept={ACCEPT_ATTR}
                     multiple
                     style={{ display: 'none' }}
                     onChange={(e) => {

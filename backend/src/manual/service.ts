@@ -8,6 +8,7 @@ import {
 import type { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
+import { fileTypeOf } from '../storage/file-types';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
 import {
@@ -295,6 +296,8 @@ export class ManualService implements OnApplicationBootstrap {
       const { chunkCount, pdfCreatedAt } = await this.rag.ingest(
         manual.id,
         downloadUrl,
+        // 形式ごとに読み方が違うので、拡張子が分かるようファイル名も渡す
+        manual.fileName,
       );
 
       await this.prisma.manual.update({
@@ -707,7 +710,16 @@ export class ManualService implements OnApplicationBootstrap {
     if (!manual) {
       throw new NotFoundException('マニュアルが見つかりません');
     }
-    return this.storage.createDownloadUrl(manual.fileKey, manual.fileName);
+    const url = await this.storage.createDownloadUrl(
+      manual.fileKey,
+      manual.fileName,
+    );
+    return {
+      url,
+      fileName: manual.fileName,
+      // 画面はここを見て、埋め込み表示かダウンロード案内かを決める
+      viewableInBrowser: fileTypeOf(manual.fileName)?.viewableInBrowser ?? false,
+    };
   }
 
   /**

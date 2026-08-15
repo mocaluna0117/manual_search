@@ -15,7 +15,8 @@ from pydantic import UUID4, BaseModel
 from pypdf import PdfReader
 
 from chunking import split_text
-from security import fetch_pdf, require_api_token
+from extract import extractor_for
+from security import fetch_file, require_api_token
 from embedding import create_embedder, to_vector_literal
 from llm import ADMIN_TOOLS, Context, create_answer_generator
 from vision import MAX_TRANSCRIBE_PAGES, create_transcriber, render_page_jpeg
@@ -284,6 +285,9 @@ def _fallback_extract_options(answer: str) -> tuple[str, list[str]]:
 class IngestRequest(BaseModel):
     manual_id: UUID4
     download_url: str  # NestJSが発行した署名付きURL
+    # 元のファイル名。拡張子から読み方(PDF/Word/Excel/PowerPoint/メール)を決める。
+    # 省略時はPDFとして扱う(この項目より前からある呼び出しとの互換のため)
+    file_name: str = ""
 
 
 class IngestResponse(BaseModel):
@@ -303,56 +307,87 @@ def health():
 
 @app.post("/ingest", response_model=IngestResponse, dependencies=[Depends(require_api_token)])
 def ingest(req: IngestRequest) -> IngestResponse:
-    """PDFを取り込み、テキスト抽出→チャンク分割→DB保存する。
+    """ファイルを取り込み、テキスト抽出→チャンク分割→DB保存する。
 
+    PDFはページごと、Excelはシートごと、PowerPointはスライドごとに分ける。
+    WordとOutlookメールは区切りが無いので全体で1つとして扱う。
     embeddingはこの段階ではNULLのまま(次ステップでBedrockを使って埋める)。
     """
-    # 1) 署名付きURLからPDFをダウンロード。
+    # 1) 署名付きURLからファイルをダウンロード。
     #    スキーム/ホスト/解決先IPを検証し、サイズ上限とタイムアウトも掛ける
     #    (file://やメタデータエンドポイントを読ませられるのを防ぐ)
-    pdf_bytes = fetch_pdf(req.download_url)
+    file_bytes = fetch_file(req.download_url)
 
-    # 2) ページごとにテキスト抽出
-    try:
-        reader = PdfReader(BytesIO(pdf_bytes))
-        pages = [(page.extract_text() or "").strip() for page in reader.pages]
-    except Exception as e:
-        logger.warning("PDFの解析に失敗 manual=%s: %s", req.manual_id, e)
-        raise HTTPException(status_code=422, detail="PDFを解析できませんでした")
-
-    # 2.2) PDF自体が持つ作成日を読む(一覧の「作成日」列に使う)。
-    #      日付が壊れているPDFもあるので、取れなければ諦めて取り込みは続ける
     pdf_created_at: str | None = None
-    try:
-        created = reader.metadata.creation_date if reader.metadata else None
-        if created:
-            pdf_created_at = created.isoformat()
-    except Exception:
-        pass
-
-    # 2.5) テキストがほぼ取れないページ(スキャン・画像ページ)は
-    #      Claudeの画像認識で書き起こす(上限ページ数まで)
+    # 画像ページの書き起こし件数。PDF以外では書き起こしをしないので0のまま
     transcribed_count = 0
-    if transcriber.enabled:
-        for i, text in enumerate(pages):
-            if len(text) >= MIN_TEXT_CHARS_PER_PAGE:
-                continue
-            if transcribed_count >= MAX_TRANSCRIBE_PAGES:
-                break  # コストの安全弁。超過分は素通し(空ページ扱い)
-            try:
-                image = render_page_jpeg(pdf_bytes, i)
-                pages[i] = transcriber.transcribe(image)
-                transcribed_count += 1
-            except Exception:
-                # 1ページの失敗で取り込み全体を止めない(そのページだけ諦める)
-                continue
+    extractor = extractor_for(req.file_name)
 
-    # 2.7) 表記をNFCに正規化する。PDFの内部表現によってはNFDで抽出されることが
-    #      あり、そのまま保存すると検索キーワード(NFC)のILIKEに当たらなくなる
-    pages = [normalize_text(text) for text in pages]
+    if extractor is not None:
+        # --- PDF以外(Word / Excel / PowerPoint / Outlookメール) ---
+        try:
+            sections = extractor(file_bytes)
+        except Exception as e:
+            logger.warning(
+                "ファイルの解析に失敗 manual=%s file=%s: %s",
+                req.manual_id,
+                req.file_name,
+                e,
+            )
+            raise HTTPException(
+                status_code=422, detail="ファイルを解析できませんでした"
+            )
+        if not any(text.strip() for _label, text in sections):
+            raise HTTPException(
+                status_code=422,
+                detail="このファイルからは文字を取り出せませんでした(中身が画像だけの可能性があります)",
+            )
+        # 見出し(シート名・スライド番号)を本文の先頭に付けて、
+        # 「どのシートの話か」が抜粋だけでも分かるようにする
+        pages = [
+            normalize_text(f"{label}\n{text}" if label else text)
+            for label, text in sections
+        ]
+    else:
+        # --- PDF(従来の経路) ---
+        try:
+            reader = PdfReader(BytesIO(file_bytes))
+            pages = [(page.extract_text() or "").strip() for page in reader.pages]
+        except Exception as e:
+            logger.warning("PDFの解析に失敗 manual=%s: %s", req.manual_id, e)
+            raise HTTPException(status_code=422, detail="PDFを解析できませんでした")
 
-    # 3) ページごとにチャンク化する(どのページ由来かを記録し、引用をページ単位にするため)
-    chunks: list[tuple[str, int]] = []  # (本文, ページ番号)
+        # PDF自体が持つ作成日を読む(一覧の「作成日」列に使う)。
+        # 日付が壊れているPDFもあるので、取れなければ諦めて取り込みは続ける
+        try:
+            created = reader.metadata.creation_date if reader.metadata else None
+            if created:
+                pdf_created_at = created.isoformat()
+        except Exception:
+            pass
+
+        # テキストがほぼ取れないページ(スキャン・画像ページ)は
+        # Claudeの画像認識で書き起こす(上限ページ数まで)
+        if transcriber.enabled:
+            for i, text in enumerate(pages):
+                if len(text) >= MIN_TEXT_CHARS_PER_PAGE:
+                    continue
+                if transcribed_count >= MAX_TRANSCRIBE_PAGES:
+                    break  # コストの安全弁。超過分は素通し(空ページ扱い)
+                try:
+                    image = render_page_jpeg(file_bytes, i)
+                    pages[i] = transcriber.transcribe(image)
+                    transcribed_count += 1
+                except Exception:
+                    # 1ページの失敗で取り込み全体を止めない(そのページだけ諦める)
+                    continue
+
+        # 表記をNFCに正規化する。PDFの内部表現によってはNFDで抽出されることが
+        # あり、そのまま保存すると検索キーワード(NFC)のILIKEに当たらなくなる
+        pages = [normalize_text(text) for text in pages]
+
+    # 3) 区切りごとにチャンク化する(どこ由来かを記録し、引用の手がかりにする)
+    chunks: list[tuple[str, int]] = []  # (本文, ページ/シート/スライドの番号)
     for page_no, text in enumerate(pages, start=1):
         for piece in split_text(text):
             chunks.append((piece, page_no))

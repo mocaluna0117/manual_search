@@ -155,6 +155,12 @@ type RestoreCategoriesResult {
   mergedInto: [String!]!
 }
 
+type ManualViewTarget {
+  url: String!
+  fileName: String!
+  viewableInBrowser: Boolean!
+}
+
 type ManualDownloadTarget {
   id: ID!
   title: String!
@@ -228,7 +234,7 @@ type Query {
   conversation(id: ID!): Conversation!
   manuals(categoryId: ID, uncategorized: Boolean): [Manual!]!
   searchManuals(keyword: String!): [ManualSearchResult!]!
-  manualDownloadUrl(id: ID!): String!
+  manualDownloadUrl(id: ID!): ManualViewTarget!
   manualDownloadUrls(ids: [ID!]!): [ManualDownloadTarget!]!
   reclassifyStatus: ReclassifyStatus!
   reclassifyCounts: ReclassifyCounts!

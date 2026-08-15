@@ -7,3 +7,8 @@ boto3
 pypdfium2
 pillow
 pytest
+# PDF以外のマニュアルから本文を取り出す(Word/Excel/PowerPoint/Outlookメール)
+python-docx
+openpyxl
+python-pptx
+extract-msg

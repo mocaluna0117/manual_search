@@ -8,6 +8,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { fileTypeOf, mimeTypeOf } from './file-types';
 
 /** endpointは値があるときだけ設定する(未設定ならAWS S3の既定URLが使われる) */
 function withEndpoint(config: S3ClientConfig, endpoint?: string): S3ClientConfig {
@@ -67,14 +68,16 @@ export class StorageService {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: fileKey,
-      ContentType: 'application/pdf',
+      // 形式ごとに正しいContent-Typeで署名する。ここがPUT時のヘッダと
+      // 食い違うと署名が一致せず、アップロードが403で弾かれる
+      ContentType: mimeTypeOf(fileName),
     });
     const uploadUrl = await getSignedUrl(this.presignS3, command, { expiresIn: 900 });
 
     return { uploadUrl, fileKey };
   }
 
-  /** 閲覧用の署名付きURLを発行する(15分有効)。ブラウザのタブでPDFが開く */
+  /** 閲覧用の署名付きURLを発行する(15分有効)。PDFはタブで開き、他は保存される */
   async createDownloadUrl(fileKey: string, fileName: string) {
     return this.signDownload(this.presignS3, fileKey, fileName);
   }
@@ -89,12 +92,16 @@ export class StorageService {
   }
 
   private signDownload(client: S3Client, fileKey: string, fileName: string) {
+    const type = fileTypeOf(fileName);
+    // ブラウザで開けない形式(Word/Excel/PowerPoint/メール)は、タブで開こうと
+    // せずそのまま保存させる。inlineのままだと真っ白なタブが開くだけになる
+    const disposition = type?.viewableInBrowser ? 'inline' : 'attachment';
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: fileKey,
-      // inline=タブで開く。日本語ファイル名はRFC5987形式でエンコードする
-      ResponseContentDisposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
-      ResponseContentType: 'application/pdf',
+      // 日本語ファイル名はRFC5987形式でエンコードする
+      ResponseContentDisposition: `${disposition}; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      ResponseContentType: type?.mimeType ?? 'application/octet-stream',
       // ブラウザにキャッシュさせる。PDFビューアはスクロールに応じて
       // ファイルの続きを小分けに取りに行くので、これが無いと毎回通信が発生し
       // スクロールが引っかかる。privateなので共有キャッシュには残らない。
