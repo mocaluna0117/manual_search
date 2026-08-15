@@ -300,10 +300,10 @@ export class ManualService implements OnApplicationBootstrap {
         manual.fileName,
       );
 
+      // 読み取れた分をまず記録する。ここではまだCOMPLETEDにしない
       await this.prisma.manual.update({
         where: { id },
         data: {
-          ingestStatus: IngestStatus.COMPLETED,
           chunkCount,
           ingestedAt: new Date(),
           // 読み取れたときだけ更新する(既に入っている値を消さない)
@@ -311,10 +311,21 @@ export class ManualService implements OnApplicationBootstrap {
         },
       });
 
-      // 「AIにおまかせ」指定なら、取り込み完了後にカテゴリを自動で割り当てる
+      // 「AIにおまかせ」指定なら、ここでカテゴリを割り当てる。
+      //
+      // 分類より先にCOMPLETEDにしてはいけない。画面は「取り込みが終わった=
+      // 置き場所が決まった」と見なすため、分類が終わる前に完了扱いにすると
+      // 「未分類に入りました」と表示した直後にAIが別のフォルダへ移し、
+      // 未分類を見ても無い、という食い違いが起きる
       if (autoCategorize) {
         await this.autoCategorizeOne(id);
       }
+
+      // 置き場所まで決まってから完了にする
+      await this.prisma.manual.update({
+        where: { id },
+        data: { ingestStatus: IngestStatus.COMPLETED },
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : '不明なエラー';
       this.logger.error(`取り込み失敗 manual=${id}: ${message}`);
