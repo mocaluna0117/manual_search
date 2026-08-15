@@ -179,7 +179,8 @@ export function EmptiedFolderCleanup({
     <Dialog.Root
       open={open}
       onOpenChange={(e) => !e.open && hide()}
-      size="lg"
+      // 狭い画面では全画面にする(横がはみ出して読めなくなるため)
+      size={{ base: 'full', md: 'lg' }}
       scrollBehavior="inside"
       // 背景クリックで消えると、片付けの機会を落としたのか自分で閉じたのか
       // 分からなくなる。閉じ方はEscかボタンに限る

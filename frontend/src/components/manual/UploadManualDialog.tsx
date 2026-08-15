@@ -365,7 +365,8 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
     <Dialog.Root
       open={open}
       onOpenChange={(e) => !e.open && resetAndClose()}
-      size="lg"
+      // 狭い画面では全画面にする(横がはみ出して読めなくなるため)
+      size={{ base: 'full', md: 'lg' }}
     >
       <Portal>
         <Dialog.Backdrop />

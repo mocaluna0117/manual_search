@@ -11,6 +11,7 @@ import { FcFolder } from 'react-icons/fc'
 import { extensionOf } from '../../lib/fileTypes'
 import { updatedDateOf } from '../../lib/manualDate'
 import { FileIcon } from './FileIcon'
+import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
 import {
   LuBookOpen,
   LuChevronDown,
@@ -225,6 +226,9 @@ export function ManualItemList({
     manuals.length + folders.length > 0 &&
     manuals.every((m) => checkedIds?.has(m.id)) &&
     (!foldersSelectable || folders.every((f) => checkedFolderIds?.has(f.id)))
+  // タッチ端末か。ドラッグ・右クリック・ダブルタップが使えないため、
+  // 操作の出し方を変える(マウスとの併用機でも、細い指先より安全側に倒す)
+  const isTouch = useIsTouchDevice()
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
   // 名前を書き換え中のマニュアル。フォルダ名の変更と同じ操作感にする
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -309,11 +313,12 @@ export function ManualItemList({
   })
 
   const folderItemProps = (folder: Category) => ({
-    onClick: () => onSelect(folder.id),
+    // タッチ端末は1タップで開く(ダブルタップは反応しにくい)
+    onClick: () => (isTouch ? onOpenFolder?.(folder) : onSelect(folder.id)),
     onDoubleClick: () => onOpenFolder?.(folder),
     // フォルダ自体もドラッグできる(サイドバーのゴミ箱へ運ぶため)。
     // マニュアルのドラッグと区別できるよう専用のデータ形式を使う
-    draggable: isAdmin,
+    draggable: isAdmin && !isTouch,
     onDragStart: (e: React.DragEvent) => {
       e.dataTransfer.setData(FOLDER_MIME, folder.id)
       e.dataTransfer.effectAllowed = 'move'
@@ -336,8 +341,10 @@ export function ManualItemList({
   })
 
   const manualItemProps = (manual: Manual) => ({
-    draggable: isAdmin,
-    onClick: () => onSelect(manual.id),
+    // タッチ端末ではドラッグもダブルタップも扱いにくいので、
+    // 1タップで開き、ドラッグは無効にする
+    draggable: isAdmin && !isTouch,
+    onClick: () => (isTouch ? onOpenManual(manual) : onSelect(manual.id)),
     onDoubleClick: () => onOpenManual(manual),
     onContextMenu: (e: React.MouseEvent) => {
       e.preventDefault()
@@ -354,9 +361,15 @@ export function ManualItemList({
   })
 
   /** 詳細表示の列ヘッダー(クリックで並べ替え) */
+  // 狭い画面では補助的な列を隠し、アイコンと名前に幅を回す。
+  // 隠した情報は名前の下に小さく添えるので、失われはしない
+  const SUB_COLUMN = { base: 'none', md: 'block' } as const
+  const SUB_COLUMN_FLEX = { base: 'none', md: 'flex' } as const
+
   const sortHeader = (label: string, key: SortKey, w?: string) => (
     <HStack
       w={w}
+      display={w ? SUB_COLUMN_FLEX : undefined}
       flex={w ? undefined : '1'}
       gap={1}
       cursor={onSort ? 'pointer' : 'default'}
@@ -429,14 +442,27 @@ export function ManualItemList({
                 </Text>
               </HStack>
               {/* フォルダに拡張子は無いので、列の位置合わせだけする */}
-              <Text w="70px" fontSize="sm" color="fg.subtle" flexShrink={0}>
+              <Text
+                w="70px"
+                display={SUB_COLUMN}
+                fontSize="sm"
+                color="fg.subtle"
+                flexShrink={0}
+              >
                 フォルダ
               </Text>
-              <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
+              <Text
+                w="140px"
+                display={SUB_COLUMN}
+                fontSize="sm"
+                color="fg.muted"
+                flexShrink={0}
+              >
                 {formatDateTime(folder.updatedAt)}
               </Text>
               <Text
                 w="80px"
+                display={SUB_COLUMN}
                 fontSize="sm"
                 color="fg.muted"
                 flexShrink={0}
@@ -479,7 +505,13 @@ export function ManualItemList({
                   )}
                   <StatusIcon manual={manual} />
                 </HStack>
-                <Text w="70px" fontSize="sm" color="fg.muted" flexShrink={0}>
+                <Text
+                  w="70px"
+                  display={SUB_COLUMN}
+                  fontSize="sm"
+                  color="fg.muted"
+                  flexShrink={0}
+                >
                   {extensionOf(manual.fileName)}
                 </Text>
                 {(() => {
@@ -487,6 +519,7 @@ export function ManualItemList({
                   return (
                     <Text
                       w="140px"
+                      display={SUB_COLUMN}
                       fontSize="sm"
                       color={isFallback ? 'fg.subtle' : 'fg.muted'}
                       flexShrink={0}
@@ -500,10 +533,32 @@ export function ManualItemList({
                     </Text>
                   )
                 })()}
-                <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0}>
+                <Text
+                  w="80px"
+                  display={SUB_COLUMN}
+                  fontSize="sm"
+                  color="fg.muted"
+                  flexShrink={0}
+                >
                   {formatSize(manual.size)}
                 </Text>
               </HStack>
+              {/* 狭い画面では列を隠しているので、その分をここに小さく添える */}
+              <Text
+                display={{ base: 'block', md: 'none' }}
+                pl={9}
+                pb={1}
+                fontSize="xs"
+                color="fg.subtle"
+              >
+                {[
+                  extensionOf(manual.fileName),
+                  formatDateTime(updatedDateOf(manual).date ?? undefined),
+                  formatSize(manual.size),
+                ]
+                  .filter((v) => v && v !== '—')
+                  .join(' ・ ')}
+              </Text>
               {/* 本文ヒットの抜粋など(検索結果のみ) */}
               {renderSubtitle?.(manual)}
             </Box>

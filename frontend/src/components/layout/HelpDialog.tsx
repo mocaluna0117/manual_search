@@ -261,7 +261,8 @@ export function HelpDialog({ open, onClose, onOpenPdf }: HelpDialogProps) {
     <Dialog.Root
       open={open}
       onOpenChange={(e) => !e.open && onClose()}
-      size="lg"
+      // 狭い画面では全画面にする(横がはみ出して読めなくなるため)
+      size={{ base: 'full', md: 'lg' }}
       scrollBehavior="inside"
     >
       <Portal>

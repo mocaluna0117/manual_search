@@ -121,7 +121,8 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
     <Dialog.Root
       open={open}
       onOpenChange={(e) => !e.open && onClose()}
-      size="xl"
+      // 狭い画面では全画面にする(横がはみ出して読めなくなるため)
+      size={{ base: 'full', md: 'xl' }}
       scrollBehavior="inside"
     >
       <Portal>
