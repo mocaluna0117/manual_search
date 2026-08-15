@@ -379,17 +379,22 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   }
 
   return (
+    // ツールバーは固定、一覧だけをスクロールさせる。
+    // ファイルが増えてもダウンロードや表示切替のボタンに手が届くようにする
     <Box
-      p={{ base: 4, md: 6 }}
-      pt={{ base: 14, md: 6 }}
       h="100%"
-      overflowY="auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) setSelectedId(null)
-      }}
+      display="flex"
+      flexDirection="column"
+      pt={{ base: 14, md: 6 }}
     >
       {/* ツールバー: パンくず + 操作 + 表示切替 */}
-      <HStack mb={4} gap={2} flexWrap="wrap">
+      <HStack
+        px={{ base: 4, md: 6 }}
+        pb={4}
+        gap={2}
+        flexWrap="wrap"
+        flexShrink={0}
+      >
         {!isRoot && (
           <Button
             size="xs"
@@ -483,6 +488,16 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         <ViewModeSwitch viewMode={viewMode} onChange={changeViewMode} />
       </HStack>
 
+      <Box
+        flex="1"
+        minH={0}
+        overflowY="auto"
+        px={{ base: 4, md: 6 }}
+        pb={{ base: 4, md: 6 }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSelectedId(null)
+        }}
+      >
       {loading && !data && <Spinner />}
 
       {/* 取り込み中の件数を上部にも出す(アイコンの⏳だけだと気づきにくい) */}
@@ -552,6 +567,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           右クリックでメニュー(サイドバーのフォルダにもドロップできます)
         </Text>
       )}
+    </Box>
     </Box>
   )
 }

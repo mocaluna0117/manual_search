@@ -305,13 +305,18 @@ export function ManualItemList({
     <>
       {viewMode === 'details' && (
         <Box>
+          {/* 列見出しもスクロール中は上端に残す(何の列か見失わないように) */}
           <HStack
             px={2}
-            py={1}
+            py={2}
             gap={2}
             borderBottomWidth="1px"
             color="fg.muted"
             fontSize="xs"
+            position="sticky"
+            top={0}
+            zIndex={1}
+            bg="bg"
           >
             {selectable && (
               <ItemCheckbox

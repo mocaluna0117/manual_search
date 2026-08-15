@@ -119,16 +119,21 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
   }
 
   return (
+    // ツールバーは固定、一覧だけをスクロールさせる。
+    // ファイルが増えてもダウンロードや表示切替のボタンに手が届くようにする
     <Box
-      p={{ base: 4, md: 6 }}
-      pt={{ base: 14, md: 6 }}
       h="100%"
-      overflowY="auto"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) setSelectedId(null)
-      }}
+      display="flex"
+      flexDirection="column"
+      pt={{ base: 14, md: 6 }}
     >
-      <HStack mb={4} gap={2} flexWrap="wrap">
+      <HStack
+        px={{ base: 4, md: 6 }}
+        pb={4}
+        gap={2}
+        flexWrap="wrap"
+        flexShrink={0}
+      >
         <Heading size="sm" display="flex" alignItems="center" gap={2}>
           <LuSearch /> 「{keyword}」の検索結果
         </Heading>
@@ -168,6 +173,16 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
         <ViewModeSwitch viewMode={viewMode} onChange={changeViewMode} />
       </HStack>
 
+      <Box
+        flex="1"
+        minH={0}
+        overflowY="auto"
+        px={{ base: 4, md: 6 }}
+        pb={{ base: 4, md: 6 }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) setSelectedId(null)
+        }}
+      >
       {loading && !data && <Spinner />}
 
       <ManualItemList
@@ -221,6 +236,7 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
           「{keyword}」に一致するマニュアルは見つかりませんでした
         </Text>
       )}
+    </Box>
     </Box>
   )
 }
