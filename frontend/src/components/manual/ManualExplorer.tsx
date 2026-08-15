@@ -564,7 +564,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       {isAdmin && (
         <Text mt={6} fontSize="xs" color="fg.subtle">
           ダブルクリックで開く / ドラッグでフォルダへ移動 /
-          右クリックでメニュー(サイドバーのフォルダにもドロップできます)
+          右クリックでメニュー(サイドバーのフォルダやゴミ箱にもドロップできます)
         </Text>
       )}
     </Box>

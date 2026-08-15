@@ -55,6 +55,7 @@ import {
   DELETE_CONVERSATION_MUTATION,
 } from '../../graphql/chat'
 import {
+  DELETE_MANUALS_MUTATION,
   MANUALS_QUERY,
   MOVE_MANUAL_MUTATION,
   RECLASSIFY_COUNTS_QUERY,
@@ -69,6 +70,13 @@ import { ClassificationRuleDialog } from './ClassificationRuleDialog'
 import { InquiryDialog } from './InquiryDialog'
 import { SettingsDialog } from './SettingsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
+
+/**
+ * フォルダをドラッグしていることを示すデータ形式。
+ * ドラッグ中は中身(getData)を読めないが、types なら判別できるため、
+ * マニュアルのドラッグ(text/plain)と区別するのに使う
+ */
+export const FOLDER_MIME = 'application/x-manual-folder'
 
 export interface SidebarProps {
   selectedCategoryId: string | null
@@ -158,7 +166,12 @@ export function SidebarContent({
     refetchQueries: ['ManualCategories'],
   })
   const [deleteCategory] = useMutation(DELETE_CATEGORY_MUTATION, {
-    refetchQueries: ['ManualCategories'],
+    refetchQueries: [
+      'ManualCategories',
+      'Manuals',
+      'TrashedManuals',
+      'TrashedCategories',
+    ],
   })
 
   const handleCreateCategory = async () => {
@@ -301,7 +314,6 @@ export function SidebarContent({
   // 使い方ガイドPDFのファイル名。docs/usage-guide/README.mdの登録手順と揃えること
 const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pdf'
 
-const FOLDER_MIME = 'application/x-manual-folder'
   const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null)
   // 挿入位置の線を出す場所(どのフォルダの上/下か)
   const [dropAt, setDropAt] = useState<{ id: string; before: boolean } | null>(
@@ -338,10 +350,45 @@ const FOLDER_MIME = 'application/x-manual-folder'
     }
   }
 
+  /** ゴミ箱にドロップされたものをゴミ箱へ移す(ファイル・フォルダ両対応) */
+  const handleTrashDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setDropTargetId(null)
+    try {
+      const folderId = e.dataTransfer.getData(FOLDER_MIME)
+      if (folderId) {
+        const folder = data?.manualCategories.find((c) => c.id === folderId)
+        const count = folder?.manualCount ?? 0
+        // フォルダは中身ごと動くので、ファイル1件より影響が大きい。ここだけ確認する
+        if (
+          !window.confirm(
+            `フォルダ「${folder?.name ?? ''}」をゴミ箱に移動しますか？` +
+              (count > 0 ? `\n中のファイル${count}件も一緒に移動します。` : '') +
+              '\nゴミ箱から元に戻せます。',
+          )
+        )
+          return
+        await deleteCategory({ variables: { id: folderId } })
+        if (folderId === selectedCategoryId) onSelectCategory(null)
+        return
+      }
+      // ファイルは元に戻せるので、いちいち確認しない(OSのゴミ箱と同じ感覚)
+      const manualId = e.dataTransfer.getData('text/plain')
+      if (manualId) await deleteManuals({ variables: { ids: [manualId] } })
+    } catch (err) {
+      window.alert(
+        err instanceof Error ? err.message : 'ゴミ箱に移動できませんでした',
+      )
+    }
+  }
+
   // エクスプローラーからマニュアルをドラッグしてフォルダへ移動できるようにする
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
   const [moveManual] = useMutation(MOVE_MANUAL_MUTATION, {
     refetchQueries: ['Manuals'],
+  })
+  const [deleteManuals] = useMutation(DELETE_MANUALS_MUTATION, {
+    refetchQueries: ['Manuals', 'ManualCategories', 'TrashedManuals'],
   })
   const handleManualDrop = async (
     e: React.DragEvent,
@@ -756,14 +803,26 @@ const FOLDER_MIME = 'application/x-manual-folder'
             <FcOpenedFolder style={{ filter: 'grayscale(1)', opacity: 0.85 }} />{' '}
             未分類
           </Button>
-          {/* ゴミ箱(管理者のみ)。毎日使うものではないので、一覧の最下段に置く */}
+          {/* ゴミ箱(管理者のみ)。毎日使うものではないので、一覧の最下段に置く。
+              ファイル・フォルダをドラッグして放り込める */}
           {isAdmin && (
             <Button
               variant="ghost"
               size="sm"
               justifyContent="flex-start"
-              color="fg.muted"
+              color={dropTargetId === 'trash' ? 'fg.error' : 'fg.muted'}
               _hover={{ bg: 'bg.emphasized' }}
+              borderWidth="1px"
+              borderColor={
+                dropTargetId === 'trash' ? 'fg.error' : 'transparent'
+              }
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setDropTargetId('trash')
+              }}
+              onDragLeave={() => setDropTargetId(null)}
+              onDrop={(e) => void handleTrashDrop(e)}
               onClick={() => {
                 onSelectTrash()
                 onNavigate?.()

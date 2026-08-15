@@ -17,6 +17,7 @@ import {
 import type { Category } from '../../graphql/categories'
 import type { Manual } from '../../graphql/manuals'
 import { formatSize } from '../../lib/format'
+import { FOLDER_MIME } from '../layout/Sidebar'
 
 /**
  * マニュアル/フォルダの一覧表示(Windowsのエクスプローラー風)。
@@ -252,8 +253,17 @@ export function ManualItemList({
   const folderItemProps = (folder: Category) => ({
     onClick: () => onSelect(folder.id),
     onDoubleClick: () => onOpenFolder?.(folder),
+    // フォルダ自体もドラッグできる(サイドバーのゴミ箱へ運ぶため)。
+    // マニュアルのドラッグと区別できるよう専用のデータ形式を使う
+    draggable: isAdmin,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData(FOLDER_MIME, folder.id)
+      e.dataTransfer.effectAllowed = 'move'
+    },
     onDragOver: (e: React.DragEvent) => {
       if (!isAdmin || !onDropToFolder) return
+      // 運んでいるのがフォルダなら、ここは受け皿にしない
+      if (e.dataTransfer.types.includes(FOLDER_MIME)) return
       e.preventDefault()
       e.dataTransfer.dropEffect = 'move'
       setDragOverFolderId(folder.id)
