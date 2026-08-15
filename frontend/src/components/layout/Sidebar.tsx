@@ -71,6 +71,7 @@ import { ClassificationRuleDialog } from './ClassificationRuleDialog'
 import { InquiryDialog } from './InquiryDialog'
 import { SettingsDialog } from './SettingsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
+import { Tooltip } from '../ui/Tooltip'
 
 /**
  * フォルダをドラッグしていることを示すデータ形式。
@@ -105,20 +106,21 @@ export type SidebarSections = 'both' | 'chat' | 'manuals'
  */
 function AppBrand({ onClick }: { onClick: () => void }) {
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      px={2}
-      gap={2}
-      fontWeight="bold"
-      color="fg"
-      title="新しいチャット(ホーム)"
-      _hover={{ bg: 'bg.emphasized' }}
-      onClick={onClick}
-    >
-      <Image src="/favicon.svg" alt="" boxSize="20px" />
-      Manualy
-    </Button>
+    <Tooltip label="新しいチャット(ホーム)">
+      <Button
+        variant="ghost"
+        size="sm"
+        px={2}
+        gap={2}
+        fontWeight="bold"
+        color="fg"
+        _hover={{ bg: 'bg.emphasized' }}
+        onClick={onClick}
+      >
+        <Image src="/favicon.svg" alt="" boxSize="20px" />
+        Manualy
+      </Button>
+    </Tooltip>
   )
 }
 
@@ -559,33 +561,38 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
               >
                 {conversation.title}
               </Button>
-              <IconButton
-                aria-label="チャット名を変更"
-                title="チャット名を変更"
-                size="xs"
-                variant="ghost"
-                color="fg.muted"
-                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-                onClick={() => {
-                  setEditingChatId(conversation.id)
-                  setEditingChatName(conversation.title)
-                }}
-              >
-                <LuPencil />
-              </IconButton>
-              <IconButton
-                aria-label="会話を削除"
-                title="会話を削除"
-                size="xs"
-                variant="ghost"
-                color="fg.muted"
-                _hover={{ color: 'fg.error', bg: 'bg.emphasized' }}
-                onClick={() =>
-                  handleDeleteConversation(conversation.id, conversation.title)
-                }
-              >
-                <LuTrash2 />
-              </IconButton>
+              <Tooltip label="チャット名を変更">
+                <IconButton
+                  aria-label="チャット名を変更"
+                  size="xs"
+                  variant="ghost"
+                  color="fg.muted"
+                  _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                  onClick={() => {
+                    setEditingChatId(conversation.id)
+                    setEditingChatName(conversation.title)
+                  }}
+                >
+                  <LuPencil />
+                </IconButton>
+              </Tooltip>
+              <Tooltip label="会話を削除">
+                <IconButton
+                  aria-label="会話を削除"
+                  size="xs"
+                  variant="ghost"
+                  color="fg.muted"
+                  _hover={{ color: 'fg.error', bg: 'bg.emphasized' }}
+                  onClick={() =>
+                    handleDeleteConversation(
+                      conversation.id,
+                      conversation.title,
+                    )
+                  }
+                >
+                  <LuTrash2 />
+                </IconButton>
+              </Tooltip>
             </HStack>
             ),
           )}
@@ -625,43 +632,46 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
           </Button>
           {isAdmin && (
             <HStack gap={0}>
-              <IconButton
-                aria-label="AIで全マニュアルを再分類"
-                title="AIで全マニュアルを再分類"
-                size="2xs"
-                variant="ghost"
-                color={reclassifying ? 'purple.fg' : 'fg.muted'}
-                _hover={{ color: 'purple.fg', bg: 'bg.emphasized' }}
-                loading={reclassifying}
-                onClick={() => void handleReclassify()}
-              >
-                <LuBot />
-              </IconButton>
-              <IconButton
-                aria-label="分類ルール"
-                title="分類ルール(AIの分類の決まりごと)"
-                size="2xs"
-                variant="ghost"
-                color="fg.muted"
-                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-                onClick={() => setRulesOpen(true)}
-              >
-                <LuRuler />
-              </IconButton>
-              <IconButton
-                aria-label="フォルダを追加"
-                title="フォルダを追加"
-                size="2xs"
-                variant="ghost"
-                color="fg.muted"
-                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-                // フォーカスを奪わない。奪うと入力欄のonBlurが先に閉じてしまい、
-                // このボタンで閉じられなくなる
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setAddingCategory((v) => !v)}
-              >
-                <LuPlus />
-              </IconButton>
+              <Tooltip label="AIで全マニュアルを再分類">
+                <IconButton
+                  aria-label="AIで全マニュアルを再分類"
+                  size="2xs"
+                  variant="ghost"
+                  color={reclassifying ? 'purple.fg' : 'fg.muted'}
+                  _hover={{ color: 'purple.fg', bg: 'bg.emphasized' }}
+                  loading={reclassifying}
+                  onClick={() => void handleReclassify()}
+                >
+                  <LuBot />
+                </IconButton>
+              </Tooltip>
+              <Tooltip label="分類ルール(AIの分類の決まりごと)">
+                <IconButton
+                  aria-label="分類ルール"
+                  size="2xs"
+                  variant="ghost"
+                  color="fg.muted"
+                  _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                  onClick={() => setRulesOpen(true)}
+                >
+                  <LuRuler />
+                </IconButton>
+              </Tooltip>
+              <Tooltip label="フォルダを追加">
+                <IconButton
+                  aria-label="フォルダを追加"
+                  size="2xs"
+                  variant="ghost"
+                  color="fg.muted"
+                  _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                  // フォーカスを奪わない。奪うと入力欄のonBlurが先に閉じてしまい、
+                  // このボタンで閉じられなくなる
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setAddingCategory((v) => !v)}
+                >
+                  <LuPlus />
+                </IconButton>
+              </Tooltip>
             </HStack>
           )}
         </HStack>
@@ -1086,17 +1096,18 @@ export function SidebarPanel({
           )}
           <Box flex="1" />
           {onToggleCollapse && (
-            <IconButton
-              aria-label="サイドバーを閉じる"
-              title="サイドバーを閉じる"
-              size="sm"
-              variant="ghost"
-              color="fg.muted"
-              _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-              onClick={onToggleCollapse}
-            >
-              {side === 'left' ? <LuPanelLeft /> : <LuPanelRight />}
-            </IconButton>
+            <Tooltip label="サイドバーを閉じる">
+              <IconButton
+                aria-label="サイドバーを閉じる"
+                size="sm"
+                variant="ghost"
+                color="fg.muted"
+                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                onClick={onToggleCollapse}
+              >
+                {side === 'left' ? <LuPanelLeft /> : <LuPanelRight />}
+              </IconButton>
+            </Tooltip>
           )}
         </HStack>
       )}

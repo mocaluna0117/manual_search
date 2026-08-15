@@ -35,6 +35,7 @@ import { useManualViewer } from '../manual/ManualViewerProvider'
 import { MarkdownText } from './MarkdownText'
 import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
 import { PromptTemplateMenu } from './PromptTemplateMenu'
+import { Tooltip } from '../ui/Tooltip'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -436,17 +437,18 @@ export function ChatHome({
         />
         {/* 定型文(テンプレート)。選ぶと入力欄に入り、〇〇が選択状態になる */}
         <PromptTemplateMenu onSelect={insertTemplate}>
-          <IconButton
-            aria-label="よく使う質問から選ぶ"
-            title="よく使う質問から選ぶ"
-            size="lg"
-            variant="outline"
-            borderRadius="full"
-            color="fg.muted"
-            alignSelf="flex-end"
-          >
-            <LuMessageSquareText />
-          </IconButton>
+          <Tooltip label="よく使う質問から選ぶ">
+            <IconButton
+              aria-label="よく使う質問から選ぶ"
+              size="lg"
+              variant="outline"
+              borderRadius="full"
+              color="fg.muted"
+              alignSelf="flex-end"
+            >
+              <LuMessageSquareText />
+            </IconButton>
+          </Tooltip>
         </PromptTemplateMenu>
         <IconButton
           aria-label="画像を添付"
@@ -716,29 +718,31 @@ export function ChatHome({
                 >
                   {formatChatTime(message.createdAt)}
                 </Text>
-                <IconButton
-                  aria-label="コピー"
-                  title="コピー"
-                  size="2xs"
-                  variant="ghost"
-                  color={
-                    message.role === 'USER' ? 'blue.contrast' : 'fg.muted'
-                  }
-                  onClick={() => void copyMessage(message)}
-                >
-                  {copiedId === message.id ? <LuCheck /> : <LuCopy />}
-                </IconButton>
-                {message.role === 'USER' && (
+                <Tooltip label="コピー">
                   <IconButton
-                    aria-label="編集して再送信"
-                    title="編集して再送信"
+                    aria-label="コピー"
                     size="2xs"
                     variant="ghost"
-                    color="blue.contrast"
-                    onClick={() => editMessage(message)}
+                    color={
+                      message.role === 'USER' ? 'blue.contrast' : 'fg.muted'
+                    }
+                    onClick={() => void copyMessage(message)}
                   >
-                    <LuPencil />
+                    {copiedId === message.id ? <LuCheck /> : <LuCopy />}
                   </IconButton>
+                </Tooltip>
+                {message.role === 'USER' && (
+                  <Tooltip label="編集して再送信">
+                    <IconButton
+                      aria-label="編集して再送信"
+                      size="2xs"
+                      variant="ghost"
+                      color="blue.contrast"
+                      onClick={() => editMessage(message)}
+                    >
+                      <LuPencil />
+                    </IconButton>
+                  </Tooltip>
                 )}
               </HStack>
             </Box>

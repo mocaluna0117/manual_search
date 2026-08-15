@@ -4,6 +4,7 @@ import { LuPanelLeft, LuPanelRight } from 'react-icons/lu'
 import type { Category } from '../../graphql/categories'
 import { useLayoutMode, type LayoutMode } from '../../lib/settings'
 import { MobileSidebar, SidebarPanel, type SidebarSections } from './Sidebar'
+import { Tooltip } from '../ui/Tooltip'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -109,33 +110,35 @@ export function AppLayout({ children, ...props }: AppLayoutProps) {
           gap={0}
           display={{ base: 'none', md: 'flex' }}
         >
-          <IconButton
-            aria-label="サイドバーを開く"
-            title="サイドバーを開く"
-            size="sm"
-            variant="ghost"
-            color="fg.muted"
-            _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-            onClick={toggleLeft}
-          >
-            <LuPanelLeft />
-          </IconButton>
-          <IconButton
-            aria-label="新しいチャット(ホーム)"
-            title="新しいチャット(ホーム)"
-            size="sm"
-            variant="ghost"
-            _hover={{ bg: 'bg.emphasized' }}
-            onClick={() => props.onSelectCategory(null)}
-          >
-            <Image src="/favicon.svg" alt="" boxSize="20px" />
-          </IconButton>
+          <Tooltip label="サイドバーを開く">
+            <IconButton
+              aria-label="サイドバーを開く"
+              size="sm"
+              variant="ghost"
+              color="fg.muted"
+              _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+              onClick={toggleLeft}
+            >
+              <LuPanelLeft />
+            </IconButton>
+          </Tooltip>
+          <Tooltip label="新しいチャット(ホーム)">
+            <IconButton
+              aria-label="新しいチャット(ホーム)"
+              size="sm"
+              variant="ghost"
+              _hover={{ bg: 'bg.emphasized' }}
+              onClick={() => props.onSelectCategory(null)}
+            >
+              <Image src="/favicon.svg" alt="" boxSize="20px" />
+            </IconButton>
+          </Tooltip>
         </HStack>
       )}
       {hasRight && rightCollapsed && (
+        <Tooltip label="サイドバーを開く">
         <IconButton
           aria-label="サイドバーを開く"
-          title="サイドバーを開く"
           size="sm"
           variant="ghost"
           color="fg.muted"
@@ -149,6 +152,7 @@ export function AppLayout({ children, ...props }: AppLayoutProps) {
         >
           <LuPanelRight />
         </IconButton>
+        </Tooltip>
       )}
 
       <MobileSidebar {...props} />

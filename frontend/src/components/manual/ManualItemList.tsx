@@ -18,6 +18,7 @@ import type { Category } from '../../graphql/categories'
 import type { Manual } from '../../graphql/manuals'
 import { formatSize } from '../../lib/format'
 import { FOLDER_MIME } from '../layout/Sidebar'
+import { Tooltip } from '../ui/Tooltip'
 
 /**
  * マニュアル/フォルダの一覧表示(Windowsのエクスプローラー風)。
@@ -68,19 +69,19 @@ export function StatusIcon({ manual }: { manual: Manual }) {
     case 'PENDING':
     case 'PROCESSING':
       return (
-        <Box color="orange.fg" title="取り込み中…" flexShrink={0}>
-          <LuClock size={14} />
-        </Box>
+        <Tooltip label="取り込み中…">
+          <Box color="orange.fg" flexShrink={0}>
+            <LuClock size={14} />
+          </Box>
+        </Tooltip>
       )
     case 'FAILED':
       return (
-        <Box
-          color="fg.error"
-          title={manual.ingestError ?? '取り込みに失敗しました'}
-          flexShrink={0}
-        >
-          <LuTriangleAlert size={14} />
-        </Box>
+        <Tooltip label={manual.ingestError ?? '取り込みに失敗しました'}>
+          <Box color="fg.error" flexShrink={0}>
+            <LuTriangleAlert size={14} />
+          </Box>
+        </Tooltip>
       )
     case 'COMPLETED':
       return null
@@ -97,26 +98,28 @@ export function ViewModeSwitch({
 }) {
   return (
     <HStack gap={0} borderWidth="1px" borderRadius="md" overflow="hidden">
-      <IconButton
-        aria-label="詳細表示"
-        title="詳細"
-        size="xs"
-        borderRadius={0}
-        variant={viewMode === 'details' ? 'subtle' : 'ghost'}
-        onClick={() => onChange('details')}
-      >
-        <LuList />
-      </IconButton>
-      <IconButton
-        aria-label="アイコン表示"
-        title="中アイコン"
-        size="xs"
-        borderRadius={0}
-        variant={viewMode === 'icons' ? 'subtle' : 'ghost'}
-        onClick={() => onChange('icons')}
-      >
-        <LuLayoutGrid />
-      </IconButton>
+      <Tooltip label="詳細">
+        <IconButton
+          aria-label="詳細表示"
+          size="xs"
+          borderRadius={0}
+          variant={viewMode === 'details' ? 'subtle' : 'ghost'}
+          onClick={() => onChange('details')}
+        >
+          <LuList />
+        </IconButton>
+      </Tooltip>
+      <Tooltip label="中アイコン">
+        <IconButton
+          aria-label="アイコン表示"
+          size="xs"
+          borderRadius={0}
+          variant={viewMode === 'icons' ? 'subtle' : 'ghost'}
+          onClick={() => onChange('icons')}
+        >
+          <LuLayoutGrid />
+        </IconButton>
+      </Tooltip>
     </HStack>
   )
 }
@@ -410,13 +413,11 @@ export function ManualItemList({
                     {renderTitle ? renderTitle(manual) : manual.title}
                   </Text>
                   {isAdmin && manual.categoryPinned && (
-                    <Box
-                      color="fg.muted"
-                      flexShrink={0}
-                      title="ピン留め済み(AIの再分類では動きません)"
-                    >
-                      <LuPin size={12} />
-                    </Box>
+                    <Tooltip label="ピン留め済み(AIの再分類では動きません)">
+                      <Box color="fg.muted" flexShrink={0}>
+                        <LuPin size={12} />
+                      </Box>
+                    </Tooltip>
                   )}
                   <StatusIcon manual={manual} />
                 </HStack>
@@ -489,12 +490,11 @@ export function ManualItemList({
               {/* 状態とピンは右上にまとめ、左上はチェックボックスに空ける */}
               <HStack position="absolute" top="1" right="3" gap={1}>
                 {isAdmin && manual.categoryPinned && (
-                  <Box
-                    color="fg.muted"
-                    title="ピン留め済み(AIの再分類では動きません)"
-                  >
-                    <LuPin size={14} />
-                  </Box>
+                  <Tooltip label="ピン留め済み(AIの再分類では動きません)">
+                    <Box color="fg.muted">
+                      <LuPin size={14} />
+                    </Box>
+                  </Tooltip>
                 )}
                 <StatusIcon manual={manual} />
               </HStack>

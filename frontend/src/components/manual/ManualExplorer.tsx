@@ -37,6 +37,7 @@ import {
 } from './ManualItemList'
 import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './ManualViewerProvider'
+import { Tooltip } from '../ui/Tooltip'
 
 /** 表示中の場所。null=ルート(全フォルダ+未分類のマニュアル) */
 export type ExplorerFolder =
@@ -401,14 +402,15 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         flexShrink={0}
       >
         {!isRoot && (
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => onNavigate(null)}
-            title="ひとつ上へ"
-          >
-            <LuArrowLeft />
-          </Button>
+          <Tooltip label="ひとつ上へ">
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => onNavigate(null)}
+            >
+              <LuArrowLeft />
+            </Button>
+          </Tooltip>
         )}
         <Button
           size="xs"
