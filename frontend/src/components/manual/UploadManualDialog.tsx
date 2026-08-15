@@ -237,6 +237,11 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const doneCount = items.filter((i) => i.status === 'done').length
   const hasError = items.some((i) => i.status === 'error')
   const allDone = items.length > 0 && doneCount === items.length
+  // アップロードボタンが実際に処理する件数(終わったものは対象外)
+  const uploadableCount = items.filter((i) => i.status !== 'done').length
+  const skippedCount = items.filter(
+    (i) => i.outcome === 'SKIPPED_OLDER',
+  ).length
 
   return (
     <Dialog.Root
@@ -451,9 +456,20 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                 </div>
 
                 {/* 進捗サマリ */}
-                {items.length > 1 && (uploading || doneCount > 0) && (
+                {items.length > 1 && (uploading || doneCount > 0) && !allDone && (
                   <Text fontSize="sm" color="fg.muted">
                     {doneCount} / {items.length} 件完了
+                  </Text>
+                )}
+
+                {/* 全部終わったときは、次に何ができるかまで伝える。
+                    ボタンが押せない理由が分からないままにしない */}
+                {allDone && !uploading && (
+                  <Text fontSize="sm" color="green.fg">
+                    {skippedCount > 0
+                      ? `${doneCount - skippedCount}件を取り込みました（${skippedCount}件はスキップ）。`
+                      : `${doneCount}件のアップロードが終わりました。`}
+                    続けて上げる場合は、上の枠にファイルを追加してください。
                   </Text>
                 )}
               </VStack>
@@ -463,18 +479,19 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
               <Button variant="ghost" onClick={resetAndClose} disabled={uploading}>
                 {allDone ? '閉じる' : 'キャンセル'}
               </Button>
-              {!allDone && (
-                <Button
-                  colorPalette="blue"
-                  onClick={handleUpload}
-                  loading={uploading}
-                  disabled={items.length === 0}
-                >
-                  {hasError
-                    ? '失敗分を再試行'
-                    : `アップロード${items.length > 1 ? `（${items.length}件）` : ''}`}
-                </Button>
-              )}
+              {/* 終わったあともボタンは出したままにする。消してしまうと
+                  「アップロードできなくなった」ように見えるため、
+                  押せないことは無効表示で示す(ファイルを足せばまた押せる) */}
+              <Button
+                colorPalette="blue"
+                onClick={handleUpload}
+                loading={uploading}
+                disabled={uploadableCount === 0}
+              >
+                {hasError
+                  ? '失敗分を再試行'
+                  : `アップロード${uploadableCount > 1 ? `（${uploadableCount}件）` : ''}`}
+              </Button>
             </Dialog.Footer>
           </Dialog.Content>
         </Dialog.Positioner>

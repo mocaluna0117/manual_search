@@ -49,12 +49,40 @@ export class ManualService implements OnApplicationBootstrap {
       this.logger.warn(`中断された取り込みを${count}件FAILEDに戻しました`);
     }
 
+    await this.rescueLostManuals();
+
     // ゴミ箱の自動削除。起動時に1回と、その後は1日ごと
     void this.purgeExpiredTrash().catch(() => undefined);
     setInterval(
       () => void this.purgeExpiredTrash().catch(() => undefined),
       24 * 60 * 60 * 1000,
     ).unref();
+  }
+
+  /**
+   * ゴミ箱の中のフォルダに入ってしまい、画面のどこにも出てこなくなった
+   * マニュアルを未分類へ戻す。
+   *
+   * サイドバーはゴミ箱のフォルダを出さず、カテゴリが付いているので未分類にも出ず、
+   * マニュアル自体は生きているのでゴミ箱にも出ない、という三重の死角になる。
+   * 一方で重複チェックには引っかかるため「どこにも無いのに同名だと言われる」。
+   * 割り当て側は塞いだので、これは既存データの後始末。
+   */
+  private async rescueLostManuals() {
+    // updateManyはリレーション条件を書けないので、先にIDを集める
+    const lost = await this.prisma.manual.findMany({
+      where: { ...ALIVE, category: { deletedAt: { not: null } } },
+      select: { id: true, title: true },
+    });
+    if (lost.length === 0) return;
+    await this.prisma.manual.updateMany({
+      where: { id: { in: lost.map((m) => m.id) } },
+      data: { categoryId: null },
+    });
+    this.logger.warn(
+      `ゴミ箱のフォルダに入っていたマニュアル${lost.length}件を未分類に戻しました: ` +
+        lost.map((m) => m.title).join(', '),
+    );
   }
 
   findAll(categoryId?: string, uncategorized?: boolean) {
@@ -421,8 +449,11 @@ export class ManualService implements OnApplicationBootstrap {
     const createdCategories: string[] = [];
     for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
       const batch = manuals.slice(i, i + BATCH_SIZE);
-      // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)
-      const categories = await this.prisma.manualCategory.findMany();
+      // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)。
+      // ゴミ箱の中のフォルダは候補に出さない(選ばれても入れられないため)
+      const categories = await this.prisma.manualCategory.findMany({
+        where: ALIVE,
+      });
       const assignments = await this.rag.organize(
         batch.map((m) => ({
           manualId: m.id,
@@ -449,7 +480,9 @@ export class ManualService implements OnApplicationBootstrap {
         include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
       });
       if (!manual || manual.categoryId) return;
-      const categories = await this.prisma.manualCategory.findMany();
+      const categories = await this.prisma.manualCategory.findMany({
+        where: ALIVE,
+      });
       const assignments = await this.rag.organize(
         [
           {
@@ -490,11 +523,25 @@ export class ManualService implements OnApplicationBootstrap {
       const name = assignment.category.trim();
       if (!name) continue;
       let category = await this.prisma.manualCategory.findFirst({
-        where: { name },
+        // ゴミ箱の中のフォルダには絶対に入れない。入れてしまうと画面のどこにも
+        // 出てこない(サイドバーはゴミ箱のフォルダを出さず、未分類でもなく、
+        // マニュアル自体は生きているのでゴミ箱にも出ない)迷子になる
+        where: { name, ...ALIVE },
       });
       if (!category) {
         // 既存カテゴリ限定モードでは、AIが指示を破って作った未知の名前は無視する
         if (!allowNew) continue;
+        // 名前はDBで一意。同名がゴミ箱にあると作れないので、未分類のまま残す。
+        // 捨てたはずのフォルダを黙って復活させるより、画面で見える方を選ぶ
+        const inTrash = await this.prisma.manualCategory.findFirst({
+          where: { name, deletedAt: { not: null } },
+        });
+        if (inTrash) {
+          this.logger.warn(
+            `フォルダ「${name}」はゴミ箱にあるため分類をスキップしました(未分類のまま)`,
+          );
+          continue;
+        }
         category = await this.prisma.manualCategory.create({
           data: { name },
         });
@@ -516,8 +563,9 @@ export class ManualService implements OnApplicationBootstrap {
       throw new NotFoundException('マニュアルが見つかりません');
     }
     if (categoryId) {
-      const category = await this.prisma.manualCategory.findUnique({
-        where: { id: categoryId },
+      // ゴミ箱の中のフォルダへは移せない(移すと画面から見えなくなるため)
+      const category = await this.prisma.manualCategory.findFirst({
+        where: { id: categoryId, ...ALIVE },
       });
       if (!category) {
         throw new BadRequestException('移動先のカテゴリが見つかりません');
@@ -535,8 +583,8 @@ export class ManualService implements OnApplicationBootstrap {
   async moveMany(ids: string[], categoryId: string | null) {
     if (ids.length === 0) return 0;
     if (categoryId) {
-      const category = await this.prisma.manualCategory.findUnique({
-        where: { id: categoryId },
+      const category = await this.prisma.manualCategory.findFirst({
+        where: { id: categoryId, ...ALIVE },
       });
       if (!category) {
         throw new BadRequestException('移動先のカテゴリが見つかりません');
