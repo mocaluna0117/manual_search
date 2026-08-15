@@ -114,6 +114,23 @@ export class RagService {
     };
   }
 
+  /**
+   * タイトルだけが変わったときに、ベクトルを作り直す。
+   * 本文は変わっていないのでファイルの読み直しは不要
+   */
+  async reembedTitle(manualId: string): Promise<number> {
+    const res = await this.request('/reembed-title', TIMEOUT_MS.organize, {
+      manual_id: manualId,
+    });
+    if (!res.ok) {
+      throw new ServiceUnavailableException(
+        `検索用データの更新に失敗しました (HTTP ${res.status})`,
+      );
+    }
+    const body = (await res.json()) as { chunk_count: number };
+    return body.chunk_count;
+  }
+
   /** マニュアル一覧のカテゴリ分けをAIに依頼する(判断だけ返る。DB反映は呼び出し側) */
   async organize(
     manuals: { manualId: string; title: string; snippet: string }[],

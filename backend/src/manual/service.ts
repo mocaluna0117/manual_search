@@ -687,10 +687,25 @@ export class ManualService implements OnApplicationBootstrap {
     if (!manual) {
       throw new NotFoundException('マニュアルが見つかりません');
     }
-    return this.prisma.manual.update({
+    if (trimmed === manual.title) return manual; // 変わっていなければ何もしない
+
+    const updated = await this.prisma.manual.update({
       where: { id },
       data: { title: trimmed.slice(0, 200) },
     });
+
+    // ベクトルは取り込み時に「タイトル\n本文」で作っているため、
+    // 名前を変えると意味検索だけが古い名前のまま取り残される。
+    // 本文は変わっていないので、埋め込みだけを作り直す(裏で実行)。
+    // 失敗しても名前の変更自体は成立させる(キーワード・タイトル検索は
+    // 検索時にDBを読むので、こちらは即座に反映されている)
+    void this.rag.reembedTitle(id).catch((e: unknown) => {
+      this.logger.error(
+        `名前変更後の検索用データ更新に失敗 manual=${id}: ` +
+          (e instanceof Error ? e.message : '不明なエラー'),
+      );
+    });
+    return updated;
   }
 
   /** マニュアルを別カテゴリへ移動する(categoryId=nullで未分類へ) */

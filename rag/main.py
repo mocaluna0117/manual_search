@@ -675,6 +675,59 @@ def search(req: SearchRequest) -> SearchResponse:
     )
 
 
+class ReembedRequest(BaseModel):
+    manual_id: UUID4
+
+
+class ReembedResponse(BaseModel):
+    chunk_count: int
+
+
+@app.post(
+    "/reembed-title",
+    response_model=ReembedResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def reembed_title(req: ReembedRequest) -> ReembedResponse:
+    """タイトルだけが変わったときに、ベクトルを作り直す。
+
+    ベクトルは取り込み時に「タイトル\n本文」で作っている(本文に手がかりが
+    無いチャンクにも、どの文書の断片かという文脈を持たせるため)。
+    そのため名前を変えると、意味検索だけが古い名前のままになる。
+    本文は変わっていないのでPDFの読み直しは不要で、埋め込みだけを作り直す。
+    """
+    manual_id = str(req.manual_id)
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT title FROM "Manual" WHERE id = %s', (manual_id,))
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="マニュアルが見つかりません")
+            title = normalize_text(row[0] or "")
+            cur.execute(
+                'SELECT id, content FROM "ManualChunk" WHERE manual_id = %s '
+                "ORDER BY chunk_index",
+                (manual_id,),
+            )
+            chunks = cur.fetchall()
+
+    if not chunks:
+        return ReembedResponse(chunk_count=0)
+
+    embeddings = embedder.embed_texts(
+        [f"{title}\n{content}" if title else content for _id, content in chunks]
+    )
+    with db_connect() as conn:
+        with conn.cursor() as cur:
+            for (chunk_id, _content), emb in zip(chunks, embeddings):
+                cur.execute(
+                    'UPDATE "ManualChunk" SET embedding = %s::vector WHERE id = %s',
+                    (to_vector_literal(emb), chunk_id),
+                )
+        conn.commit()
+    return ReembedResponse(chunk_count=len(chunks))
+
+
 # --- ストリーミング(回答を少しずつ返す) ---
 
 # 末尾に付く制御行。途中経過として画面に出さないよう、行単位で伏せる
