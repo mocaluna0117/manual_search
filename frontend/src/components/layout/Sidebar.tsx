@@ -37,6 +37,7 @@ import {
   LuTrash2,
   LuUpload,
   LuUser,
+  LuChartNoAxesColumn,
   LuUsers,
   LuX,
 } from 'react-icons/lu'
@@ -70,6 +71,7 @@ import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { ClassificationRuleDialog } from './ClassificationRuleDialog'
 import { InquiryDialog } from './InquiryDialog'
 import { SettingsDialog } from './SettingsDialog'
+import { AnalyticsDialog } from './AnalyticsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
 import { Tooltip } from '../ui/Tooltip'
 
@@ -151,6 +153,7 @@ export function SidebarContent({
   const [rulesOpen, setRulesOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
   const handleLogout = async () => {
@@ -938,6 +941,22 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
       <Box>
         {isAdmin && (
           <>
+            <Button
+              variant="outline"
+              size="sm"
+              w="100%"
+              mb={2}
+              color="fg"
+              borderColor="border.emphasized"
+              _hover={{ bg: 'bg.emphasized' }}
+              onClick={() => setAnalyticsOpen(true)}
+            >
+              <LuChartNoAxesColumn /> 利用状況
+            </Button>
+            <AnalyticsDialog
+              open={analyticsOpen}
+              onClose={() => setAnalyticsOpen(false)}
+            />
             <Button
               variant="outline"
               size="sm"

@@ -28,4 +28,8 @@ export class RagAnswer {
   // 絞り込み質問の選択肢(フロントでボタン表示する)
   @Field(() => [String])
   options!: string[];
+
+  // マニュアルから答えられたか(null=判断材料なし)。画面には出さず、
+  // 「答えられなかった質問」の集計のためにDBへ記録する
+  answered?: boolean | null;
 }

@@ -216,6 +216,8 @@ export class ChatService {
     let citations: RagCitation[] = [];
     let options: string[] = [];
     let ragActions: RagAction[] = [];
+    // マニュアルから答えられたか。集計にだけ使い、画面には出さない
+    let answered: boolean | null = null;
     try {
       const result = await this.rag.search(
         question,
@@ -228,6 +230,7 @@ export class ChatService {
       citations = result.citations;
       options = result.options;
       ragActions = result.actions;
+      answered = result.answered ?? null;
     } catch (e) {
       // 「停止」ボタン(クライアント切断)による中断は、質問を無かったことにする。
       // 回答を保存せず質問も消すことで、ユーザーが編集して再送信できる状態に戻す
@@ -427,6 +430,7 @@ export class ChatService {
       answer,
       options,
       citations,
+      answered,
     );
     return {
       conversationId: conversation.id,
@@ -440,6 +444,9 @@ export class ChatService {
     content: string,
     options: string[] = [],
     citations: RagCitation[] = [],
+    // マニュアルから答えられたか。管理操作の応答や定型文では渡さない(null)ので、
+    // 「答えられなかった質問」の集計に混ざらない
+    answeredFromManuals: boolean | null = null,
   ): Promise<Message> {
     const message = await this.prisma.message.create({
       data: {
@@ -449,6 +456,7 @@ export class ChatService {
         // 根拠マニュアルは回答時点のスナップショットとしてJSONで保持
         citations: citations as unknown as Prisma.InputJsonValue,
         options: options as unknown as Prisma.InputJsonValue,
+        answeredFromManuals,
       },
     });
     await this.prisma.conversation.update({

@@ -141,10 +141,17 @@ model Message {
   citations      Json?
   // 絞り込み質問の選択肢(ASSISTANTのみ)。フロントでボタンとして表示する
   options        Json?
+  // マニュアルから答えられたか(ASSISTANTのみ)。
+  // true=抜粋を根拠に回答、false=AIが「根拠なし」と申告=答えられなかった、
+  // null=判断材料がない(管理操作の応答・エラー・この列より前のデータ)。
+  // 「どの領域のマニュアルが足りないか」を集計するために記録する
+  answeredFromManuals Boolean? @map("answered_from_manuals")
   createdAt      DateTime     @default(now()) @map("created_at")
 
   // 会話を開くたびに「この会話のメッセージを古い順」で引く
   @@index([conversationId, createdAt])
+  // 利用状況の集計は会話をまたいで期間で絞るため、日時単体でも引けるようにする
+  @@index([createdAt])
 }
 
 // RAG用: マニュアルを検索しやすい断片に分割したもの。

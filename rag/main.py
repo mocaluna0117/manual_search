@@ -98,6 +98,11 @@ class SearchResponse(BaseModel):
     citations: list[Citation]
     options: list[str] = []  # 絞り込み質問の選択肢(ボタン表示用)
     actions: list[ActionRequest] = []  # 管理ツールの呼び出し要求(管理者のみ)
+    # マニュアルから答えられたか。True=抜粋を根拠に回答、
+    # False=モデルが「[参照] なし」と申告(=答えられなかった)、
+    # None=判断材料がない(管理操作・検索対象ゼロ・生成失敗・申告なし)。
+    # 「どのマニュアルが足りないか」を後から集計するために保存側へ渡す
+    answered: bool | None = None
 
 
 OPTION_PATTERN = re.compile(r"^\[選択肢\]\s*(.+)$", re.MULTILINE)
@@ -418,6 +423,54 @@ class OrganizeResponse(BaseModel):
     assignments: list[OrganizeAssignment]
 
 
+class ClusterQuestionsRequest(BaseModel):
+    """質問文の一覧。IDは付けず、本文だけを渡す(誰の質問かは送らない)"""
+
+    questions: list[str]
+
+
+class QuestionTheme(BaseModel):
+    theme: str  # まとめた見出し(例:「顛末書の書き方」)
+    count: int  # このテーマに属する質問の件数
+    examples: list[str] = []  # 代表的な質問文(最大3件)
+
+
+class ClusterQuestionsResponse(BaseModel):
+    themes: list[QuestionTheme]
+
+
+@app.post(
+    "/cluster-questions",
+    response_model=ClusterQuestionsResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def cluster_questions(req: ClusterQuestionsRequest) -> ClusterQuestionsResponse:
+    """質問文を意味の近さでテーマごとにまとめる(件数の多い順)。
+
+    語尾違いの同じ質問がバラバラに数えられるのを防ぐためのもので、
+    DBには一切書き込まない(判断だけを返す)。
+    """
+    questions = [q.strip() for q in req.questions if q.strip()]
+    if not questions:
+        return ClusterQuestionsResponse(themes=[])
+    try:
+        raw = answer_generator.cluster_questions(questions)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"集計に失敗しました: {e}")
+
+    themes = [
+        QuestionTheme(
+            theme=str(t.get("theme", "")).strip(),
+            count=int(t.get("count", 0)),
+            examples=[str(x) for x in (t.get("examples") or [])][:3],
+        )
+        for t in raw
+        if str(t.get("theme", "")).strip()
+    ]
+    themes.sort(key=lambda t: t.count, reverse=True)
+    return ClusterQuestionsResponse(themes=themes)
+
+
 @app.post("/organize", response_model=OrganizeResponse, dependencies=[Depends(require_api_token)])
 def organize(req: OrganizeRequest) -> OrganizeResponse:
     """マニュアル一覧をAIでカテゴリ分けする(DBへの書き込みは行わない=判断だけ返す)"""
@@ -489,9 +542,11 @@ def search(req: SearchRequest) -> SearchResponse:
     # 検索ヒットゼロでも、管理者のときは生成まで進める。
     # 管理操作(フォルダ作成など)はマニュアルが1件も無い状態でも成立する必要がある
     if not rows and not req.is_admin:
+        # 「答えられなかった」ではなく「そもそも探す先が無い」ので集計対象にしない
         return SearchResponse(
             answer="まだ検索できるマニュアルがありません。マニュアルをアップロードして取り込んでください。",
             citations=[],
+            answered=None,
         )
 
     # 3) 取得した抜粋を根拠として、Claudeに回答文を書かせる。
@@ -507,6 +562,7 @@ def search(req: SearchRequest) -> SearchResponse:
     options: list[str] = []
     actions: list[ActionRequest] = []
     used_rows = rows[:3]  # 保険の既定値: 参照の申告が無ければ上位3件だけ引用に出す
+    answered: bool | None = None
     try:
         raw_answer, raw_actions = answer_generator.generate(
             req.question,
@@ -528,9 +584,14 @@ def search(req: SearchRequest) -> SearchResponse:
         answer, used = extract_references(answer, len(rows))
         if used is not None:
             used_rows = [rows[i] for i in used]
+            # 申告があったときだけ可否が確定する。[参照]なし=答えられなかった。
+            # 申告が無い場合は保険で上位3件を引用に出すが、根拠にしたかは
+            # 分からないのでNoneのままにする(集計を汚さない)
+            answered = len(used) > 0
         # 管理操作の要求時は、検索抜粋はほぼ無関係なので引用を出さない
         if actions:
             used_rows = []
+            answered = None  # マニュアルへの質問ではないので集計対象外
     except Exception as e:
         answer = (
             "関連しそうなマニュアルが見つかりましたが、"
@@ -539,6 +600,7 @@ def search(req: SearchRequest) -> SearchResponse:
         # 「失敗した」と伝えた応答から管理操作が実行されるのを防ぐ
         actions = []
         options = []
+        answered = None  # 生成に失敗しただけで、マニュアルの有無とは無関係
 
     # 引用は「実際に使われた抜粋」だけを、同じマニュアルの同じページでまとめて返す
     citations: list[Citation] = []
@@ -552,5 +614,9 @@ def search(req: SearchRequest) -> SearchResponse:
         )
 
     return SearchResponse(
-        answer=answer, citations=citations, options=options, actions=actions
+        answer=answer,
+        citations=citations,
+        options=options,
+        actions=actions,
+        answered=answered,
     )

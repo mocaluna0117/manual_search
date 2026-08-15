@@ -243,6 +243,8 @@ class AnswerGenerator(Protocol):
         rules: list[str] | None = None,
     ) -> list[dict]: ...
 
+    def cluster_questions(self, questions: list[str]) -> list[dict]: ...
+
 
 class StubAnswerGenerator:
     """開発用: LLMを呼ばずに定型文を返す"""
@@ -276,6 +278,16 @@ class StubAnswerGenerator:
         rules: list[str] | None = None,
     ) -> list[dict]:
         return []  # LLM無しでは分類できない(空=何も割り当てない)
+
+    def cluster_questions(self, questions: list[str]) -> list[dict]:
+        # LLM無しでは意味でまとめられないので、同じ文面だけを数える
+        counts: dict[str, int] = {}
+        for q in questions:
+            counts[q] = counts.get(q, 0) + 1
+        return [
+            {"theme": q, "count": n, "examples": [q]}
+            for q, n in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+        ]
 
 
 class BedrockAnswerGenerator:
@@ -442,6 +454,43 @@ class BedrockAnswerGenerator:
         match = re.search(r"\[.*\]", text, re.DOTALL)  # コードフェンス等を除去
         if not match:
             raise ValueError("分類結果のJSONを取り出せませんでした")
+        return json.loads(match.group(0))
+
+
+    def cluster_questions(self, questions: list[str]) -> list[dict]:
+        """質問文を意味の近さでテーマにまとめる。
+
+        「顛末書の書き方は?」と「顛末書ってどう書くの」を同じテーマとして
+        数えるのが目的。件数がそのまま「よく聞かれること」になり、
+        マニュアルや定型文を足す判断材料になる。
+        """
+        # 質問が多いと出力JSONが上限で切れるため、直近から一定数に絞る。
+        # 300件あれば傾向は十分に見える
+        limited = questions[:300]
+        numbered = "\n".join(f"{i}. {q}" for i, q in enumerate(limited, start=1))
+        prompt = (
+            "あなたは社内マニュアル検索システムの利用状況を分析する担当者です。\n"
+            "以下は利用者がAIに投げた質問の一覧です。"
+            "意味が近いものを同じテーマにまとめ、テーマごとの件数を数えてください。\n\n"
+            "ルール:\n"
+            "- テーマ名は、何について聞かれているかが一目で分かる簡潔な日本語(5〜20文字)にする\n"
+            "- 語尾や言い回しが違うだけの質問は同じテーマにまとめる\n"
+            "- 無理にまとめず、内容が違うものは別のテーマにする\n"
+            "- countは、そのテーマに含めた質問の実際の件数にする(合計が入力件数を超えないこと)\n"
+            "- examplesには、そのテーマの代表的な質問文を原文のまま最大3件入れる\n"
+            "- 件数の多い順に並べる\n"
+            '- JSON配列のみを出力する: [{"theme": "...", "count": 3, "examples": ["...", "..."]}, ...]\n\n'
+            f"質問一覧({len(limited)}件):\n{numbered}"
+        )
+        res = self.client.converse(
+            modelId=self.model_id,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 4000, "temperature": 0},
+        )
+        text = res["output"]["message"]["content"][0]["text"]
+        match = re.search(r"\[.*\]", text, re.DOTALL)  # コードフェンス等を除去
+        if not match:
+            raise ValueError("集計結果のJSONを取り出せませんでした")
         return json.loads(match.group(0))
 
 

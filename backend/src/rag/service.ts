@@ -19,6 +19,8 @@ interface RagSearchResponse {
   }[];
   options: string[];
   actions?: RagAction[];
+  // マニュアルから答えられたか(null=判断材料なし)。利用状況の集計に使う
+  answered?: boolean | null;
 }
 
 // 用途ごとのタイムアウト(ミリ秒)。
@@ -179,6 +181,26 @@ export class RagService {
       })),
       options: body.options ?? [],
       actions: body.actions ?? [],
+      answered: body.answered ?? null,
     };
+  }
+
+  /**
+   * 質問文をテーマごとにまとめる(利用状況の集計用)。
+   * 語尾違いの同じ質問がバラバラに数えられるのを防ぐ
+   */
+  async clusterQuestions(questions: string[]) {
+    const res = await this.request('/cluster-questions', TIMEOUT_MS.organize, {
+      questions,
+    });
+    if (!res.ok) {
+      throw new ServiceUnavailableException(
+        `集計に失敗しました (HTTP ${res.status})`,
+      );
+    }
+    const body = (await res.json()) as {
+      themes: { theme: string; count: number; examples: string[] }[];
+    };
+    return body.themes ?? [];
   }
 }

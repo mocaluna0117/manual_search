@@ -2,6 +2,53 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type RagCitation {
+  manualId: String!
+  title: String!
+  snippet: String!
+  pageNumber: Int
+}
+
+type RagAnswer {
+  answer: String!
+  citations: [RagCitation!]!
+  options: [String!]!
+}
+
+type UnansweredQuestion {
+  id: ID!
+  question: String!
+  answer: String!
+  askedAt: DateTime!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type QuestionTheme {
+  theme: String!
+  count: Int!
+  examples: [String!]!
+}
+
+type ManualUsage {
+  manualId: ID!
+  title: String!
+  categoryName: String
+  citedCount: Int!
+  lastCitedAt: DateTime
+}
+
+type AnalyticsSummary {
+  questionCount: Int!
+  answeredCount: Int!
+  unansweredCount: Int!
+  unknownCount: Int!
+  neverCitedManualCount: Int!
+}
+
 type UserProfile {
   id: ID!
   email: String
@@ -22,11 +69,6 @@ type ManagedUser {
   createdAt: DateTime
 }
 
-"""
-A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
-"""
-scalar DateTime
-
 type ManualCategory {
   id: ID!
   name: String!
@@ -35,19 +77,6 @@ type ManualCategory {
   deletedAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
-}
-
-type RagCitation {
-  manualId: String!
-  title: String!
-  snippet: String!
-  pageNumber: Int
-}
-
-type RagAnswer {
-  answer: String!
-  citations: [RagCitation!]!
-  options: [String!]!
 }
 
 type ManualUploadTarget {
@@ -186,13 +215,17 @@ type PromptTemplate {
 type Query {
   health: String!
   dbHealth: String!
+  analyticsSummary(days: Int): AnalyticsSummary!
+  unansweredQuestions(days: Int): [UnansweredQuestion!]!
+  manualUsage(days: Int): [ManualUsage!]!
+  questionThemes(days: Int): [QuestionTheme!]!
+  ragHealth: String!
+  ragSearch(question: String!): RagAnswer!
   me: UserProfile!
   users: [ManagedUser!]!
   manualCategories: [ManualCategory!]!
   conversations: [Conversation!]!
   conversation(id: ID!): Conversation!
-  ragHealth: String!
-  ragSearch(question: String!): RagAnswer!
   manuals(categoryId: ID, uncategorized: Boolean): [Manual!]!
   searchManuals(keyword: String!): [ManualSearchResult!]!
   manualDownloadUrl(id: ID!): String!

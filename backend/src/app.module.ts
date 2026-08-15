@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { join } from 'path';
 import { AppResolver } from './app.resolver';
+import { AnalyticsModule } from './analytics/module';
 import { AuthModule } from './auth/module';
 import { CategoryModule } from './category/module';
 import { ChatModule } from './chat/module';
@@ -29,6 +30,7 @@ import { TemplateModule } from './template/module';
       // resはクライアント切断の検知(チャットの停止ボタン)に使う
       context: ({ req, res }: { req: unknown; res: unknown }) => ({ req, res }),
     }),
+    AnalyticsModule,
     AuthModule,
     PrismaModule,
     CategoryModule,
