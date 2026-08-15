@@ -179,12 +179,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       return next
     })
   const toggleCheckAll = () => {
+    // 判定に使うのは「画面に出ているフォルダ」だけ。フォルダの中では
+    // フォルダ行が出ないのに全フォルダと突き合わせていたため、
+    // 全部チェック済みでも「まだ全部ではない」と判断され、
+    // もう一度押しても外れずに付け直されていた
+    const shownFolders = isRoot ? categories : []
     const allOn =
       manuals.every((m) => checkedIds.has(m.id)) &&
-      categories.every((c) => checkedFolderIds.has(c.id))
+      shownFolders.every((c) => checkedFolderIds.has(c.id))
     setCheckedIds(allOn ? new Set() : new Set(manuals.map((m) => m.id)))
     setCheckedFolderIds(
-      allOn || !isRoot ? new Set() : new Set(categories.map((c) => c.id)),
+      allOn ? new Set() : new Set(shownFolders.map((c) => c.id)),
     )
   }
   const checkedCount = checkedIds.size + checkedFolderIds.size
