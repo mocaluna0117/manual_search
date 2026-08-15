@@ -4,6 +4,8 @@ export interface Category {
   id: string
   name: string
   updatedAt?: string // 詳細表示の「更新日時」列に使う
+  totalSize?: number // フォルダ内のファイル合計サイズ(バイト)
+  manualCount?: number // フォルダ内のファイル数
 }
 
 interface CategoriesData {

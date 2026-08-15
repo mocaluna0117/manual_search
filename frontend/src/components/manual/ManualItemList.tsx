@@ -357,7 +357,15 @@ export function ManualItemList({
               <Text w="140px" fontSize="sm" color="fg.muted" flexShrink={0}>
                 {formatDateTime(folder.updatedAt)}
               </Text>
-              <Text w="80px" fontSize="sm" color="fg.muted" flexShrink={0} />
+              <Text
+                w="80px"
+                fontSize="sm"
+                color="fg.muted"
+                flexShrink={0}
+                title={`${folder.manualCount ?? 0}件のファイル`}
+              >
+                {formatSize(folder.totalSize ?? 0)}
+              </Text>
             </HStack>
           ))}
 

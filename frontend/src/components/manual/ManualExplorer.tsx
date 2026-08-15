@@ -140,9 +140,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     ? [...(categoriesData?.manualCategories ?? [])].sort((a, b) => {
         if (sortKey === 'createdAt')
           return (a.updatedAt ?? '').localeCompare(b.updatedAt ?? '') * dir
-        return (
-          a.name.localeCompare(b.name, 'ja') * (sortKey === 'size' ? 1 : dir)
-        )
+        if (sortKey === 'size')
+          return ((a.totalSize ?? 0) - (b.totalSize ?? 0)) * dir
+        return a.name.localeCompare(b.name, 'ja') * dir
       })
     : (categoriesData?.manualCategories ?? [])
 

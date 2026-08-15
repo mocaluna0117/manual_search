@@ -30,6 +30,8 @@ scalar DateTime
 type ManualCategory {
   id: ID!
   name: String!
+  totalSize: Float!
+  manualCount: Int!
   createdAt: DateTime!
   updatedAt: DateTime!
 }

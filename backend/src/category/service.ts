@@ -5,11 +5,29 @@ import { PrismaService } from '../prisma/service';
 export class CategoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
+  async findAll() {
     // 管理者が決めた並び順が優先。同値(未設定)なら名前順で安定させる
-    return this.prisma.manualCategory.findMany({
+    const categories = await this.prisma.manualCategory.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
+    // 一覧の「サイズ」列に出す、フォルダ内のファイル合計。
+    // カテゴリごとに数えると件数分のクエリになるので1回にまとめる
+    const totals = await this.prisma.manual.groupBy({
+      by: ['categoryId'],
+      _sum: { size: true },
+      _count: { _all: true },
+    });
+    const byCategory = new Map(
+      totals.map((t) => [
+        t.categoryId,
+        { size: t._sum.size ?? 0, count: t._count._all },
+      ]),
+    );
+    return categories.map((category) => ({
+      ...category,
+      totalSize: byCategory.get(category.id)?.size ?? 0,
+      manualCount: byCategory.get(category.id)?.count ?? 0,
+    }));
   }
 
   async create(name: string) {
