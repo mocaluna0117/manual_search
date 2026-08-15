@@ -41,6 +41,7 @@ export interface Manual {
   updatedAt: string // DBの更新時刻(並べ替えの保険用)
   pdfCreatedAt: string | null // PDF自体が持つ作成日(「作成日」列)
   categoryPinned: boolean // ピン留め済み(AIの再分類で動かない)
+  deletedAt?: string | null // ゴミ箱に入れた日時
 }
 
 /** 同名ファイルをアップロードしたときの結果 */
@@ -215,6 +216,65 @@ export const DELETE_MANUALS_MUTATION: TypedDocumentNode<
 > = gql`
   mutation DeleteManuals($ids: [ID!]!) {
     deleteManuals(ids: $ids)
+  }
+`
+
+// --- ゴミ箱(ADMIN専用) ---
+
+interface TrashedManualsData {
+  trashedManuals: Manual[]
+}
+
+export const TRASHED_MANUALS_QUERY: TypedDocumentNode<TrashedManualsData> = gql`
+  query TrashedManuals {
+    trashedManuals {
+      id
+      title
+      fileName
+      size
+      categoryId
+      ingestStatus
+      ingestError
+      chunkCount
+      updatedAt
+      pdfCreatedAt
+      categoryPinned
+      deletedAt
+    }
+  }
+`
+
+interface TrashActionData {
+  restoreManuals?: number
+  purgeManuals?: number
+  emptyTrash?: number
+}
+
+interface IdsVars {
+  ids: string[]
+}
+
+export const RESTORE_MANUALS_MUTATION: TypedDocumentNode<
+  TrashActionData,
+  IdsVars
+> = gql`
+  mutation RestoreManuals($ids: [ID!]!) {
+    restoreManuals(ids: $ids)
+  }
+`
+
+export const PURGE_MANUALS_MUTATION: TypedDocumentNode<
+  TrashActionData,
+  IdsVars
+> = gql`
+  mutation PurgeManuals($ids: [ID!]!) {
+    purgeManuals(ids: $ids)
+  }
+`
+
+export const EMPTY_TRASH_MUTATION: TypedDocumentNode<TrashActionData> = gql`
+  mutation EmptyTrash {
+    emptyTrash
   }
 `
 

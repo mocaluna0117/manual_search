@@ -12,6 +12,7 @@ interface AppLayoutProps {
   onSelectCategory: (category: Category | null) => void
   onSelectConversation: (conversationId: string) => void
   onSelectUncategorized: () => void
+  onSelectTrash: () => void
   onSelectManualsRoot: () => void // エクスプローラーのルート(全フォルダ)を開く
   onSearch: (keyword: string) => void
 }

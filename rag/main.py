@@ -125,6 +125,8 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
 
     取り込みが完了していないマニュアル(差し替え直後・失敗)は検索対象から除く。
     そうしないと「新しいPDFに差し替わったのに旧版の内容で回答する」状態になる。
+    ゴミ箱に入れたもの(deleted_at)も同様に除く。捨てたはずの内容を
+    AIが引用してくるのを防ぐ。
 
     ベクトル検索は「意味の近さ」に強いが、電話番号・型番・固有名詞のような
     「文字通りの一致」に弱い。キーワード検索はその逆。タイトル検索は、
@@ -151,7 +153,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
         SELECT n.id, n.manual_id, m.title, n.content, n.page_number
         FROM nearest n
         JOIN "Manual" m ON m.id = n.manual_id
-        WHERE m.ingest_status = 'COMPLETED'
+        WHERE m.ingest_status = 'COMPLETED' AND m.deleted_at IS NULL
         -- JOINを挟むと内側のORDER BYは保たれないので、距離で明示的に並べ直す。
         -- これを忘れるとRRFに渡る順位が崩れ、検索精度が静かに落ちる
         ORDER BY n.distance
@@ -180,7 +182,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
                    ({hit_expr}) AS hits
             FROM "ManualChunk" mc
             JOIN "Manual" m ON m.id = mc.manual_id
-            WHERE m.ingest_status = 'COMPLETED'
+            WHERE m.ingest_status = 'COMPLETED' AND m.deleted_at IS NULL
               AND ({any_match})
             ORDER BY hits DESC
             LIMIT 20
@@ -209,7 +211,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
                        ({title_hit_expr}) AS hits
                 FROM "ManualChunk" mc
                 JOIN "Manual" m ON m.id = mc.manual_id
-                WHERE m.ingest_status = 'COMPLETED'
+                WHERE m.ingest_status = 'COMPLETED' AND m.deleted_at IS NULL
                   AND ({title_any_match})
                 ORDER BY m.id, mc.chunk_index
             ) t

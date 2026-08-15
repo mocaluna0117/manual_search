@@ -68,6 +68,7 @@ type Manual {
   ingestStatus: IngestStatus!
   ingestError: String
   chunkCount: Int
+  deletedAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -180,6 +181,7 @@ type Query {
   manualDownloadUrls(ids: [ID!]!): [ManualDownloadTarget!]!
   reclassifyStatus: ReclassifyStatus!
   reclassifyCounts: ReclassifyCounts!
+  trashedManuals: [Manual!]!
   classificationRules: [ClassificationRule!]!
   promptTemplates: [PromptTemplate!]!
 }
@@ -203,6 +205,9 @@ type Mutation {
   moveManuals(ids: [ID!]!, categoryId: ID): Int!
   deleteManual(id: ID!): Manual!
   deleteManuals(ids: [ID!]!): Int!
+  restoreManuals(ids: [ID!]!): Int!
+  purgeManuals(ids: [ID!]!): Int!
+  emptyTrash: Int!
   ingestManual(id: ID!): Boolean!
   createClassificationRule(text: String!): ClassificationRule!
   updateClassificationRule(id: ID!, text: String!): ClassificationRule!

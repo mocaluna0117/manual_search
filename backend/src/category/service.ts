@@ -14,6 +14,7 @@ export class CategoryService {
     // カテゴリごとに数えると件数分のクエリになるので1回にまとめる
     const totals = await this.prisma.manual.groupBy({
       by: ['categoryId'],
+      where: { deletedAt: null }, // ゴミ箱の中は数えない
       _sum: { size: true },
       _count: { _all: true },
     });
@@ -101,7 +102,8 @@ export class CategoryService {
   async delete(id: string) {
     // マニュアルが残っているカテゴリは消させない(FKエラーの生投げではなく明確な理由を返す)
     const manualCount = await this.prisma.manual.count({
-      where: { categoryId: id },
+      // ゴミ箱の中しか残っていないフォルダは削除できてよい
+      where: { categoryId: id, deletedAt: null },
     });
     if (manualCount > 0) {
       throw new BadRequestException(

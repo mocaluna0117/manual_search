@@ -142,11 +142,39 @@ export class ManualResolver {
     return this.manualService.delete(id);
   }
 
-  // チェックしたファイルをまとめて削除。戻り値は削除できた件数
+  // チェックしたファイルをまとめてゴミ箱へ。戻り値は移せた件数
   @Roles(UserRole.ADMIN)
   @Mutation(() => Int)
   deleteManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
     return this.manualService.deleteMany(ids);
+  }
+
+  // ゴミ箱の中身
+  @Roles(UserRole.ADMIN)
+  @Query(() => [Manual])
+  trashedManuals() {
+    return this.manualService.trashed();
+  }
+
+  // ゴミ箱から元に戻す
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  restoreManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
+    return this.manualService.restoreMany(ids);
+  }
+
+  // ゴミ箱から完全に削除する(実ファイルごと消える)
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  purgeManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
+    return this.manualService.purgeMany(ids);
+  }
+
+  // ゴミ箱を空にする
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  emptyTrash() {
+    return this.manualService.emptyTrash();
   }
 
   // PDFをRAGに取り込む(チャンク化)。開始したらすぐ返す

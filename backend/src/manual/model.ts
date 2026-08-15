@@ -64,6 +64,10 @@ export class Manual {
   @Field(() => Int, { nullable: true })
   chunkCount!: number | null;
 
+  // ゴミ箱に入った日時(nullなら通常のマニュアル)
+  @Field(() => Date, { nullable: true })
+  deletedAt!: Date | null;
+
   @Field()
   createdAt!: Date;
 

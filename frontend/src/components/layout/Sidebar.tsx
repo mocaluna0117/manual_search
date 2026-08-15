@@ -75,6 +75,7 @@ export interface SidebarProps {
   onSelectCategory: (category: Category | null) => void
   onSelectConversation: (conversationId: string) => void
   onSelectUncategorized: () => void
+  onSelectTrash: () => void
   onSelectManualsRoot: () => void // エクスプローラーのルート(全フォルダ)を開く
   onSearch: (keyword: string) => void
   /** 項目を選んだ後に呼ばれる(スマホではDrawerを閉じるために使う) */
@@ -95,6 +96,7 @@ export function SidebarContent({
   onSelectCategory,
   onSelectConversation,
   onSelectUncategorized,
+  onSelectTrash,
   onSelectManualsRoot,
   onSearch,
   onNavigate,
@@ -713,6 +715,22 @@ const FOLDER_MIME = 'application/x-manual-folder'
             <FcOpenedFolder style={{ filter: 'grayscale(1)', opacity: 0.85 }} />{' '}
             未分類
           </Button>
+          {/* ゴミ箱(管理者のみ)。削除したマニュアルはここに一定期間残る */}
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              justifyContent="flex-start"
+              color="fg.muted"
+              _hover={{ bg: 'bg.emphasized' }}
+              onClick={() => {
+                onSelectTrash()
+                onNavigate?.()
+              }}
+            >
+              <LuTrash2 /> ゴミ箱
+            </Button>
+          )}
         </VStack>
         </>
       )}

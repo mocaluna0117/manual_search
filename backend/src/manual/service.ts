@@ -12,6 +12,12 @@ import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
 import { IngestStatus, ReclassifyStatus, RegisterOutcome } from './model';
 
+/** ゴミ箱に入っていない(生きている)マニュアルだけを対象にする条件 */
+const ALIVE = { deletedAt: null } as const;
+
+/** ゴミ箱の自動削除までの日数 */
+const TRASH_RETENTION_DAYS = 30;
+
 @Injectable()
 export class ManualService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ManualService.name);
@@ -42,16 +48,23 @@ export class ManualService implements OnApplicationBootstrap {
     if (count > 0) {
       this.logger.warn(`中断された取り込みを${count}件FAILEDに戻しました`);
     }
+
+    // ゴミ箱の自動削除。起動時に1回と、その後は1日ごと
+    void this.purgeExpiredTrash().catch(() => undefined);
+    setInterval(
+      () => void this.purgeExpiredTrash().catch(() => undefined),
+      24 * 60 * 60 * 1000,
+    ).unref();
   }
 
   findAll(categoryId?: string, uncategorized?: boolean) {
     return this.prisma.manual.findMany({
       // uncategorized=trueなら「カテゴリ未設定」だけに絞る(nullでの絞り込み)
       where: uncategorized
-        ? { categoryId: null }
+        ? { ...ALIVE, categoryId: null }
         : categoryId
-          ? { categoryId }
-          : undefined,
+          ? { ...ALIVE, categoryId }
+          : ALIVE,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -65,6 +78,7 @@ export class ManualService implements OnApplicationBootstrap {
     const contains = { contains: kw, mode: 'insensitive' as const };
     const manuals = await this.prisma.manual.findMany({
       where: {
+        ...ALIVE,
         OR: [
           { title: contains },
           { fileName: contains },
@@ -118,7 +132,8 @@ export class ManualService implements OnApplicationBootstrap {
     data.fileName = data.fileName.normalize('NFC');
 
     const existing = await this.prisma.manual.findFirst({
-      where: { fileName: data.fileName },
+      // ゴミ箱の中とは突き合わせない(捨てたものを差し替え対象にしない)
+      where: { ...ALIVE, fileName: data.fileName },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -356,12 +371,17 @@ export class ManualService implements OnApplicationBootstrap {
     const [target, pinned] = await Promise.all([
       this.prisma.manual.count({
         where: {
+          ...ALIVE,
           ingestStatus: IngestStatus.COMPLETED,
           categoryPinned: false,
         },
       }),
       this.prisma.manual.count({
-        where: { ingestStatus: IngestStatus.COMPLETED, categoryPinned: true },
+        where: {
+          ...ALIVE,
+          ingestStatus: IngestStatus.COMPLETED,
+          categoryPinned: true,
+        },
       }),
     ]);
     return { target, pinned };
@@ -379,7 +399,12 @@ export class ManualService implements OnApplicationBootstrap {
   ) {
     const manuals = await this.prisma.manual.findMany({
       // ピン留め(手動分類)されたものはAIの分類で動かさない
-      where: { ...where, ingestStatus: IngestStatus.COMPLETED, categoryPinned: false },
+      where: {
+        ...where,
+        ...ALIVE,
+        ingestStatus: IngestStatus.COMPLETED,
+        categoryPinned: false,
+      },
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
     if (manuals.length === 0) {
@@ -600,7 +625,7 @@ export class ManualService implements OnApplicationBootstrap {
   async getDownloadTargets(ids: string[]) {
     if (ids.length === 0) return [];
     const manuals = await this.prisma.manual.findMany({
-      where: { id: { in: ids } },
+      where: { ...ALIVE, id: { in: ids } },
       orderBy: { title: 'asc' },
     });
     return Promise.all(
@@ -616,32 +641,98 @@ export class ManualService implements OnApplicationBootstrap {
     );
   }
 
+  /**
+   * ゴミ箱へ移す(実体はまだ消さない)。
+   * 一覧・検索・AI回答からは外れるが、復元できる
+   */
   async delete(id: string) {
-    const manual = await this.prisma.manual.findUnique({ where: { id } });
+    const manual = await this.prisma.manual.findFirst({
+      where: { ...ALIVE, id },
+    });
     if (!manual) {
       throw new NotFoundException('マニュアルが見つかりません');
     }
-    // 先にストレージの実ファイルを消し、成功したらDBの行を消す。
-    // 逆順だと、ストレージ削除失敗時に「DBに無いのにファイルだけ残る」迷子ができる
-    await this.storage.deleteObject(manual.fileKey);
-    return this.prisma.manual.delete({ where: { id } });
+    return this.prisma.manual.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  /** まとめてゴミ箱へ移す。戻り値は移せた件数 */
+  async deleteMany(ids: string[]) {
+    const { count } = await this.prisma.manual.updateMany({
+      where: { ...ALIVE, id: { in: ids } },
+      data: { deletedAt: new Date() },
+    });
+    return count;
+  }
+
+  /** ゴミ箱の中身(捨てた順) */
+  trashed() {
+    return this.prisma.manual.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: 'desc' },
+    });
+  }
+
+  /** ゴミ箱から元に戻す。戻り値は復元できた件数 */
+  async restoreMany(ids: string[]) {
+    const { count } = await this.prisma.manual.updateMany({
+      where: { deletedAt: { not: null }, id: { in: ids } },
+      data: { deletedAt: null },
+    });
+    return count;
   }
 
   /**
-   * まとめて削除する(チェックした複数ファイルの削除)。戻り値は削除できた件数。
-   * 1件ずつ消して、途中で失敗しても残りは続ける(全部やり直しにしない)
+   * ゴミ箱から完全に削除する(実ファイルごと)。戻り値は削除できた件数。
+   * 生きているマニュアルは対象にしない(誤って消さないため)
    */
-  async deleteMany(ids: string[]) {
-    let deleted = 0;
-    for (const id of ids) {
+  async purgeMany(ids: string[]) {
+    const manuals = await this.prisma.manual.findMany({
+      where: { deletedAt: { not: null }, id: { in: ids } },
+    });
+    let purged = 0;
+    for (const manual of manuals) {
       try {
-        await this.delete(id);
-        deleted++;
+        // 先にストレージの実ファイルを消し、成功したらDBの行を消す。
+        // 逆順だと、ストレージ削除失敗時に「DBに無いのにファイルだけ残る」迷子ができる
+        await this.storage.deleteObject(manual.fileKey);
+        await this.prisma.manual.delete({ where: { id: manual.id } });
+        purged++;
       } catch (e) {
         const message = e instanceof Error ? e.message : '不明なエラー';
-        this.logger.error(`削除失敗 manual=${id}: ${message}`);
+        this.logger.error(`完全削除に失敗 manual=${manual.id}: ${message}`);
       }
     }
-    return deleted;
+    return purged;
+  }
+
+  /** ゴミ箱を空にする */
+  async emptyTrash() {
+    const manuals = await this.prisma.manual.findMany({
+      where: { deletedAt: { not: null } },
+      select: { id: true },
+    });
+    return this.purgeMany(manuals.map((m) => m.id));
+  }
+
+  /**
+   * 捨ててから一定期間が過ぎたものを自動で完全削除する。
+   * 起動時と1日ごとに実行する(専用のスケジューラを増やさない)
+   */
+  private async purgeExpiredTrash() {
+    const limit = new Date(
+      Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const expired = await this.prisma.manual.findMany({
+      where: { deletedAt: { lt: limit } },
+      select: { id: true },
+    });
+    if (expired.length === 0) return;
+    const purged = await this.purgeMany(expired.map((m) => m.id));
+    this.logger.log(
+      `ゴミ箱の自動削除: ${purged}件(${TRASH_RETENTION_DAYS}日経過)`,
+    );
   }
 }

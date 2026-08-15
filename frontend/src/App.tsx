@@ -9,6 +9,7 @@ import {
   type ExplorerFolder,
 } from './components/manual/ManualExplorer'
 import { ManualSearchResults } from './components/manual/ManualSearchResults'
+import { TrashView } from './components/manual/TrashView'
 import { ManualViewerProvider } from './components/manual/ManualViewerProvider'
 import type { Category } from './graphql/categories'
 
@@ -19,6 +20,7 @@ type View =
   | { type: 'manuals' } // エクスプローラーのルート(全フォルダ)
   | { type: 'category'; category: Category }
   | { type: 'uncategorized' } // カテゴリ未設定のマニュアル一覧
+  | { type: 'trash' } // ゴミ箱
   | { type: 'search'; keyword: string }
 
 const VIEW_STORAGE_KEY = 'manualSearch.view'
@@ -74,6 +76,7 @@ function App() {
         setView({ type: 'chat', conversationId })
       }
       onSelectUncategorized={() => setView({ type: 'uncategorized' })}
+      onSelectTrash={() => setView({ type: 'trash' })}
       onSelectManualsRoot={() => setView({ type: 'manuals' })}
       onSearch={(keyword) => setView({ type: 'search', keyword })}
     >
@@ -99,6 +102,7 @@ function App() {
           }
         />
       )}
+      {view.type === 'trash' && <TrashView />}
       {view.type === 'search' && (
         <ManualSearchResults key={view.keyword} keyword={view.keyword} />
       )}

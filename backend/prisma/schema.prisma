@@ -69,12 +69,15 @@ model Manual {
   ingestError   String?           @map("ingest_error") // 失敗理由(FAILEDのとき)
   chunkCount    Int?              @map("chunk_count") // 作成されたチャンク数
   ingestedAt    DateTime?         @map("ingested_at")
+  // ゴミ箱。値が入っていたら削除済み扱いで、一覧・検索・AI回答から外す
+  deletedAt     DateTime?         @map("deleted_at")
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
   // 外部キー列にPostgresは自動でインデックスを作らないので明示する。
   // 一覧は「カテゴリで絞って作成日時の降順」で引くため複合にしておく
   @@index([categoryId, createdAt])
+  @@index([deletedAt])
 }
 
 enum UserRole {
