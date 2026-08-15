@@ -84,9 +84,13 @@ function outcomeNote(item: UploadItem): string | null {
   }
 }
 
+/** カテゴリ欄の「AIにおまかせ」を表す値(実在のフォルダIDとは別物) */
+const AUTO = '__auto'
+
 export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const [items, setItems] = useState<UploadItem[]>([])
-  const [categoryId, setCategoryId] = useState('')
+  // おすすめの「AIにおまかせ」を最初から選んでおく
+  const [categoryId, setCategoryId] = useState(AUTO)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -141,7 +145,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const resetAndClose = () => {
     if (uploading) return // アップロード中は閉じられない
     setItems([])
-    setCategoryId('')
+    setCategoryId(AUTO)
     onClose()
   }
 
@@ -179,9 +183,9 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
             fileName: item.file.name,
             size: item.file.size,
             categoryId:
-              categoryId && categoryId !== '__auto' ? categoryId : undefined,
+              categoryId && categoryId !== AUTO ? categoryId : undefined,
             // 「AIにおまかせ」なら取り込み完了後に自動でカテゴリが付く
-            autoCategorize: categoryId === '__auto' || undefined,
+            autoCategorize: categoryId === AUTO || undefined,
             // 同名マニュアルがある場合の新旧判定に使う(ブラウザが持つファイルの更新日時)
             fileLastModified: new Date(item.file.lastModified).toISOString(),
             forceReplace: forceReplace || undefined,
@@ -396,17 +400,17 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                     w="100%"
                     justifyContent="flex-start"
                     colorPalette="purple"
-                    variant={categoryId === '__auto' ? 'solid' : 'outline'}
+                    variant={categoryId === AUTO ? 'solid' : 'outline'}
                     disabled={uploading}
                     mb={2}
                     onClick={() =>
-                      setCategoryId(categoryId === '__auto' ? '' : '__auto')
+                      setCategoryId(categoryId === AUTO ? '' : AUTO)
                     }
                   >
                     <LuBot />
                     <Text>AIにおまかせ（内容から自動分類）</Text>
                     <Box flex="1" />
-                    {categoryId === '__auto' ? (
+                    {categoryId === AUTO ? (
                       <LuCheck />
                     ) : (
                       <Badge colorPalette="purple" variant="surface">
@@ -418,8 +422,8 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                       画面外へはみ出すため、位置を指定できるSelectを使う */}
                   <Select.Root
                     collection={categoryCollection}
-                    disabled={uploading || categoryId === '__auto'}
-                    value={[categoryId === '__auto' ? '' : categoryId]}
+                    disabled={uploading || categoryId === AUTO}
+                    value={[categoryId === AUTO ? '' : categoryId]}
                     onValueChange={(e) => setCategoryId(e.value[0] ?? '')}
                     positioning={{ placement: 'bottom-start', sameWidth: true }}
                     size="sm"
@@ -447,7 +451,7 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
                       </Select.Positioner>
                     </Portal>
                   </Select.Root>
-                  {categoryId === '__auto' && (
+                  {categoryId === AUTO && (
                     <Text fontSize="xs" color="fg.muted" mt={1}>
                       内容を読んで自動で振り分けます（合うフォルダが無ければ作成）。
                       フォルダを自分で選ぶ場合は、もう一度ボタンを押して解除してください。
