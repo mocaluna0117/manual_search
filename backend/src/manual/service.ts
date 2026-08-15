@@ -550,15 +550,21 @@ export class ManualService implements OnApplicationBootstrap {
   /**
    * 選んだマニュアルだけをAIで分類し直す。
    *
-   * 既存のフォルダの中からだけ選ばせる(allowNew=false)。数件を直すための
-   * 操作で新しいフォルダが増えると、かえって散らかるため。
+   * 合うフォルダが無ければ新しく作る(allowNew=true)。既存に無理に押し込むと
+   * 分類の意味が薄れるため、必要なら箱を増やす方を選ぶ。
    * ピン留めされたものは動かさない(ピン留めは「AIに動かされたくない」という
    * 意思表示なので、まとめて選ばれても尊重する)。黙って残すと直ったように
    * 見えてしまうので、件数を返して画面で伝える。
    */
   async reclassifySelected(ids: string[]) {
     if (ids.length === 0) {
-      return { movedCount: 0, skippedPinned: [], skippedNotReady: [], moved: [] };
+      return {
+        movedCount: 0,
+        skippedPinned: [],
+        skippedNotReady: [],
+        moved: [],
+        createdCategories: [],
+      };
     }
     // 対象になり得るものと、ならないものを先に分ける(理由を伝えるため)
     const targets = await this.prisma.manual.findMany({
@@ -578,7 +584,7 @@ export class ManualService implements OnApplicationBootstrap {
       .filter((m) => !m.categoryPinned && m.ingestStatus !== IngestStatus.COMPLETED)
       .map((m) => m.title);
 
-    const result = await this.organizeManuals({ id: { in: ids } }, false);
+    const result = await this.organizeManuals({ id: { in: ids } }, true);
 
     const titleById = new Map(targets.map((m) => [m.id, m.title]));
     return {
@@ -589,6 +595,7 @@ export class ManualService implements OnApplicationBootstrap {
         title: titleById.get(m.manualId) ?? '',
         categoryName: m.categoryName,
       })),
+      createdCategories: result.createdCategories,
     };
   }
 

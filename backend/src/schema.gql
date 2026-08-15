@@ -146,6 +146,7 @@ type ReclassifySelectedResult {
   moved: [ReclassifiedManual!]!
   skippedPinned: [String!]!
   skippedNotReady: [String!]!
+  createdCategories: [String!]!
 }
 
 type DeleteEmptyCategoriesResult {

@@ -451,6 +451,8 @@ interface ReclassifySelectedData {
     skippedPinned: string[]
     /** 取り込みが終わっておらず中身を読めなかった分 */
     skippedNotReady: string[]
+    /** 合うフォルダが無くて新しく作った分 */
+    createdCategories: string[]
   }
 }
 
@@ -467,6 +469,7 @@ export const RECLASSIFY_SELECTED_MUTATION: TypedDocumentNode<
       }
       skippedPinned
       skippedNotReady
+      createdCategories
     }
   }
 `

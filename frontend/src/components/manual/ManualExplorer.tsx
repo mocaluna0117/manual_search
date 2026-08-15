@@ -391,7 +391,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     if (
       !window.confirm(
         `選択した${ids.length}件を、AIが内容から分類し直します。\n` +
-          '入れ先は今あるフォルダの中から選びます(新しいフォルダは作りません)。\n' +
+          '合うフォルダが無ければ新しく作ります。\n' +
           'ピン留めしたファイルは動かしません。よろしいですか？',
       )
     )
@@ -407,6 +407,10 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
           ? `${r.movedCount}件を分類し直しました。\n\n` +
             r.moved.map((m) => `・${m.title} → 📁 ${m.categoryName}`).join('\n')
           : '移動したファイルはありません。今の分類のままです。') +
+          // 増えたフォルダは必ず伝える(サイドバーに見慣れない箱が増えるため)
+          (r.createdCategories.length > 0
+            ? `\n\n新しく作ったフォルダ: ${r.createdCategories.join('、')}`
+            : '') +
           // 動かさなかった分は理由と一緒に伝える(黙っていると直ったように見える)
           (r.skippedPinned.length > 0
             ? `\n\nピン留めのため動かしませんでした: ${r.skippedPinned.join('、')}` +

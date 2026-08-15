@@ -156,6 +156,10 @@ export class ReclassifySelectedResult {
   // 取り込みが終わっておらず、中身を読めなかったマニュアルの名前
   @Field(() => [String])
   skippedNotReady!: string[];
+
+  // 合うフォルダが無くて新しく作った分の名前
+  @Field(() => [String])
+  createdCategories!: string[];
 }
 
 // 空フォルダの片付け結果
