@@ -15,6 +15,10 @@ model ManualCategory {
   manuals   Manual[]
   // 管理者がドラッグで決めた並び順(小さいほど上)。同値なら名前順
   sortOrder Int       @default(0) @map("sort_order")
+  // ゴミ箱。中のマニュアルごとフォルダを捨てられるようにするための印。
+  // フォルダと一緒に捨てたマニュアルには、同じ日時をdeletedAtに入れて
+  // 「どれを一緒に戻すか」を判別する
+  deletedAt DateTime? @map("deleted_at")
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 

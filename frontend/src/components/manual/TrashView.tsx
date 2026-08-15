@@ -4,8 +4,11 @@ import { useState } from 'react'
 import { LuRotateCcw, LuTrash2 } from 'react-icons/lu'
 import {
   EMPTY_TRASH_MUTATION,
+  PURGE_CATEGORIES_MUTATION,
   PURGE_MANUALS_MUTATION,
+  RESTORE_CATEGORIES_MUTATION,
   RESTORE_MANUALS_MUTATION,
+  TRASHED_CATEGORIES_QUERY,
   TRASHED_MANUALS_QUERY,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
@@ -28,28 +31,46 @@ export function TrashView() {
   const { data, loading } = useQuery(TRASHED_MANUALS_QUERY, {
     fetchPolicy: 'cache-and-network',
   })
+  // フォルダごと捨てたものは、中身をばらさずフォルダ1件として扱う
+  const { data: catData } = useQuery(TRASHED_CATEGORIES_QUERY, {
+    fetchPolicy: 'cache-and-network',
+  })
   const { data: meData } = useQuery(ME_QUERY)
   const isAdmin = meData?.me.role === 'ADMIN'
   const { openManual } = useManualViewer()
   const [viewMode, changeViewMode] = useViewMode()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [checkedFolderIds, setCheckedFolderIds] = useState<Set<string>>(
+    new Set(),
+  )
   const [busy, setBusy] = useState(false)
 
   const refetch = {
-    refetchQueries: ['TrashedManuals', 'Manuals', 'ManualCategories'],
+    refetchQueries: [
+      'TrashedManuals',
+      'TrashedCategories',
+      'Manuals',
+      'ManualCategories',
+    ],
   }
   const [restoreManuals] = useMutation(RESTORE_MANUALS_MUTATION, refetch)
   const [purgeManuals] = useMutation(PURGE_MANUALS_MUTATION, refetch)
+  const [restoreCategories] = useMutation(RESTORE_CATEGORIES_MUTATION, refetch)
+  const [purgeCategories] = useMutation(PURGE_CATEGORIES_MUTATION, refetch)
   const [emptyTrash] = useMutation(EMPTY_TRASH_MUTATION, refetch)
 
   const manuals = data?.trashedManuals ?? []
+  const folders = catData?.trashedCategories ?? []
+  const checkedCount = checkedIds.size + checkedFolderIds.size
+  const total = manuals.length + folders.length
 
   const run = async (action: () => Promise<unknown>, done: string) => {
     setBusy(true)
     try {
       await action()
       setCheckedIds(new Set())
+      setCheckedFolderIds(new Set())
       window.alert(done)
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '実行できませんでした')
@@ -59,28 +80,37 @@ export function TrashView() {
   }
 
   const handleRestore = () =>
-    run(
-      () => restoreManuals({ variables: { ids: [...checkedIds] } }),
-      `${checkedIds.size}件を元に戻しました。元のフォルダに表示されます。`,
-    )
+    run(async () => {
+      if (checkedIds.size > 0)
+        await restoreManuals({ variables: { ids: [...checkedIds] } })
+      // フォルダは中身ごと戻る
+      if (checkedFolderIds.size > 0)
+        await restoreCategories({ variables: { ids: [...checkedFolderIds] } })
+    }, `${checkedCount}件を元に戻しました。`)
 
   const handlePurge = () => {
     if (
       !window.confirm(
-        `選択した${checkedIds.size}件を完全に削除します。\nこの操作は取り消せません。よろしいですか？`,
+        `選択した${checkedCount}件を完全に削除します。` +
+          (checkedFolderIds.size > 0
+            ? '\nフォルダは中のファイルごと消えます。'
+            : '') +
+          '\nこの操作は取り消せません。よろしいですか？',
       )
     )
       return
-    return run(
-      () => purgeManuals({ variables: { ids: [...checkedIds] } }),
-      `${checkedIds.size}件を完全に削除しました。`,
-    )
+    return run(async () => {
+      if (checkedIds.size > 0)
+        await purgeManuals({ variables: { ids: [...checkedIds] } })
+      if (checkedFolderIds.size > 0)
+        await purgeCategories({ variables: { ids: [...checkedFolderIds] } })
+    }, `${checkedCount}件を完全に削除しました。`)
   }
 
   const handleEmpty = () => {
     if (
       !window.confirm(
-        `ゴミ箱の${manuals.length}件をすべて完全に削除します。\nこの操作は取り消せません。よろしいですか？`,
+        `ゴミ箱の${total}件をすべて完全に削除します。\nフォルダは中のファイルごと消えます。\nこの操作は取り消せません。よろしいですか？`,
       )
     )
       return
@@ -104,11 +134,11 @@ export function TrashView() {
         </HStack>
         {data && (
           <Text fontSize="sm" color="fg.muted">
-            {manuals.length}件
+            {total}件
           </Text>
         )}
         <Box flex="1" />
-        {checkedIds.size > 0 && (
+        {checkedCount > 0 && (
           <>
             <Button
               size="xs"
@@ -117,7 +147,7 @@ export function TrashView() {
               loading={busy}
               onClick={() => void handleRestore()}
             >
-              <LuRotateCcw /> 選択した{checkedIds.size}件を元に戻す
+              <LuRotateCcw /> 選択した{checkedCount}件を元に戻す
             </Button>
             <Button
               size="xs"
@@ -130,7 +160,7 @@ export function TrashView() {
             </Button>
           </>
         )}
-        {manuals.length > 0 && checkedIds.size === 0 && (
+        {total > 0 && checkedCount === 0 && (
           <Button
             size="xs"
             colorPalette="red"
@@ -148,6 +178,7 @@ export function TrashView() {
 
       <ManualItemList
         viewMode={viewMode}
+        folders={folders}
         manuals={manuals}
         isAdmin={isAdmin}
         selectedId={selectedId}
@@ -162,12 +193,23 @@ export function TrashView() {
             return next
           })
         }
-        onToggleCheckAll={() =>
-          setCheckedIds((prev) =>
-            manuals.every((m) => prev.has(m.id))
-              ? new Set()
-              : new Set(manuals.map((m) => m.id)),
+        onToggleCheckAll={() => {
+          const allOn =
+            manuals.every((m) => checkedIds.has(m.id)) &&
+            folders.every((f) => checkedFolderIds.has(f.id))
+          setCheckedIds(allOn ? new Set() : new Set(manuals.map((m) => m.id)))
+          setCheckedFolderIds(
+            allOn ? new Set() : new Set(folders.map((f) => f.id)),
           )
+        }}
+        checkedFolderIds={checkedFolderIds}
+        onToggleFolderCheck={(id) =>
+          setCheckedFolderIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
+            return next
+          })
         }
         // 捨てた日時を名前の下に出す(いつ消えるかの目安になる)
         renderSubtitle={(manual) =>
@@ -179,13 +221,13 @@ export function TrashView() {
         }
       />
 
-      {!loading && manuals.length === 0 && (
+      {!loading && total === 0 && (
         <Text mt={6} color="fg.muted" fontSize="sm">
           ゴミ箱は空です
         </Text>
       )}
 
-      {manuals.length > 0 && (
+      {total > 0 && (
         <Text mt={6} fontSize="xs" color="fg.subtle">
           ゴミ箱の中身は検索・AIの回答には出てきません。
           削除から{RETENTION_DAYS}日が過ぎたものは自動的に完全削除されます。

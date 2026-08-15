@@ -13,6 +13,7 @@ import {
   ReclassifyStatus,
   RegisterManualResult,
 } from './model';
+import { ManualCategory } from '../category/model';
 import { ManualService } from './service';
 
 @Resolver(() => Manual)
@@ -156,11 +157,32 @@ export class ManualResolver {
     return this.manualService.trashed();
   }
 
+  // ゴミ箱に入っているフォルダ(中身ごと捨てたもの)
+  @Roles(UserRole.ADMIN)
+  @Query(() => [ManualCategory])
+  trashedCategories() {
+    return this.manualService.trashedCategories();
+  }
+
   // ゴミ箱から元に戻す
   @Roles(UserRole.ADMIN)
   @Mutation(() => Int)
   restoreManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
     return this.manualService.restoreMany(ids);
+  }
+
+  // フォルダを中身ごと元に戻す
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  restoreCategories(@Args('ids', { type: () => [ID] }) ids: string[]) {
+    return this.manualService.restoreCategories(ids);
+  }
+
+  // フォルダを中身ごと完全に削除する
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => Int)
+  purgeCategories(@Args('ids', { type: () => [ID] }) ids: string[]) {
+    return this.manualService.purgeCategories(ids);
   }
 
   // ゴミ箱から完全に削除する(実ファイルごと消える)

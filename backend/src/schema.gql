@@ -32,6 +32,7 @@ type ManualCategory {
   name: String!
   totalSize: Float!
   manualCount: Int!
+  deletedAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
 }
@@ -182,6 +183,7 @@ type Query {
   reclassifyStatus: ReclassifyStatus!
   reclassifyCounts: ReclassifyCounts!
   trashedManuals: [Manual!]!
+  trashedCategories: [ManualCategory!]!
   classificationRules: [ClassificationRule!]!
   promptTemplates: [PromptTemplate!]!
 }
@@ -206,6 +208,8 @@ type Mutation {
   deleteManual(id: ID!): Manual!
   deleteManuals(ids: [ID!]!): Int!
   restoreManuals(ids: [ID!]!): Int!
+  restoreCategories(ids: [ID!]!): Int!
+  purgeCategories(ids: [ID!]!): Int!
   purgeManuals(ids: [ID!]!): Int!
   emptyTrash: Int!
   ingestManual(id: ID!): Boolean!

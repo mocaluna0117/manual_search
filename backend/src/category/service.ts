@@ -8,6 +8,7 @@ export class CategoryService {
   async findAll() {
     // 管理者が決めた並び順が優先。同値(未設定)なら名前順で安定させる
     const categories = await this.prisma.manualCategory.findMany({
+      where: { deletedAt: null },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     // 一覧の「サイズ」列に出す、フォルダ内のファイル合計。
@@ -50,6 +51,7 @@ export class CategoryService {
    */
   async reorder(ids: string[]) {
     const categories = await this.prisma.manualCategory.findMany({
+      where: { deletedAt: null },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       select: { id: true },
     });
@@ -94,24 +96,42 @@ export class CategoryService {
       where: { name: trimmed, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
     });
     if (duplicate) {
-      throw new BadRequestException(`カテゴリ「${trimmed}」は既に存在します`);
+      // 名前はDBで一意なので、ゴミ箱の中の同名とも衝突する。
+      // 「既に存在します」だけだと画面上どこにも無くて混乱するため区別して伝える
+      throw new BadRequestException(
+        duplicate.deletedAt
+          ? `フォルダ「${trimmed}」がゴミ箱にあります。復元するか、完全に削除してください`
+          : `フォルダ「${trimmed}」は既に存在します`,
+      );
     }
     return trimmed;
   }
 
+  /**
+   * フォルダをゴミ箱へ入れる。中のマニュアルも一緒に入る。
+   *
+   * フォルダと中身に「同じ日時」を入れるのが要点で、復元のときに
+   * 「このフォルダと一緒に捨てられたもの」だけを戻せるようにしている
+   * (フォルダを捨てる前から個別にゴミ箱にあったものは、そのまま残す)
+   */
   async delete(id: string) {
-    // マニュアルが残っているカテゴリは消させない(FKエラーの生投げではなく明確な理由を返す)
-    const manualCount = await this.prisma.manual.count({
-      // ゴミ箱の中しか残っていないフォルダは削除できてよい
-      where: { categoryId: id, deletedAt: null },
+    const category = await this.prisma.manualCategory.findFirst({
+      where: { id, deletedAt: null },
     });
-    if (manualCount > 0) {
-      throw new BadRequestException(
-        `このカテゴリには${manualCount}件のマニュアルがあるため削除できません。先に移動または削除してください`,
-      );
+    if (!category) {
+      throw new BadRequestException('フォルダが見つかりません');
     }
-    return this.prisma.manualCategory.delete({
-      where: { id },
-    });
+    const deletedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.manual.updateMany({
+        where: { categoryId: id, deletedAt: null },
+        data: { deletedAt },
+      }),
+      this.prisma.manualCategory.update({
+        where: { id },
+        data: { deletedAt },
+      }),
+    ]);
+    return { ...category, deletedAt };
   }
 }

@@ -667,21 +667,114 @@ export class ManualService implements OnApplicationBootstrap {
     return count;
   }
 
-  /** ゴミ箱の中身(捨てた順) */
-  trashed() {
-    return this.prisma.manual.findMany({
+  /**
+   * ゴミ箱の中身(捨てた順)。
+   * フォルダごと捨てたマニュアルはフォルダの中に入ったままなので、
+   * ここには出さない(フォルダを戻せば一緒に戻る)
+   */
+  async trashed() {
+    const manuals = await this.prisma.manual.findMany({
+      where: { deletedAt: { not: null } },
+      include: { category: true },
+      orderBy: { deletedAt: 'desc' },
+    });
+    return manuals.filter(
+      (m) =>
+        !(
+          m.category?.deletedAt &&
+          m.deletedAt &&
+          m.category.deletedAt.getTime() === m.deletedAt.getTime()
+        ),
+    );
+  }
+
+  /** ゴミ箱に入っているフォルダ(中の件数付き) */
+  async trashedCategories() {
+    const categories = await this.prisma.manualCategory.findMany({
       where: { deletedAt: { not: null } },
       orderBy: { deletedAt: 'desc' },
     });
+    return Promise.all(
+      categories.map(async (category) => ({
+        ...category,
+        // 一緒に捨てられた=同じ日時のものを数える
+        manualCount: await this.prisma.manual.count({
+          where: { categoryId: category.id, deletedAt: category.deletedAt },
+        }),
+        totalSize: 0,
+      })),
+    );
   }
 
-  /** ゴミ箱から元に戻す。戻り値は復元できた件数 */
-  async restoreMany(ids: string[]) {
-    const { count } = await this.prisma.manual.updateMany({
-      where: { deletedAt: { not: null }, id: { in: ids } },
-      data: { deletedAt: null },
+  /** ゴミ箱のフォルダを中身ごと元に戻す */
+  async restoreCategories(ids: string[]) {
+    const categories = await this.prisma.manualCategory.findMany({
+      where: { id: { in: ids }, deletedAt: { not: null } },
     });
-    return count;
+    for (const category of categories) {
+      await this.prisma.$transaction([
+        // 一緒に捨てたマニュアルだけを戻す
+        this.prisma.manual.updateMany({
+          where: { categoryId: category.id, deletedAt: category.deletedAt },
+          data: { deletedAt: null },
+        }),
+        this.prisma.manualCategory.update({
+          where: { id: category.id },
+          data: { deletedAt: null },
+        }),
+      ]);
+    }
+    return categories.length;
+  }
+
+  /** ゴミ箱のフォルダを中身ごと完全に削除する */
+  async purgeCategories(ids: string[]) {
+    const categories = await this.prisma.manualCategory.findMany({
+      where: { id: { in: ids }, deletedAt: { not: null } },
+    });
+    let purged = 0;
+    for (const category of categories) {
+      // 中のマニュアルを先に消さないと外部キーで消せない
+      const inside = await this.prisma.manual.findMany({
+        where: { categoryId: category.id },
+        select: { id: true },
+      });
+      await this.purgeMany(inside.map((m) => m.id));
+      const left = await this.prisma.manual.count({
+        where: { categoryId: category.id },
+      });
+      if (left > 0) {
+        this.logger.error(
+          `フォルダを削除できません(${left}件残っています) category=${category.id}`,
+        );
+        continue;
+      }
+      await this.prisma.manualCategory.delete({ where: { id: category.id } });
+      purged++;
+    }
+    return purged;
+  }
+
+  /**
+   * ゴミ箱から元に戻す。戻り値は復元できた件数。
+   * 元のフォルダ自体がゴミ箱にある場合は、戻しても見えなくなってしまうので
+   * 未分類へ移す
+   */
+  async restoreMany(ids: string[]) {
+    const manuals = await this.prisma.manual.findMany({
+      where: { deletedAt: { not: null }, id: { in: ids } },
+      include: { category: true },
+    });
+    for (const manual of manuals) {
+      await this.prisma.manual.update({
+        where: { id: manual.id },
+        data: {
+          deletedAt: null,
+          categoryId: manual.category?.deletedAt ? null : manual.categoryId,
+        },
+      });
+    }
+    return manuals.length;
   }
 
   /**
@@ -708,13 +801,21 @@ export class ManualService implements OnApplicationBootstrap {
     return purged;
   }
 
-  /** ゴミ箱を空にする */
+  /** ゴミ箱を空にする(フォルダも含めて完全削除) */
   async emptyTrash() {
+    const categories = await this.prisma.manualCategory.findMany({
+      where: { deletedAt: { not: null } },
+      select: { id: true },
+    });
+    const purgedCategories = await this.purgeCategories(
+      categories.map((c) => c.id),
+    );
     const manuals = await this.prisma.manual.findMany({
       where: { deletedAt: { not: null } },
       select: { id: true },
     });
-    return this.purgeMany(manuals.map((m) => m.id));
+    const purgedManuals = await this.purgeMany(manuals.map((m) => m.id));
+    return purgedManuals + purgedCategories;
   }
 
   /**
@@ -725,12 +826,21 @@ export class ManualService implements OnApplicationBootstrap {
     const limit = new Date(
       Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000,
     );
+    // フォルダを先に消す(中のマニュアルごと消える)
+    const expiredCategories = await this.prisma.manualCategory.findMany({
+      where: { deletedAt: { lt: limit } },
+      select: { id: true },
+    });
+    const purgedCategories = await this.purgeCategories(
+      expiredCategories.map((c) => c.id),
+    );
     const expired = await this.prisma.manual.findMany({
       where: { deletedAt: { lt: limit } },
       select: { id: true },
     });
-    if (expired.length === 0) return;
-    const purged = await this.purgeMany(expired.map((m) => m.id));
+    if (expired.length === 0 && purgedCategories === 0) return;
+    const purged =
+      (await this.purgeMany(expired.map((m) => m.id))) + purgedCategories;
     this.logger.log(
       `ゴミ箱の自動削除: ${purged}件(${TRASH_RETENTION_DAYS}日経過)`,
     );

@@ -18,6 +18,10 @@ export class ManualCategory {
   @Field(() => Int)
   manualCount!: number;
 
+  // ゴミ箱に入った日時(nullなら通常のフォルダ)
+  @Field(() => Date, { nullable: true })
+  deletedAt!: Date | null;
+
   @Field()
   createdAt!: Date;
 

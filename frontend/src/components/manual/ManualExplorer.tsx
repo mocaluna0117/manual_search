@@ -291,9 +291,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         `選択した${fileCount > 0 ? `ファイル${fileCount}件` : ''}` +
           `${fileCount > 0 && folderCount > 0 ? 'と' : ''}` +
           `${folderCount > 0 ? `フォルダ${folderCount}件` : ''}を削除します。\n` +
-          '元に戻せません。よろしいですか？' +
+          'ゴミ箱から元に戻せます。' +
           (folderCount > 0
-            ? '\n\n(中にファイルが残っているフォルダは削除されません)'
+            ? '\n\n(フォルダは中のファイルごと移動します)'
             : ''),
       )
     )
@@ -309,7 +309,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         deletedFiles = result?.deleteManuals ?? 0
       }
 
-      // フォルダは1件ずつ。空でないものは理由付きで拒否される
+      // フォルダは1件ずつ(中身も一緒にゴミ箱へ入る)
       const keptFolders: string[] = []
       let deletedFolders = 0
       for (const id of checkedFolderIds) {
@@ -325,13 +325,19 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       setCheckedIds(new Set())
       setCheckedFolderIds(new Set())
       const lines = [
-        deletedFiles > 0 ? `ファイル${deletedFiles}件を削除しました。` : '',
-        deletedFolders > 0 ? `フォルダ${deletedFolders}件を削除しました。` : '',
+        deletedFiles > 0
+          ? `ファイル${deletedFiles}件をゴミ箱に移動しました。`
+          : '',
+        deletedFolders > 0
+          ? `フォルダ${deletedFolders}件を中身ごとゴミ箱に移動しました。`
+          : '',
         keptFolders.length > 0
-          ? `次のフォルダは中にファイルが残っているため削除しませんでした: ${keptFolders.join('、')}`
+          ? `次のフォルダは移動できませんでした: ${keptFolders.join('、')}`
           : '',
       ].filter(Boolean)
-      window.alert(lines.join('\n') || '削除できるものがありませんでした。')
+      window.alert(
+        lines.join('\n') || '移動できるものがありませんでした。',
+      )
     } catch (e) {
       window.alert(e instanceof Error ? e.message : '削除できませんでした')
     } finally {

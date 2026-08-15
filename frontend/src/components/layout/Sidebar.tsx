@@ -150,7 +150,15 @@ export function SidebarContent({
   }
 
   const handleDeleteCategory = async (category: Category) => {
-    if (!window.confirm(`カテゴリ「${category.name}」を削除しますか？`)) return
+    const count = category.manualCount ?? 0
+    if (
+      !window.confirm(
+        `フォルダ「${category.name}」をゴミ箱に移動しますか？` +
+          (count > 0 ? `\n中のファイル${count}件も一緒に移動します。` : '') +
+          '\nゴミ箱から元に戻せます。',
+      )
+    )
+      return
     try {
       await deleteCategory({ variables: { id: category.id } })
       if (category.id === selectedCategoryId) onSelectCategory(null)

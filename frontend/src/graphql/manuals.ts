@@ -244,10 +244,34 @@ export const TRASHED_MANUALS_QUERY: TypedDocumentNode<TrashedManualsData> = gql`
   }
 `
 
+interface TrashedCategoriesData {
+  trashedCategories: {
+    id: string
+    name: string
+    deletedAt?: string | null
+    manualCount?: number
+    totalSize?: number
+  }[]
+}
+
+export const TRASHED_CATEGORIES_QUERY: TypedDocumentNode<TrashedCategoriesData> = gql`
+  query TrashedCategories {
+    trashedCategories {
+      id
+      name
+      deletedAt
+      manualCount
+      totalSize
+    }
+  }
+`
+
 interface TrashActionData {
   restoreManuals?: number
   purgeManuals?: number
   emptyTrash?: number
+  restoreCategories?: number
+  purgeCategories?: number
 }
 
 interface IdsVars {
@@ -269,6 +293,24 @@ export const PURGE_MANUALS_MUTATION: TypedDocumentNode<
 > = gql`
   mutation PurgeManuals($ids: [ID!]!) {
     purgeManuals(ids: $ids)
+  }
+`
+
+export const RESTORE_CATEGORIES_MUTATION: TypedDocumentNode<
+  TrashActionData,
+  IdsVars
+> = gql`
+  mutation RestoreCategories($ids: [ID!]!) {
+    restoreCategories(ids: $ids)
+  }
+`
+
+export const PURGE_CATEGORIES_MUTATION: TypedDocumentNode<
+  TrashActionData,
+  IdsVars
+> = gql`
+  mutation PurgeCategories($ids: [ID!]!) {
+    purgeCategories(ids: $ids)
   }
 `
 
