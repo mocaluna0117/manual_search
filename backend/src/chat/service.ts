@@ -65,6 +65,13 @@ export class ChatService {
   }
 
   /** 質問を受けて、会話の作成→質問の保存→RAG検索→回答の保存までを行う */
+  /**
+   * 質問に答える。
+   *
+   * stream を渡すと、回答の文字が生成されるそばから onDelta が呼ばれる
+   * (画面に少しずつ出すため)。渡さなければ従来どおり完成してから返す。
+   * どちらの場合も、保存される内容と戻り値は同じ
+   */
   async ask(
     question: string,
     userId: string,
@@ -72,6 +79,7 @@ export class ChatService {
     image?: { base64: string; format: string },
     signal?: AbortSignal,
     isAdmin = false,
+    stream?: { onDelta: (text: string) => void; onReset: () => void },
   ): Promise<AskResult> {
     // 1) 会話を用意(初回の質問なら新規作成し、タイトルは質問から自動生成)
     //    既存会話の場合は所有者チェックも兼ねる
@@ -219,13 +227,17 @@ export class ChatService {
     // マニュアルから答えられたか。集計にだけ使い、画面には出さない
     let answered: boolean | null = null;
     try {
-      const result = await this.rag.search(
-        question,
-        image,
-        history,
-        signal,
-        isAdmin,
-      );
+      const result = stream
+        ? await this.rag.searchStream(
+            question,
+            image,
+            history,
+            signal,
+            isAdmin,
+            stream.onDelta,
+            stream.onReset,
+          )
+        : await this.rag.search(question, image, history, signal, isAdmin);
       answer = result.answer;
       citations = result.citations;
       options = result.options;

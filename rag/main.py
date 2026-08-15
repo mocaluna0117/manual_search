@@ -1,4 +1,5 @@
 import base64
+import json
 import logging
 import os
 import re
@@ -9,6 +10,7 @@ from io import BytesIO
 import psycopg
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import UUID4, BaseModel
 from pypdf import PdfReader
 
@@ -496,9 +498,11 @@ def organize(req: OrganizeRequest) -> OrganizeResponse:
     return OrganizeResponse(assignments=assignments)
 
 
-@app.post("/search", response_model=SearchResponse, dependencies=[Depends(require_api_token)])
-def search(req: SearchRequest) -> SearchResponse:
-    """質問(+添付画像)に近いチャンクをベクトル検索し、Claudeが回答を生成する。
+def retrieve(req: SearchRequest):
+    """質問から抜粋を集めるところまで(回答の生成は含まない)。
+
+    /search と /search-stream で同じ検索をするために切り出してある。
+    戻り値は (rows, image)。検索対象が1件も無い場合は rows が空になる。
 
     <=> はpgvectorのコサイン距離演算子。小さいほど「近い(似ている)」。
     """
@@ -539,12 +543,26 @@ def search(req: SearchRequest) -> SearchResponse:
         with conn.cursor() as cur:
             rows = hybrid_search(cur, query_vec, terms)
 
+    return rows, image
+
+
+# 検索対象が1件も無いときの文面(管理者以外)。
+# 「答えられなかった」ではなく「そもそも探す先が無い」ので集計対象にしない
+NO_MANUALS_ANSWER = (
+    "まだ検索できるマニュアルがありません。マニュアルをアップロードして取り込んでください。"
+)
+
+
+@app.post("/search", response_model=SearchResponse, dependencies=[Depends(require_api_token)])
+def search(req: SearchRequest) -> SearchResponse:
+    """質問に近い抜粋を集め、それを根拠にClaudeが回答を生成する(一括で返す)"""
+    rows, image = retrieve(req)
+
     # 検索ヒットゼロでも、管理者のときは生成まで進める。
     # 管理操作(フォルダ作成など)はマニュアルが1件も無い状態でも成立する必要がある
     if not rows and not req.is_admin:
-        # 「答えられなかった」ではなく「そもそも探す先が無い」ので集計対象にしない
         return SearchResponse(
-            answer="まだ検索できるマニュアルがありません。マニュアルをアップロードして取り込んでください。",
+            answer=NO_MANUALS_ANSWER,
             citations=[],
             answered=None,
         )
@@ -619,4 +637,170 @@ def search(req: SearchRequest) -> SearchResponse:
         options=options,
         actions=actions,
         answered=answered,
+    )
+
+
+# --- ストリーミング(回答を少しずつ返す) ---
+
+# 末尾に付く制御行。途中経過として画面に出さないよう、行単位で伏せる
+CONTROL_LINE = re.compile(r"^\s*(\[参照\]|\[選択肢\]|選択肢[：:])")
+
+
+class StreamBuffer:
+    """流れてくる文字から、画面に出してよい分だけを取り出す。
+
+    [参照]・[選択肢]の行は本文から除去される決まりなので、行が完成するまで
+    出さずに持っておき、制御行だと分かったら捨てる。行の途中で切って出すと
+    「[参照] 1,3」が一瞬見えてしまう
+    """
+
+    def __init__(self) -> None:
+        self._pending = ""
+        # 制御行が現れたら、そこから先はすべて本文ではない。
+        # 1行だけ捨てる作りにすると、選択肢が複数行に分かれたときに
+        # 2行目以降が本文として漏れる
+        self._stopped = False
+
+    def push(self, text: str) -> str:
+        """追加された文字を受け取り、画面に出してよい分を返す"""
+        if self._stopped:
+            return ""
+        self._pending += text
+        out = []
+        while "\n" in self._pending:
+            line, self._pending = self._pending.split("\n", 1)
+            if CONTROL_LINE.match(line):
+                self._stopped = True
+                self._pending = ""
+                return "".join(out)
+            out.append(line + "\n")
+        # 行の途中でも、制御行になりそうな書き出しでなければ出してよい
+        if self._pending and not self._pending.lstrip().startswith(("[", "選択肢")):
+            out.append(self._pending)
+            self._pending = ""
+        return "".join(out)
+
+
+def sse(event: str, data: dict) -> str:
+    """Server-Sent Events の1件分。改行2つで1件の区切り"""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.post("/search-stream", dependencies=[Depends(require_api_token)])
+def search_stream(req: SearchRequest):
+    """/search と同じ回答を、文字が生成されるそばから返す。
+
+    形式はSSE。イベントは delta(追加された文字) → done(確定した全文と引用)。
+    途中で失敗した場合は error を1件返して終わる。
+    """
+
+    def events():
+        # 最初の1バイトを早く送る。CloudFrontとALBは無通信60秒で切るため、
+        # 検索に時間がかかっても接続が保たれるようにする
+        yield sse("start", {})
+        try:
+            rows, image = retrieve(req)
+        except HTTPException as e:
+            yield sse("error", {"message": str(e.detail)})
+            return
+        except Exception as e:
+            yield sse("error", {"message": f"検索に失敗しました: {e}"})
+            return
+
+        if not rows and not req.is_admin:
+            yield sse("delta", {"text": NO_MANUALS_ANSWER})
+            yield sse(
+                "done",
+                {"answer": NO_MANUALS_ANSWER, "citations": [], "options": [], "actions": [], "answered": None},
+            )
+            return
+
+        contexts = [
+            Context(title=f"{title}(p.{page})" if page else title, content=content)
+            for _manual_id, title, content, page in rows
+        ]
+        used_rows = rows[:3]  # 保険の既定値: 参照の申告が無ければ上位3件
+        answered: bool | None = None
+        options: list[str] = []
+        actions: list[ActionRequest] = []
+        buffer = StreamBuffer()
+        raw_answer = ""
+
+        try:
+            for chunk in answer_generator.generate_stream(
+                req.question,
+                contexts,
+                image=image,
+                history=req.history,
+                tools=ADMIN_TOOLS if req.is_admin else None,
+                is_admin=req.is_admin,
+            ):
+                if chunk["type"] == "delta":
+                    visible = buffer.push(chunk["text"])
+                    if visible:
+                        yield sse("delta", {"text": visible})
+                elif chunk["type"] == "tool":
+                    # 管理操作は実行結果で本文が差し替わるので、途中経過を消す
+                    yield sse("reset", {})
+                elif chunk["type"] == "done":
+                    raw_answer = chunk["answer"]
+                    actions = [ActionRequest(**a) for a in chunk["actions"]]
+
+            if not raw_answer.strip() and not actions:
+                raise ValueError("モデルが本文を返しませんでした")
+
+            answer, options = extract_options(raw_answer)
+            answer, used = extract_references(answer, len(rows))
+            if used is not None:
+                used_rows = [rows[i] for i in used]
+                answered = len(used) > 0
+            if actions:
+                used_rows = []
+                answered = None
+        except Exception as e:
+            answer = (
+                "関連しそうなマニュアルが見つかりましたが、"
+                f"回答文の生成に失敗しました({e})。以下の抜粋をご確認ください。"
+            )
+            actions = []
+            options = []
+            answered = None
+            yield sse("reset", {})
+
+        citations: list[dict] = []
+        seen: set[tuple[str, int | None]] = set()
+        for manual_id, title, content, page in used_rows:
+            if (manual_id, page) in seen:
+                continue
+            seen.add((manual_id, page))
+            citations.append(
+                {
+                    "manual_id": manual_id,
+                    "title": title,
+                    "snippet": content[:150],
+                    "page": page,
+                }
+            )
+
+        # 確定した全文を必ず送る。伏せていた分や制御行の除去をここで合わせる
+        yield sse(
+            "done",
+            {
+                "answer": answer,
+                "citations": citations,
+                "options": options,
+                "actions": [a.model_dump() for a in actions],
+                "answered": answered,
+            },
+        )
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            # 途中で溜め込ませないための指定(プロキシ・CloudFront対策)
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )

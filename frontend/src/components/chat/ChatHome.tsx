@@ -1,4 +1,4 @@
-import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
+import { useApolloClient, useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
@@ -25,12 +25,12 @@ import {
   LuX,
 } from 'react-icons/lu'
 import {
-  ASK_MUTATION,
   CONVERSATION_QUERY,
   type ChatMessage,
 } from '../../graphql/chat'
 import { ME_QUERY } from '../../graphql/me'
 import { useSendKey } from '../../lib/settings'
+import { askStream } from '../../lib/chatStream'
 import { useManualViewer } from '../manual/ManualViewerProvider'
 import { MarkdownText } from './MarkdownText'
 import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
@@ -229,23 +229,39 @@ export function ChatHome({
   // カテゴリが変わることがないので余計な再取得をしない
   const { data: meData } = useQuery(ME_QUERY)
   const isAdmin = meData?.me.role === 'ADMIN'
-  const [ask, { loading }] = useMutation(ASK_MUTATION, {
-    refetchQueries: isAdmin
-      ? ['Conversations', 'ManualCategories', 'Manuals']
-      : ['Conversations'],
-  })
+  // 回答はGraphQLではなく専用の経路で受け取る(文字が届くたびに書き足すため)。
+  // 送信中かどうかと、書き足し中の吹き出しは自分で持つ
+  const [loading, setLoading] = useState(false)
+  const [streamingId, setStreamingId] = useState<string | null>(null)
+  /** 書き足し中の吹き出しが既に出ているか(出ていれば「探しています」は不要) */
+  const streamingStarted =
+    streamingId !== null && messages.some((m) => m.id === streamingId)
+
+  /** 回答後に一覧を最新化する(サイドバーの履歴、管理者はフォルダ一覧も) */
+  const refetchAfterAnswer = () =>
+    void apolloClient.refetchQueries({
+      include: isAdmin
+        ? ['Conversations', 'ManualCategories', 'Manuals']
+        : ['Conversations'],
+    })
 
   // 引用カードからアプリ内ビューアでPDFを開く
   const { openManual } = useManualViewer()
 
   // スクロール制御:
   // - 履歴を開いた直後: 一番下へ即時ジャンプ(続きから読む位置)
-  // - AIの回答が届いた: 回答の「先頭」に合わせる(長い回答を頭から読めるように)
+  // - 回答を書き足している最中: 文字を追いかけて一番下へ(アニメ無し)
+  // - AIの回答が出そろった: 回答の「先頭」に合わせる(長い回答を頭から読めるように)
   // - それ以外(自分の送信・考え中): 一番下へ
   useEffect(() => {
     if (justLoadedHistoryRef.current) {
       justLoadedHistoryRef.current = false
       bottomRef.current?.scrollIntoView() // 履歴表示はアニメ無しで一気に
+      return
+    }
+    if (streamingStarted) {
+      // 1文字ごとに滑らかスクロールを掛けると追従が間に合わず画面が揺れる
+      bottomRef.current?.scrollIntoView()
       return
     }
     const last = messages[messages.length - 1]
@@ -254,7 +270,7 @@ export function ChatHome({
     } else {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages, loading])
+  }, [messages, loading, streamingStarted])
 
   const handleAttach = (file: File | null) => {
     if (!file) return
@@ -297,27 +313,64 @@ export function ChatHome({
 
     const controller = new AbortController()
     abortRef.current = controller
+    setLoading(true)
+    // 回答を書き足していく吹き出しのID。届いた文字をここに足していく
+    const streamId = `stream-${Date.now()}`
+    setStreamingId(streamId)
     try {
-      const { data } = await ask({
-        variables: {
-          question,
-          conversationId: conversationId ?? undefined,
-          imageBase64: image ? await fileToBase64(image) : undefined,
-          imageFormat: image ? ALLOWED_IMAGE_TYPES[image.type] : undefined,
-        },
-        // 「停止」ボタンでHTTPリクエストごと中断できるようにする
-        context: { fetchOptions: { signal: controller.signal } },
+      const imageBase64 = image ? await fileToBase64(image) : undefined
+      const imageFormat = image ? ALLOWED_IMAGE_TYPES[image.type] : undefined
+      const result = await askStream({
+        question,
+        conversationId,
+        imageBase64,
+        imageFormat,
+        // 「停止」ボタンで接続ごと中断できるようにする
+        signal: controller.signal,
+        onDelta: (text) =>
+          setMessages((prev) => {
+            const last = prev[prev.length - 1]
+            if (last?.id === streamId) {
+              // 既に出ている吹き出しに書き足す
+              return [
+                ...prev.slice(0, -1),
+                { ...last, content: last.content + text },
+              ]
+            }
+            return [
+              ...prev,
+              {
+                id: streamId,
+                role: 'ASSISTANT',
+                content: text,
+                citations: [],
+                options: [],
+                createdAt: new Date().toISOString(),
+              },
+            ]
+          }),
+        // 管理操作などで本文が差し替わるときは、途中経過を消してやり直す
+        onReset: () =>
+          setMessages((prev) =>
+            prev[prev.length - 1]?.id === streamId ? prev.slice(0, -1) : prev,
+          ),
       })
-      if (!data) return
-      setMessages((prev) => [...prev, data.askQuestion.message])
+      // 確定した回答で置き換える(引用・選択肢もここで付く)
+      setMessages((prev) => [
+        ...prev.filter((m) => m.id !== streamId),
+        result.message,
+      ])
       // 新規チャットだった場合、できあがった会話IDをAppに知らせる
       if (!conversationId) {
-        onConversationCreated(data.askQuestion.conversationId)
+        onConversationCreated(result.conversationId)
       }
+      refetchAfterAnswer()
     } catch (e) {
+      // 途中まで出ていた回答は確定していないので消す
+      setMessages((prev) => prev.filter((m) => m.id !== streamId))
       // 停止ボタンによる中断はエラー扱いにしない。
-      // なおサーバー側の生成は止まらないため、回答自体は会話に保存され、
-      // 会話を開き直すと表示される(それを短い一文で案内する)
+      // 接続を切るとサーバー側も生成を打ち切り、質問ごと保存を取り消すので、
+      // 「保存されていない」ことを短い一文で案内する
       if (controller.signal.aborted) {
         setMessages((prev) => [
           ...prev,
@@ -346,6 +399,8 @@ export function ChatHome({
       ])
     } finally {
       abortRef.current = null
+      setStreamingId(null)
+      setLoading(false)
     }
   }
 
@@ -748,7 +803,14 @@ export function ChatHome({
             </Box>
           ))}
 
-          {loading && <Spinner alignSelf="flex-start" />}
+          {/* 検索している間だけ出す。文字が届き始めたら吹き出しが伸びていくので、
+              くるくるは引っ込める(二重に「待っている」感を出さない) */}
+          {loading && !streamingStarted && (
+            <HStack alignSelf="flex-start" gap={2} color="fg.muted">
+              <Spinner size="sm" />
+              <Text fontSize="sm">マニュアルを探しています…</Text>
+            </HStack>
+          )}
           <div ref={bottomRef} />
         </VStack>
       </Box>

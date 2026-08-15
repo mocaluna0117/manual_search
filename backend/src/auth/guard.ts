@@ -11,10 +11,14 @@ export class GqlAuthGuard extends AuthGuard('jwt') {
     super();
   }
 
-  // GraphQLのcontextからHTTPリクエストを取り出す(REST用のAuthGuardをGraphQLに適合させる)
+  // GraphQLのcontextからHTTPリクエストを取り出す(REST用のAuthGuardをGraphQLに適合させる)。
+  // チャットのストリーミングだけは通常のHTTPで受けるので、そちらにも対応する
   getRequest(context: ExecutionContext) {
-    const ctx = GqlExecutionContext.create(context);
-    return ctx.getContext<{ req: Request }>().req;
+    if (context.getType<'graphql'>() === 'graphql') {
+      const ctx = GqlExecutionContext.create(context);
+      return ctx.getContext<{ req: Request }>().req;
+    }
+    return context.switchToHttp().getRequest<Request>();
   }
 
   canActivate(context: ExecutionContext) {

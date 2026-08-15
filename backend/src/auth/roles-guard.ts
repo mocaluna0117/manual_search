@@ -27,9 +27,12 @@ export class RolesGuard implements CanActivate {
     // @Rolesが付いていない操作は素通し(ログイン済みなら誰でもOK)
     if (!requiredRoles || requiredRoles.length === 0) return true;
 
-    const { req } = GqlExecutionContext.create(context).getContext<{
-      req: { user?: AuthUser };
-    }>();
+    const req =
+      context.getType<'graphql'>() === 'graphql'
+        ? GqlExecutionContext.create(context).getContext<{
+            req: { user?: AuthUser };
+          }>().req
+        : context.switchToHttp().getRequest<{ user?: AuthUser }>();
     if (!req.user) return false;
 
     const user = await this.userService.ensure(req.user);

@@ -232,6 +232,16 @@ class AnswerGenerator(Protocol):
         is_admin: bool = False,
     ) -> tuple[str, list[dict]]: ...
 
+    def generate_stream(
+        self,
+        question: str,
+        contexts: list[Context],
+        image: tuple[bytes, str] | None = None,
+        history: list[HistoryMessage] | None = None,
+        tools: list[dict] | None = None,
+        is_admin: bool = False,
+    ): ...
+
     def rewrite_query(self, question: str, history: list[HistoryMessage]) -> str: ...
 
     def classify_manuals(
@@ -263,6 +273,23 @@ class StubAnswerGenerator:
             "詳しくは以下をご覧ください。(回答文の生成はANSWER_PROVIDER=bedrockで有効になります)",
             [],
         )
+
+    def generate_stream(
+        self,
+        question: str,
+        contexts: list[Context],
+        image: tuple[bytes, str] | None = None,
+        history: list[HistoryMessage] | None = None,
+        tools: list[dict] | None = None,
+        is_admin: bool = False,
+    ):
+        # LLM無しでも動きを確かめられるよう、定型文を数文字ずつ流す
+        answer, actions = self.generate(
+            question, contexts, image, history, tools, is_admin
+        )
+        for i in range(0, len(answer), 8):
+            yield {"type": "delta", "text": answer[i : i + 8]}
+        yield {"type": "done", "answer": answer, "actions": actions}
 
     def rewrite_query(self, question: str, history: list[HistoryMessage]) -> str:
         # LLM無しの簡易版: 直近のユーザー発言をつなげるだけ
@@ -299,15 +326,30 @@ class BedrockAnswerGenerator:
         self.client = create_bedrock_client(region)
         self.model_id = model_id
 
-    def generate(
+    def _converse_args(
+        self, system_prompt: str, messages: list[dict], tools: list[dict] | None
+    ) -> dict:
+        """converse / converse_stream に渡す引数(両者で同じ条件にする)"""
+        return {
+            "modelId": self.model_id,
+            "system": [{"text": system_prompt}],
+            "messages": messages,
+            "inferenceConfig": {
+                "maxTokens": 1024,
+                "temperature": 0.2,  # 事実ベースの回答なので低め(創造性を抑える)
+            },
+            # ツール(管理操作)は管理者のリクエストのときだけ渡される
+            **({"toolConfig": {"tools": tools}} if tools else {}),
+        }
+
+    def _build_messages(
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None = None,
-        history: list[HistoryMessage] | None = None,
-        tools: list[dict] | None = None,
-        is_admin: bool = False,
-    ) -> tuple[str, list[dict]]:
+        image: tuple[bytes, str] | None,
+        history: list[HistoryMessage] | None,
+    ) -> list[dict]:
+        """抜粋・会話履歴・画像から、Claudeに渡すmessagesを組み立てる"""
         # 抜粋に番号を振る([参照]行で「どれを使ったか」を申告してもらうため)
         excerpts = "\n\n".join(
             f"【抜粋{i}】{c.title}\n{c.content}"
@@ -335,21 +377,88 @@ class BedrockAnswerGenerator:
             user_message += "\n(質問には上の画像が添付されています。画像の内容も踏まえて回答してください)"
         content.append({"text": user_message})
         messages.append({"role": "user", "content": content})
+        return messages
 
+    def generate_stream(
+        self,
+        question: str,
+        contexts: list[Context],
+        image: tuple[bytes, str] | None = None,
+        history: list[HistoryMessage] | None = None,
+        tools: list[dict] | None = None,
+        is_admin: bool = False,
+    ):
+        """回答を少しずつ返す。文字の断片を順に、最後に確定した全文とツール要求を返す。
+
+        yieldするもの:
+        - {"type": "delta", "text": "..."} … 追加された文字
+        - {"type": "tool"} … ツール(管理操作)の呼び出しが始まった合図。
+          以降の断片は出さない(実行前の宣言を回答として見せないため)
+        - {"type": "done", "answer": "全文", "actions": [...]} … 最後に1回
+        """
+        messages = self._build_messages(question, contexts, image, history)
         system_prompt = SYSTEM_PROMPT + (
             ADMIN_SYSTEM_ADDENDUM if is_admin else MEMBER_SYSTEM_ADDENDUM
         )
-        res = self.client.converse(
-            modelId=self.model_id,
-            system=[{"text": system_prompt}],
-            messages=messages,
-            inferenceConfig={
-                "maxTokens": 1024,
-                "temperature": 0.2,  # 事実ベースの回答なので低め(創造性を抑える)
-            },
-            # ツール(管理操作)は管理者のリクエストのときだけ渡される
-            **({"toolConfig": {"tools": tools}} if tools else {}),
+        res = self.client.converse_stream(
+            **self._converse_args(system_prompt, messages, tools)
         )
+
+        answer_parts: list[str] = []
+        actions: list[dict] = []
+        # ツール呼び出しの入力はJSON文字列が分割されて届くので、繋いでから解釈する
+        tool_name: str | None = None
+        tool_input = ""
+        has_tool = False
+
+        for event in res["stream"]:
+            if "contentBlockStart" in event:
+                start = event["contentBlockStart"].get("start", {})
+                if "toolUse" in start:
+                    has_tool = True
+                    tool_name = start["toolUse"].get("name")
+                    tool_input = ""
+                    yield {"type": "tool"}
+            elif "contentBlockDelta" in event:
+                delta = event["contentBlockDelta"].get("delta", {})
+                if "text" in delta:
+                    answer_parts.append(delta["text"])
+                    # ツールが絡む応答は実行結果で本文ごと差し替わるので、
+                    # 途中経過を見せない(「作成します」だけが残るのを防ぐ)
+                    if not has_tool:
+                        yield {"type": "delta", "text": delta["text"]}
+                elif "toolUse" in delta:
+                    tool_input += delta["toolUse"].get("input", "")
+            elif "contentBlockStop" in event:
+                if tool_name is not None:
+                    try:
+                        parsed = json.loads(tool_input) if tool_input.strip() else {}
+                    except json.JSONDecodeError:
+                        parsed = {}
+                    actions.append({"name": tool_name, "input": parsed})
+                    tool_name = None
+                    tool_input = ""
+
+        yield {
+            "type": "done",
+            "answer": "".join(answer_parts).strip(),
+            "actions": actions,
+        }
+
+    def generate(
+        self,
+        question: str,
+        contexts: list[Context],
+        image: tuple[bytes, str] | None = None,
+        history: list[HistoryMessage] | None = None,
+        tools: list[dict] | None = None,
+        is_admin: bool = False,
+    ) -> tuple[str, list[dict]]:
+        messages = self._build_messages(question, contexts, image, history)
+        system_prompt = SYSTEM_PROMPT + (
+            ADMIN_SYSTEM_ADDENDUM if is_admin else MEMBER_SYSTEM_ADDENDUM
+        )
+        res = self.client.converse(**self._converse_args(system_prompt, messages, tools))
 
         # 応答は「本文テキスト」と「ツール呼び出し」が混在しうるので分けて返す
         answer_parts: list[str] = []

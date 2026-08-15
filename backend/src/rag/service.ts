@@ -186,6 +186,98 @@ export class RagService {
   }
 
   /**
+   * search と同じ回答を、文字が生成されるそばから受け取る。
+   *
+   * onDelta は追加された文字ごとに呼ばれる。onReset は「ここまでの途中経過は
+   * 捨ててよい」合図(管理操作や生成失敗で本文が差し替わるとき)。
+   * 戻り値は search と同じで、確定した回答・引用・選択肢
+   */
+  async searchStream(
+    question: string,
+    image: { base64: string; format: string } | undefined,
+    history: { role: 'user' | 'assistant'; content: string }[] | undefined,
+    signal: AbortSignal | undefined,
+    isAdmin: boolean,
+    onDelta: (text: string) => void,
+    onReset: () => void,
+  ): Promise<RagAnswer & { actions: RagAction[] }> {
+    const res = await this.request(
+      '/search-stream',
+      TIMEOUT_MS.search,
+      {
+        question,
+        image_base64: image?.base64,
+        image_format: image?.format,
+        history: history ?? [],
+        is_admin: isAdmin,
+      },
+      signal,
+    );
+    if (!res.ok || !res.body) {
+      throw new ServiceUnavailableException(
+        `RAGサービスがエラーを返しました (HTTP ${res.status})`,
+      );
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    type DoneEvent = {
+      answer: string;
+      citations: {
+        manual_id: string;
+        title: string;
+        snippet: string;
+        page: number | null;
+      }[];
+      options: string[];
+      actions?: RagAction[];
+      answered?: boolean | null;
+    };
+    let done: DoneEvent | null = null;
+    let failure: string | null = null;
+
+    for (;;) {
+      const { value, done: finished } = await reader.read();
+      if (finished) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSEは空行1つで1件の区切り
+      let sep = buffer.indexOf('\n\n');
+      while (sep !== -1) {
+        const block = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        const event = /^event: (\w+)$/m.exec(block)?.[1];
+        const raw = /^data: (.*)$/m.exec(block)?.[1];
+        if (event && raw) {
+          const data = JSON.parse(raw) as Record<string, unknown>;
+          if (event === 'delta') onDelta(String(data.text ?? ''));
+          else if (event === 'reset') onReset();
+          else if (event === 'error') failure = String(data.message ?? '不明なエラー');
+          else if (event === 'done') done = data as unknown as DoneEvent;
+        }
+        sep = buffer.indexOf('\n\n');
+      }
+    }
+
+    if (failure) throw new ServiceUnavailableException(failure);
+    if (!done) {
+      throw new ServiceUnavailableException('RAGサービスの応答が途中で切れました');
+    }
+    return {
+      answer: done.answer,
+      citations: done.citations.map((c) => ({
+        manualId: c.manual_id,
+        title: c.title,
+        snippet: c.snippet,
+        pageNumber: c.page ?? null,
+      })),
+      options: done.options ?? [],
+      actions: done.actions ?? [],
+      answered: done.answered ?? null,
+    };
+  }
+
+  /**
    * 質問文をテーマごとにまとめる(利用状況の集計用)。
    * 語尾違いの同じ質問がバラバラに数えられるのを防ぐ
    */
