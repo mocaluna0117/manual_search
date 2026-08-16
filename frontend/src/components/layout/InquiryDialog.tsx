@@ -55,10 +55,18 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
     setPreviewIndex(null)
   }
 
+  /**
+   * 閉じる。書きかけの内容と添付はそのまま残す。
+   *
+   * 問い合わせは「画面のこの状態を見せたい」と思って書き始めることが多く、
+   * 途中で元の画面を確認しに戻ることがある。そこで消えてしまうと、
+   * 書き直しと撮り直しからやり直しになる。
+   * 送信できたときだけ空にする(handleSend側)。
+   */
   const close = () => {
-    setMessage('')
-    clearImages()
+    // 送信済みの完了表示のまま閉じたときは、次に開いたら書ける状態に戻す
     setSent(false)
+    setPreviewIndex(null)
     onClose()
   }
 
@@ -282,8 +290,15 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
             />
 
             <Dialog.Footer>
+              {/* 閉じても消えないので「キャンセル」とは書かない。
+                  書きかけがあるときだけ、残ることを一言添える */}
+              {!sent && (message.trim() || images.length > 0) && (
+                <Text fontSize="xs" color="fg.subtle" me="auto">
+                  書きかけの内容は残ります
+                </Text>
+              )}
               <Button variant="outline" onClick={close}>
-                {sent ? '閉じる' : 'キャンセル'}
+                閉じる
               </Button>
               {!sent && (
                 <Button
