@@ -72,10 +72,19 @@ class HistoryMessage(BaseModel):
     content: str
 
 
+class QuestionImage(BaseModel):
+    """質問に添付された画像1枚"""
+
+    base64: str
+    format: str  # png / jpeg / webp / gif
+
+
 class SearchRequest(BaseModel):
     question: str
-    image_base64: str | None = None  # 質問に添付された画像(任意)
-    image_format: str | None = None  # png / jpeg / webp / gif
+    images: list[QuestionImage] = []  # 質問に添付された画像(任意・複数可)
+    # 1枚だけ渡していた頃の呼び出し方。入れ替えの途中でも受け取れるように残す
+    image_base64: str | None = None
+    image_format: str | None = None
     history: list[HistoryMessage] = []  # 同じ会話のこれまでのやりとり(絞り込み対話用)
     is_admin: bool = False  # trueなら管理ツール(フォルダ作成・再分類)をClaudeに渡す
 
@@ -533,11 +542,40 @@ def organize(req: OrganizeRequest) -> OrganizeResponse:
     return OrganizeResponse(assignments=assignments)
 
 
+# 1回の質問に添えられる画像の枚数。多いほど読み取りにも回答にも時間がかかるので、
+# 「操作の前後」「エラー画面と設定画面」を並べられる程度に抑える
+MAX_QUESTION_IMAGES = 4
+
+
+def decode_images(req: SearchRequest) -> list[tuple[bytes, str]]:
+    """リクエストの添付画像を (バイト列, 形式) の一覧にする"""
+    items = list(req.images)
+    # 1枚だけ渡していた頃の呼び出し方にも合わせる
+    if not items and req.image_base64:
+        items = [QuestionImage(base64=req.image_base64, format=req.image_format or "jpeg")]
+    if len(items) > MAX_QUESTION_IMAGES:
+        raise HTTPException(
+            status_code=400, detail=f"画像は{MAX_QUESTION_IMAGES}枚までです"
+        )
+
+    decoded: list[tuple[bytes, str]] = []
+    for item in items:
+        image_format = (item.format or "jpeg").lower()
+        if image_format not in ALLOWED_IMAGE_FORMATS:
+            raise HTTPException(status_code=400, detail=f"未対応の画像形式です: {image_format}")
+        try:
+            image_bytes = base64.b64decode(item.base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="画像データを読み取れません")
+        decoded.append((image_bytes, image_format))
+    return decoded
+
+
 def retrieve(req: SearchRequest):
     """質問から抜粋を集めるところまで(回答の生成は含まない)。
 
     /search と /search-stream で同じ検索をするために切り出してある。
-    戻り値は (rows, image)。検索対象が1件も無い場合は rows が空になる。
+    戻り値は (rows, images)。検索対象が1件も無い場合は rows が空になる。
 
     <=> はpgvectorのコサイン距離演算子。小さいほど「近い(似ている)」。
     """
@@ -551,17 +589,9 @@ def retrieve(req: SearchRequest):
 
     # 0.5) 添付画像があればデコードし、検索に使える説明文をClaudeに作らせる。
     #    「この画面どうすれば？」のような質問文だけでは検索できないため
-    image: tuple[bytes, str] | None = None
-    if req.image_base64:
-        image_format = (req.image_format or "jpeg").lower()
-        if image_format not in ALLOWED_IMAGE_FORMATS:
-            raise HTTPException(status_code=400, detail=f"未対応の画像形式です: {image_format}")
-        try:
-            image_bytes = base64.b64decode(req.image_base64)
-        except Exception:
-            raise HTTPException(status_code=400, detail="画像データを読み取れません")
-        image = (image_bytes, image_format)
-        description = transcriber.describe(image_bytes, image_format)
+    images = decode_images(req)
+    if images:
+        description = transcriber.describe(images)
         if description:
             retrieval_query = f"{retrieval_query}\n{description}"
 
@@ -578,7 +608,7 @@ def retrieve(req: SearchRequest):
         with conn.cursor() as cur:
             rows = hybrid_search(cur, query_vec, terms)
 
-    return rows, image
+    return rows, images
 
 
 # 検索対象が1件も無いときの文面(管理者以外)。
@@ -591,7 +621,7 @@ NO_MANUALS_ANSWER = (
 @app.post("/search", response_model=SearchResponse, dependencies=[Depends(require_api_token)])
 def search(req: SearchRequest) -> SearchResponse:
     """質問に近い抜粋を集め、それを根拠にClaudeが回答を生成する(一括で返す)"""
-    rows, image = retrieve(req)
+    rows, images = retrieve(req)
 
     # 検索ヒットゼロでも、管理者のときは生成まで進める。
     # 管理操作(フォルダ作成など)はマニュアルが1件も無い状態でも成立する必要がある
@@ -620,7 +650,7 @@ def search(req: SearchRequest) -> SearchResponse:
         raw_answer, raw_actions = answer_generator.generate(
             req.question,
             contexts,
-            image=image,
+            images=images,
             history=req.history,
             # 管理者にだけフォルダ作成・再分類のツールを渡す(実行はNestJS側)。
             # 一般ユーザーには「管理者専用の操作」と案内させるための補足を付ける
@@ -787,7 +817,7 @@ def search_stream(req: SearchRequest):
         # 検索に時間がかかっても接続が保たれるようにする
         yield sse("start", {})
         try:
-            rows, image = retrieve(req)
+            rows, images = retrieve(req)
         except HTTPException as e:
             yield sse("error", {"message": str(e.detail)})
             return
@@ -818,7 +848,7 @@ def search_stream(req: SearchRequest):
             for chunk in answer_generator.generate_stream(
                 req.question,
                 contexts,
-                image=image,
+                images=images,
                 history=req.history,
                 tools=ADMIN_TOOLS if req.is_admin else None,
                 is_admin=req.is_admin,

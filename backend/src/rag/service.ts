@@ -166,7 +166,7 @@ export class RagService {
 
   async search(
     question: string,
-    image?: { base64: string; format: string },
+    images: { base64: string; format: string }[] = [],
     history?: { role: 'user' | 'assistant'; content: string }[],
     signal?: AbortSignal,
     isAdmin = false, // trueなら管理ツール(フォルダ作成・再分類)が有効になる
@@ -176,8 +176,7 @@ export class RagService {
       TIMEOUT_MS.search,
       {
         question,
-        image_base64: image?.base64,
-        image_format: image?.format,
+        images,
         history: history ?? [],
         is_admin: isAdmin,
       },
@@ -213,7 +212,7 @@ export class RagService {
    */
   async searchStream(
     question: string,
-    image: { base64: string; format: string } | undefined,
+    images: { base64: string; format: string }[],
     history: { role: 'user' | 'assistant'; content: string }[] | undefined,
     signal: AbortSignal | undefined,
     isAdmin: boolean,
@@ -225,8 +224,7 @@ export class RagService {
       TIMEOUT_MS.search,
       {
         question,
-        image_base64: image?.base64,
-        image_format: image?.format,
+        images,
         history: history ?? [],
         is_admin: isAdmin,
       },

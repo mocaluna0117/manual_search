@@ -20,9 +20,10 @@ TRANSCRIBE_PROMPT = (
 )
 
 DESCRIBE_PROMPT = (
-    "この画像は社内マニュアル検索への質問に添付されたものです。"
+    "これらの画像は社内マニュアル検索への質問に添付されたものです。"
     "画像に写っている内容(画面名、エラーメッセージ、システム名、操作対象など)を、"
     "マニュアル検索のキーワードとして使える形で簡潔に抜き出してください。"
+    "複数枚ある場合は、全体をまとめて1つの説明文にしてください。"
     "説明文だけを出力してください。"
 )
 
@@ -50,7 +51,7 @@ class NullTranscriber:
     def transcribe(self, image_bytes: bytes) -> str:
         return ""
 
-    def describe(self, image_bytes: bytes, image_format: str = "jpeg") -> str:
+    def describe(self, images: list[tuple[bytes, str]]) -> str:
         return ""
 
 
@@ -67,31 +68,29 @@ class BedrockTranscriber:
         self.model_id = model_id
 
     def transcribe(self, image_bytes: bytes) -> str:
-        return self._ask_about_image(image_bytes, "jpeg", TRANSCRIBE_PROMPT, 2048)
+        return self._ask_about_images([(image_bytes, "jpeg")], TRANSCRIBE_PROMPT, 2048)
 
-    def describe(self, image_bytes: bytes, image_format: str = "jpeg") -> str:
-        """チャット添付画像を、ベクトル検索に使えるキーワード文に変換する"""
-        return self._ask_about_image(image_bytes, image_format, DESCRIBE_PROMPT, 512)
+    def describe(self, images: list[tuple[bytes, str]]) -> str:
+        """チャット添付画像を、ベクトル検索に使えるキーワード文に変換する。
 
-    def _ask_about_image(
-        self, image_bytes: bytes, image_format: str, prompt: str, max_tokens: int
+        複数枚あっても1回の問い合わせでまとめて見せる。1枚ずつ聞くより速く、
+        「1枚目の画面から2枚目へ進んだ」のような関係も拾える
+        """
+        if not images:
+            return ""
+        return self._ask_about_images(images, DESCRIBE_PROMPT, 512)
+
+    def _ask_about_images(
+        self, images: list[tuple[bytes, str]], prompt: str, max_tokens: int
     ) -> str:
+        content: list[dict] = [
+            {"image": {"format": image_format, "source": {"bytes": image_bytes}}}
+            for image_bytes, image_format in images
+        ]
+        content.append({"text": prompt})
         res = self.client.converse(
             modelId=self.model_id,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "image": {
-                                "format": image_format,
-                                "source": {"bytes": image_bytes},
-                            }
-                        },
-                        {"text": prompt},
-                    ],
-                }
-            ],
+            messages=[{"role": "user", "content": content}],
             inferenceConfig={"maxTokens": max_tokens, "temperature": 0},
         )
         return res["output"]["message"]["content"][0]["text"]

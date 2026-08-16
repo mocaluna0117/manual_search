@@ -18,6 +18,19 @@ import { AskResult, ChatMessage, MessageRole } from './model';
 const CONFIRM_RECLASSIFY = '✅ はい、再分類を実行する';
 const CANCEL_RECLASSIFY = 'キャンセル';
 
+/** 1つの質問に添えられる画像の枚数(RAG側の上限と合わせる) */
+export const MAX_CHAT_IMAGES = 4;
+
+/**
+ * 履歴に残す質問文。画像そのものは保存しないので、
+ * 「何か画像を見せて聞いた」ことだけが後から分かるようにしておく
+ */
+function withImageNote(question: string, imageCount: number): string {
+  if (imageCount === 0) return question;
+  const count = imageCount === 1 ? '' : `${imageCount}枚`;
+  return `${question}\n(📷 画像を${count}添付)`;
+}
+
 @Injectable()
 export class ChatService {
   constructor(
@@ -76,11 +89,17 @@ export class ChatService {
     question: string,
     userId: string,
     conversationId?: string | null,
-    image?: { base64: string; format: string },
+    images: { base64: string; format: string }[] = [],
     signal?: AbortSignal,
     isAdmin = false,
     stream?: { onDelta: (text: string) => void; onReset: () => void },
   ): Promise<AskResult> {
+    if (images.length > MAX_CHAT_IMAGES) {
+      throw new BadRequestException(
+        `画像は${MAX_CHAT_IMAGES}枚までにしてください`,
+      );
+    }
+
     // 1) 会話を用意(初回の質問なら新規作成し、タイトルは質問から自動生成)
     //    既存会話の場合は所有者チェックも兼ねる
     const conversation = conversationId
@@ -214,7 +233,7 @@ export class ChatService {
       data: {
         conversationId: conversation.id,
         role: MessageRole.USER,
-        content: image ? `${question}\n(📷 画像を添付)` : question,
+        content: withImageNote(question, images.length),
       },
     });
 
@@ -230,14 +249,14 @@ export class ChatService {
       const result = stream
         ? await this.rag.searchStream(
             question,
-            image,
+            images,
             history,
             signal,
             isAdmin,
             stream.onDelta,
             stream.onReset,
           )
-        : await this.rag.search(question, image, history, signal, isAdmin);
+        : await this.rag.search(question, images, history, signal, isAdmin);
       answer = result.answer;
       citations = result.citations;
       options = result.options;

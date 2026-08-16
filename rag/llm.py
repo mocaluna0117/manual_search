@@ -226,7 +226,7 @@ class AnswerGenerator(Protocol):
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None = None,
+        images: list[tuple[bytes, str]] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
         is_admin: bool = False,
@@ -236,7 +236,7 @@ class AnswerGenerator(Protocol):
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None = None,
+        images: list[tuple[bytes, str]] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
         is_admin: bool = False,
@@ -263,7 +263,7 @@ class StubAnswerGenerator:
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None = None,
+        images: list[tuple[bytes, str]] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
         is_admin: bool = False,
@@ -278,14 +278,14 @@ class StubAnswerGenerator:
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None = None,
+        images: list[tuple[bytes, str]] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
         is_admin: bool = False,
     ):
         # LLM無しでも動きを確かめられるよう、定型文を数文字ずつ流す
         answer, actions = self.generate(
-            question, contexts, image, history, tools, is_admin
+            question, contexts, images, history, tools, is_admin
         )
         for i in range(0, len(answer), 8):
             yield {"type": "delta", "text": answer[i : i + 8]}
@@ -346,7 +346,7 @@ class BedrockAnswerGenerator:
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None,
+        images: list[tuple[bytes, str]] | None,
         history: list[HistoryMessage] | None,
     ) -> list[dict]:
         """抜粋・会話履歴・画像から、Claudeに渡すmessagesを組み立てる"""
@@ -369,12 +369,16 @@ class BedrockAnswerGenerator:
 
         # 質問に画像が添付されていたら、Claudeに画像も一緒に見せる
         content: list[dict] = []
-        if image is not None:
-            image_bytes, image_format = image
+        for image_bytes, image_format in images or []:
             content.append(
                 {"image": {"format": image_format, "source": {"bytes": image_bytes}}}
             )
-            user_message += "\n(質問には上の画像が添付されています。画像の内容も踏まえて回答してください)"
+        if content:
+            count = "" if len(content) == 1 else f"{len(content)}枚"
+            user_message += (
+                f"\n(質問には上の画像{count}が添付されています。"
+                "画像の内容も踏まえて回答してください)"
+            )
         content.append({"text": user_message})
         messages.append({"role": "user", "content": content})
         return messages
@@ -383,7 +387,7 @@ class BedrockAnswerGenerator:
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None = None,
+        images: list[tuple[bytes, str]] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
         is_admin: bool = False,
@@ -396,7 +400,7 @@ class BedrockAnswerGenerator:
           以降の断片は出さない(実行前の宣言を回答として見せないため)
         - {"type": "done", "answer": "全文", "actions": [...]} … 最後に1回
         """
-        messages = self._build_messages(question, contexts, image, history)
+        messages = self._build_messages(question, contexts, images, history)
         system_prompt = SYSTEM_PROMPT + (
             ADMIN_SYSTEM_ADDENDUM if is_admin else MEMBER_SYSTEM_ADDENDUM
         )
@@ -449,12 +453,12 @@ class BedrockAnswerGenerator:
         self,
         question: str,
         contexts: list[Context],
-        image: tuple[bytes, str] | None = None,
+        images: list[tuple[bytes, str]] | None = None,
         history: list[HistoryMessage] | None = None,
         tools: list[dict] | None = None,
         is_admin: bool = False,
     ) -> tuple[str, list[dict]]:
-        messages = self._build_messages(question, contexts, image, history)
+        messages = self._build_messages(question, contexts, images, history)
         system_prompt = SYSTEM_PROMPT + (
             ADMIN_SYSTEM_ADDENDUM if is_admin else MEMBER_SYSTEM_ADDENDUM
         )

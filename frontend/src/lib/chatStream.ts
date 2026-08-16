@@ -14,8 +14,8 @@ export interface AskStreamResult {
 interface AskStreamParams {
   question: string
   conversationId?: string | null
-  imageBase64?: string
-  imageFormat?: string
+  /** 質問に添えた画像(任意・複数可) */
+  images?: { base64: string; format: string }[]
   signal: AbortSignal
   /** 文字が届くたびに呼ばれる(画面に足していく) */
   onDelta: (text: string) => void
@@ -33,8 +33,7 @@ interface AskStreamParams {
 export async function askStream({
   question,
   conversationId,
-  imageBase64,
-  imageFormat,
+  images,
   signal,
   onDelta,
   onReset,
@@ -49,8 +48,7 @@ export async function askStream({
     body: JSON.stringify({
       question,
       conversationId: conversationId ?? null,
-      imageBase64,
-      imageFormat,
+      images: images ?? [],
     }),
     signal,
   })

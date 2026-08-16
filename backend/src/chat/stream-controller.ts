@@ -10,8 +10,7 @@ import { ChatService } from './service';
 interface StreamBody {
   question: string;
   conversationId?: string | null;
-  imageBase64?: string;
-  imageFormat?: string;
+  images?: { base64: string; format: string }[];
 }
 
 /**
@@ -68,16 +67,12 @@ export class ChatStreamController {
 
     try {
       const user = await this.userService.ensure(authUser);
-      const image = body.imageBase64
-        ? { base64: body.imageBase64, format: body.imageFormat ?? 'jpeg' }
-        : undefined;
-
       send('start', {});
       const result = await this.chatService.ask(
         body.question,
         user.id,
         body.conversationId ?? undefined,
-        image,
+        body.images ?? [],
         controller.signal,
         user.role === UserRole.ADMIN,
         {

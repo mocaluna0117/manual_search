@@ -76,25 +76,27 @@ interface AskData {
   }
 }
 
+export interface ChatImageInput {
+  base64: string
+  format: string
+}
+
 interface AskVars {
   question: string
   conversationId?: string
-  imageBase64?: string
-  imageFormat?: string
+  images?: ChatImageInput[]
 }
 
 export const ASK_MUTATION: TypedDocumentNode<AskData, AskVars> = gql`
   mutation AskQuestion(
     $question: String!
     $conversationId: ID
-    $imageBase64: String
-    $imageFormat: String
+    $images: [ChatImageInput!]
   ) {
     askQuestion(
       question: $question
       conversationId: $conversationId
-      imageBase64: $imageBase64
-      imageFormat: $imageFormat
+      images: $images
     ) {
       conversationId
       message {

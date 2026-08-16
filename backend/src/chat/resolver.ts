@@ -13,6 +13,7 @@ import type { AuthUser } from '../auth/current-user';
 import { CurrentUser } from '../auth/current-user';
 import { UserRole } from '../auth/roles';
 import { UserService } from '../user/service';
+import { ChatImageInput } from './input';
 import { AskResult, ChatMessage, Conversation } from './model';
 import { ChatService } from './service';
 
@@ -54,15 +55,11 @@ export class ChatResolver {
     @Context() ctx: { res?: Response },
     @Args('conversationId', { type: () => ID, nullable: true })
     conversationId?: string,
-    @Args('imageBase64', { type: () => String, nullable: true })
-    imageBase64?: string,
-    @Args('imageFormat', { type: () => String, nullable: true })
-    imageFormat?: string,
+    // 画面のスクリーンショットを添えて質問できる(任意・複数可)
+    @Args('images', { type: () => [ChatImageInput], nullable: true })
+    images?: ChatImageInput[],
   ) {
     const user = await this.userService.ensure(authUser);
-    const image = imageBase64
-      ? { base64: imageBase64, format: imageFormat ?? 'jpeg' }
-      : undefined;
     // フロントの「停止」ボタン(=接続の切断)をRAG呼び出しの中断につなげる。
     // 正常終了でも'close'は発火するため、レスポンス送信済みかどうかで見分ける
     const controller = new AbortController();
@@ -73,7 +70,7 @@ export class ChatResolver {
       question,
       user.id,
       conversationId,
-      image,
+      images ?? [],
       controller.signal,
       user.role === UserRole.ADMIN, // 管理者ならチャットの管理操作(フォルダ作成等)が有効
     );

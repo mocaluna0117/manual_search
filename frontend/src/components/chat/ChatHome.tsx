@@ -55,7 +55,7 @@ interface ChatHomeProps {
 }
 
 // 表示用: サーバーのメッセージ + 送信時だけ持つ画像プレビューURL
-type LocalMessage = ChatMessage & { imageUrl?: string }
+type LocalMessage = ChatMessage & { imageUrls?: string[] }
 
 
 
@@ -114,6 +114,9 @@ function groupCitations(
   return groups
 }
 
+/** 1つの質問に添えられる画像の枚数(サーバー側の上限と合わせる) */
+const MAX_IMAGES = 4
+
 /** 発言時刻の表示。今日なら「14:32」、それ以外は「8/12 14:32」 */
 function formatChatTime(iso: string): string {
   const d = new Date(iso)
@@ -161,7 +164,10 @@ export function ChatHome({
   const waitingForBackgroundJob =
     lastMessage?.role === 'ASSISTANT' &&
     lastMessage.content.includes('再分類を開始しました')
-  const [attachedImage, setAttachedImage] = useState<File | null>(null)
+  // 添付中の画像(任意・複数可)。プレビュー用のURLも一緒に持つ
+  const [attachedImages, setAttachedImages] = useState<
+    { file: File; url: string }[]
+  >([])
   // 選択肢の下に常設する「その他」インライン入力欄の内容
   const [otherText, setOtherText] = useState('')
   // コピー直後のフィードバック表示(✓)に使う。対象メッセージのIDを持つ
@@ -264,17 +270,49 @@ export function ChatHome({
     }
   }, [messages, loading, streamingStarted])
 
-  const handleAttach = (file: File | null) => {
-    if (!file) return
-    if (!(file.type in ALLOWED_IMAGE_TYPES)) {
-      toastError('この画像は使えません', 'PNG / JPEG / WebP / GIF を選んでください')
+  /** 選ばれた画像を添付に足す(使えないものは理由を伝えて飛ばす) */
+  const handleAttach = (files: File[]) => {
+    if (files.length === 0) return
+    const room = MAX_IMAGES - attachedImages.length
+    if (room <= 0) {
+      toastError(`画像は${MAX_IMAGES}枚までです`)
       return
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      toastError('画像が大きすぎます', '4MB以下にしてください')
-      return
+    const rejected: string[] = []
+    const accepted: { file: File; url: string }[] = []
+    for (const file of files.slice(0, room)) {
+      if (!(file.type in ALLOWED_IMAGE_TYPES)) {
+        rejected.push(`${file.name || '画像'}: PNG / JPEG / WebP / GIF のみ`)
+        continue
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        rejected.push(`${file.name || '画像'}: 4MB以下にしてください`)
+        continue
+      }
+      accepted.push({ file, url: URL.createObjectURL(file) })
     }
-    setAttachedImage(file)
+    if (rejected.length > 0) {
+      toastError('添付できない画像がありました', rejected.join('\n'))
+    }
+    if (files.length > room) {
+      toastError(
+        `画像は${MAX_IMAGES}枚までです`,
+        `${files.length - room}枚は添付していません`,
+      )
+    }
+    if (accepted.length > 0) {
+      setAttachedImages((prev) => [...prev, ...accepted])
+    }
+  }
+
+  /** 添付を1枚だけ外す */
+  const removeAttached = (index: number) => {
+    setAttachedImages((prev) => {
+      // プレビュー用に作ったURLは、外すときに開放する
+      const target = prev[index]
+      if (target) URL.revokeObjectURL(target.url)
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   /**
@@ -291,13 +329,13 @@ export function ChatHome({
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (document.querySelector('[role="dialog"][data-state="open"]')) return
-      const file = Array.from(e.clipboardData?.items ?? [])
+      const files = Array.from(e.clipboardData?.items ?? [])
         .filter((i) => i.type.startsWith('image/'))
         .map((i) => i.getAsFile())
-        .find((f): f is File => f !== null)
-      if (!file) return
+        .filter((f): f is File => f !== null)
+      if (files.length === 0) return
       e.preventDefault() // 画像のファイル名などが本文に入らないように
-      handleAttach(file)
+      handleAttach(files)
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
@@ -308,11 +346,17 @@ export function ChatHome({
     // 画像だけでも送れるようにする(質問文が無いときは既定の問いかけを補う。
     // 履歴が空欄にならず、AIにも「画像について聞かれている」と伝わる)
     const question =
-      rawQuestion || (attachedImage ? 'この画像について教えてください' : '')
+      rawQuestion ||
+      (attachedImages.length > 0
+        ? attachedImages.length === 1
+          ? 'この画像について教えてください'
+          : 'これらの画像について教えてください'
+        : '')
     if (!question || loading) return
-    const image = attachedImage
+    const images = attachedImages
     setInput('')
-    setAttachedImage(null)
+    // URLは吹き出しの表示に使い続けるので、ここでは開放しない
+    setAttachedImages([])
     setOtherText('')
 
     // まず自分の発言を即表示(楽観的更新)。IDは仮でよい
@@ -325,7 +369,7 @@ export function ChatHome({
         citations: [],
         options: [],
         createdAt: new Date().toISOString(),
-        imageUrl: image ? URL.createObjectURL(image) : undefined,
+        imageUrls: images.map((i) => i.url),
       },
     ])
 
@@ -336,13 +380,15 @@ export function ChatHome({
     const streamId = `stream-${Date.now()}`
     setStreamingId(streamId)
     try {
-      const imageBase64 = image ? await fileToBase64(image) : undefined
-      const imageFormat = image ? ALLOWED_IMAGE_TYPES[image.type] : undefined
       const result = await askStream({
         question,
         conversationId,
-        imageBase64,
-        imageFormat,
+        images: await Promise.all(
+          images.map(async (i) => ({
+            base64: await fileToBase64(i.file),
+            format: ALLOWED_IMAGE_TYPES[i.file.type],
+          })),
+        ),
         // 「停止」ボタンで接続ごと中断できるようにする
         signal: controller.signal,
         onDelta: (text) =>
@@ -461,38 +507,45 @@ export function ChatHome({
   /** 送信済みの質問を入力欄へ戻す(編集して再送信するため) */
   const editMessage = (message: LocalMessage) => {
     // DB保存時に付く画像添付の目印は編集対象から外す
-    setInput(message.content.replace(/\n\(📷 画像を添付\)$/, ''))
+    setInput(message.content.replace(/\n\(📷 画像を\d*枚?添付\)$/, ''))
     textareaRef.current?.focus()
   }
 
   const searchInput = (
     <VStack w="100%" maxW="800px" gap={2} align="stretch">
-      {/* 添付中の画像プレビュー */}
-      {attachedImage && (
-        <HStack
-          alignSelf="flex-start"
-          gap={2}
-          p={1}
-          borderWidth="1px"
-          borderRadius="md"
-        >
-          <Image
-            src={URL.createObjectURL(attachedImage)}
-            alt="添付画像"
-            h="48px"
-            borderRadius="sm"
-          />
-          <Text fontSize="xs" color="fg.muted">
-            {attachedImage.name}
-          </Text>
-          <IconButton
-            aria-label="添付を取り消す"
-            size="xs"
-            variant="ghost"
-            onClick={() => setAttachedImage(null)}
-          >
-            <LuX />
-          </IconButton>
+      {/* 添付中の画像。ファイル名は出さず、絵そのものを小さく並べる。
+          「何を添えたか」は絵を見れば分かるし、名前まで出すと1枚ごとに
+          横幅を取って複数枚並べられない */}
+      {attachedImages.length > 0 && (
+        <HStack alignSelf="flex-start" gap={2} flexWrap="wrap" px={1} pt={1}>
+          {attachedImages.map((item, index) => (
+            <Box key={item.url} position="relative">
+              <Image
+                src={item.url}
+                alt={`添付する画像${index + 1}`}
+                boxSize="56px"
+                objectFit="cover"
+                borderRadius="lg"
+                borderWidth="1px"
+              />
+              <IconButton
+                aria-label={`${index + 1}枚目の添付を取り消す`}
+                size="2xs"
+                borderRadius="full"
+                position="absolute"
+                top="-6px"
+                right="-6px"
+                minW="20px"
+                h="20px"
+                bg="bg.inverted"
+                color="fg.inverted"
+                _hover={{ bg: 'bg.inverted', opacity: 0.85 }}
+                onClick={() => removeAttached(index)}
+              >
+                <LuX />
+              </IconButton>
+            </Box>
+          ))}
         </HStack>
       )}
 
@@ -503,10 +556,11 @@ export function ChatHome({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept="image/png,image/jpeg,image/webp,image/gif"
           style={{ display: 'none' }}
           onChange={(e) => {
-            handleAttach(e.target.files?.[0] ?? null)
+            handleAttach(Array.from(e.target.files ?? []))
             e.target.value = '' // 同じファイルを選び直せるように
           }}
         />
@@ -525,9 +579,16 @@ export function ChatHome({
             </IconButton>
           </Tooltip>
         </PromptTemplateMenu>
-        <Tooltip label="画像を添付（貼り付けでも添えられます）">
+        <Tooltip
+          label={
+            attachedImages.length >= MAX_IMAGES
+              ? `画像は${MAX_IMAGES}枚までです`
+              : '画像を添付（貼り付けでも添えられます）'
+          }
+        >
           <IconButton
             aria-label="画像を添付"
+            disabled={attachedImages.length >= MAX_IMAGES}
             size={{ base: 'md', md: 'lg' }}
             variant="outline"
             borderRadius="full"
@@ -588,7 +649,7 @@ export function ChatHome({
             colorPalette="blue"
             onClick={handleSubmit}
             // 文章が無くても画像が添付されていれば送れる
-            disabled={!input.trim() && !attachedImage}
+            disabled={!input.trim() && attachedImages.length === 0}
             alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
             aria-label="検索"
             borderRadius={{ base: 'full', md: 'l2' }}
@@ -668,14 +729,19 @@ export function ChatHome({
               overflowWrap="anywhere"
             >
               {/* 送信時に添付した画像(このセッション中のみ表示) */}
-              {message.imageUrl && (
-                <Image
-                  src={message.imageUrl}
-                  alt="添付画像"
-                  maxH="160px"
-                  borderRadius="md"
-                  mb={2}
-                />
+              {message.imageUrls && message.imageUrls.length > 0 && (
+                <HStack gap={1} flexWrap="wrap" mb={2}>
+                  {message.imageUrls.map((url, i) => (
+                    <Image
+                      key={url}
+                      src={url}
+                      alt={`添付画像${i + 1}`}
+                      maxH="160px"
+                      maxW="100%"
+                      borderRadius="md"
+                    />
+                  ))}
+                </HStack>
               )}
               {/* AIの回答はMarkdownを整形表示、ユーザーの発言はそのまま */}
               {message.role === 'ASSISTANT' ? (
