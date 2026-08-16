@@ -304,8 +304,11 @@ export function SidebarContent({
     // 登録直後などキャッシュに無いことがあるので、見つからなければ取り直す
     const guide = (await find('cache-first')) ?? (await find('network-only'))
     if (!guide) {
-      alert(
-        '使い方ガイドが見つかりませんでした。管理者に連絡してください(docs/usage-guide/の手順で再登録できます)',
+      // ガイドは普通のマニュアルとして登録されているので、フォルダごと
+      // 捨てられると一緒にゴミ箱へ入る(実際に起きた)。まずそこを疑う
+      toastError(
+        'PDF版を開けませんでした',
+        'ガイドがゴミ箱に入っている可能性があります。ゴミ箱を確認するか、管理者に連絡してください。',
       )
       return
     }
