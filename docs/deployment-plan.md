@@ -94,6 +94,11 @@
   - 回答のストリーミング(converse_stream)には `bedrock:InvokeModelWithResponseStream` が別途必要。
     `InvokeModel` があっても許可されず、AccessDeniedExceptionになる（2026-08-16に踏んだ）。
     埋め込み(Titan)はストリーミングしないので対象外。定義は infra/iam/rag-task.json
+  - 問い合わせメールに添付を付けると、SESの呼び出しがSimple形式からRaw形式に変わり、
+    IAM上は `ses:SendRawEmail` という別のアクションになる。`ses:SendEmail` だけだと
+    「is not authorized to perform ses:SendRawEmail」で送信が失敗する（2026-08-16に踏んだ）。
+    添付の有無で必要な権限が変わるため両方を許可する。定義は infra/iam/backend-task-ses.json
+    - 失敗しても問い合わせ自体はDBに残る作りなので、権限を直せば内容は追える
 - 秘密情報は Secrets Manager（DBパスワード、必要ならCognito設定）
 - ⚠️ 個人アカウントの間は**ダミーPDFのみ**。実マニュアルは会社アカウント移行後
 
