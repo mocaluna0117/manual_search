@@ -19,6 +19,7 @@ import { LuDownload, LuExternalLink, LuX } from 'react-icons/lu'
 import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
 import { fileTypeOf } from '../../lib/fileTypes'
 import { toastError } from '../../lib/toast'
+import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
 
 interface ManualViewerContextValue {
   /** どの画面からでもこれを呼ぶと、アプリ内モーダルでPDFが開く(pageで特定ページを直接表示) */
@@ -44,6 +45,7 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
   // 開いているファイルの形式。ブラウザで表示できるかどうかで見せ方を変える
   const [fileName, setFileName] = useState<string | null>(null)
   const [viewable, setViewable] = useState(true)
+  const isTouch = useIsTouchDevice()
 
   const [fetchDownloadUrl] = useLazyQuery(MANUAL_DOWNLOAD_URL_QUERY, {
     // 署名付きURLは期限があるので毎回取り直す
@@ -63,21 +65,48 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
   const fileType = fileName ? fileTypeOf(fileName) : null
 
   const openManual = async (id: string, title: string, page?: number | null) => {
-    setViewing({ id, title })
-    setUrl(null) // 前のファイルが一瞬見えないようにリセット
-    setFileName(null)
+    // スマホのブラウザは埋め込みのPDFを描き切れず、1ページ目だけの
+    // 動かない絵になってしまう。別のタブ(ブラウザのPDFビューア)に任せる。
+    //
+    // URLを取りに行く前に先にタブを開くのが要点。待ってから開くと
+    // 「押していないのに開いた」とみなされ、ブラウザに塞がれる
+    const newTab = isTouch ? window.open('', '_blank') : null
 
     // #page=N はブラウザ内蔵PDFビューアの機能。該当ページを直接表示する
     // (URLフラグメントはサーバーに送られないので署名の検証にも影響しない)
     const withPage = (base: string) => base + (page ? `#page=${page}` : '')
 
+    /** 受け取ったURLを、別タブかアプリ内のどちらかで開く */
+    const show = (target: {
+      url: string
+      fileName: string
+      viewable: boolean
+    }) => {
+      if (newTab && target.viewable) {
+        newTab.location.href = withPage(target.url)
+        return
+      }
+      // ブラウザで開けない形式(Word等)は、白紙のタブを見せても仕方がない。
+      // アプリ内で「ダウンロードして開く」を案内する
+      newTab?.close()
+      setViewing({ id, title })
+      setFileName(target.fileName)
+      // ページ指定はPDFのビューア機能なので、他の形式では付けない
+      setViewable(target.viewable)
+      setUrl(target.viewable ? withPage(target.url) : target.url)
+    }
+
     const cached = urlCacheRef.current.get(id)
     if (cached && cached.expiresAt > Date.now()) {
-      setFileName(cached.fileName)
-      setViewable(cached.viewable)
-      // ページ指定はPDFのビューア機能なので、他の形式では付けない
-      setUrl(cached.viewable ? withPage(cached.url) : cached.url)
+      show(cached)
       return
+    }
+
+    // 別タブを開けたときは、そちらが読み込み中の表示を受け持つ
+    if (!newTab) {
+      setViewing({ id, title })
+      setUrl(null) // 前のファイルが一瞬見えないようにリセット
+      setFileName(null)
     }
 
     const { data, error } = await fetchDownloadUrl({ variables: { id } })
@@ -89,10 +118,13 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
         viewable: target.viewableInBrowser,
         expiresAt: Date.now() + URL_REUSE_MS,
       })
-      setFileName(target.fileName)
-      setViewable(target.viewableInBrowser)
-      setUrl(target.viewableInBrowser ? withPage(target.url) : target.url)
+      show({
+        url: target.url,
+        fileName: target.fileName,
+        viewable: target.viewableInBrowser,
+      })
     } else if (error) {
+      newTab?.close()
       urlCacheRef.current.delete(id)
       setViewing(null)
       toastError('開けませんでした', 'このマニュアルは削除された可能性があります')
@@ -145,6 +177,21 @@ export function ManualViewerProvider({ children }: { children: ReactNode }) {
                 {!url ? (
                   <VStack flex="1" justify="center">
                     <Spinner size="lg" />
+                  </VStack>
+                ) : viewable && isTouch ? (
+                  // スマホは埋め込みのPDFを描き切れないので、ここには
+                  // 別タブを開けなかったとき(ブラウザに塞がれた等)だけ来る。
+                  // 押せば必ず開けるボタンを出す(押した操作からなら塞がれない)
+                  <VStack flex="1" justify="center" gap={4} p={6}>
+                    <Text fontSize="sm" color="fg.muted" textAlign="center">
+                      スマートフォンでは、このマニュアルは別のタブで開きます。
+                    </Text>
+                    <Button
+                      colorPalette="blue"
+                      onClick={() => window.open(url, '_blank')}
+                    >
+                      <LuExternalLink /> タブで開く
+                    </Button>
                   </VStack>
                 ) : viewable ? (
                   // ブラウザ内蔵のPDFビューアをそのまま埋め込む。
