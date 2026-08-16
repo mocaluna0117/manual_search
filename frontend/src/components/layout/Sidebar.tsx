@@ -151,6 +151,9 @@ export function SidebarContent({
   // 閉じたことは覚えておく(開くたびに畳み直す手間をなくす)
   const isTouch = useIsTouchDevice()
   const collapsible = isTouch && sections === 'both'
+  // 狭い画面では、幅いっぱいのボタンが縦に積まれて場所を取りすぎる。
+  // アイコンだけにして下部の1行にまとめる
+  const compactFooter = isTouch
   const [collapsed, setCollapsed] = useCollapsedSections()
   const chatOpen = !collapsible || !collapsed.chat
   const manualsOpen = !collapsible || !collapsed.manuals
@@ -958,7 +961,8 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
         onClose={() => setRulesOpen(false)}
       />
 
-      {/* マニュアル追加(管理者のみ。本命の防御はバックエンドの@Roles) */}
+      {/* マニュアル追加(管理者のみ。本命の防御はバックエンドの@Roles)。
+          狭い画面では下部のアイコン列にまとめるので、ここには出さない */}
       {isAdmin && showManuals && (
         <>
           <Button
@@ -967,6 +971,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             color="fg"
             borderColor="border.emphasized"
             _hover={{ bg: 'bg.emphasized' }}
+            display={compactFooter ? 'none' : 'inline-flex'}
             onClick={() => setUploadOpen(true)}
           >
             <LuUpload /> マニュアルを追加
@@ -992,6 +997,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
               color="fg"
               borderColor="border.emphasized"
               _hover={{ bg: 'bg.emphasized' }}
+              display={compactFooter ? 'none' : 'inline-flex'}
               onClick={() => setAnalyticsOpen(true)}
             >
               <LuChartNoAxesColumn /> 利用状況
@@ -1008,6 +1014,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
               color="fg"
               borderColor="border.emphasized"
               _hover={{ bg: 'bg.emphasized' }}
+              display={compactFooter ? 'none' : 'inline-flex'}
               onClick={() => setUsersOpen(true)}
             >
               <LuUsers /> ユーザー管理
@@ -1025,6 +1032,50 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
           </Text>
         </HStack>
         <HStack justify="space-between" flexWrap="wrap" gap={0}>
+          {/* 狭い画面では、幅いっぱいのボタン3つをここへ集める。
+              縦に積むと画面の半分近くを占めてしまうため */}
+          {compactFooter && isAdmin && (
+            <>
+              {showManuals && (
+                <Tooltip label="マニュアルを追加">
+                  <IconButton
+                    aria-label="マニュアルを追加"
+                    size="xs"
+                    variant="ghost"
+                    color="fg.muted"
+                    _hover={{ bg: 'bg.emphasized' }}
+                    onClick={() => setUploadOpen(true)}
+                  >
+                    <LuUpload />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <Tooltip label="利用状況">
+                <IconButton
+                  aria-label="利用状況"
+                  size="xs"
+                  variant="ghost"
+                  color="fg.muted"
+                  _hover={{ bg: 'bg.emphasized' }}
+                  onClick={() => setAnalyticsOpen(true)}
+                >
+                  <LuChartNoAxesColumn />
+                </IconButton>
+              </Tooltip>
+              <Tooltip label="ユーザー管理">
+                <IconButton
+                  aria-label="ユーザー管理"
+                  size="xs"
+                  variant="ghost"
+                  color="fg.muted"
+                  _hover={{ bg: 'bg.emphasized' }}
+                  onClick={() => setUsersOpen(true)}
+                >
+                  <LuUsers />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
           <Button
             size="xs"
             variant="ghost"
@@ -1032,7 +1083,8 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => setHelpOpen(true)}
           >
-            <LuCircleHelp /> 使い方
+            <LuCircleHelp />
+            {!compactFooter && '使い方'}
           </Button>
           <Button
             size="xs"
@@ -1041,7 +1093,8 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => setSettingsOpen(true)}
           >
-            <LuSettings /> 設定
+            <LuSettings />
+            {!compactFooter && '設定'}
           </Button>
           <Button
             size="xs"
@@ -1050,7 +1103,8 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => setInquiryOpen(true)}
           >
-            <LuMail /> 問い合わせ
+            <LuMail />
+            {!compactFooter && '問い合わせ'}
           </Button>
           <Button
             size="xs"
@@ -1059,7 +1113,8 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             _hover={{ bg: 'bg.emphasized' }}
             onClick={() => void handleLogout()}
           >
-            <LuLogOut /> ログアウト
+            <LuLogOut />
+            {!compactFooter && 'ログアウト'}
           </Button>
         </HStack>
         <SettingsDialog
