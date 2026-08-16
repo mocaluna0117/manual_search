@@ -18,7 +18,7 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
 import {
   LuBot,
@@ -75,6 +75,8 @@ import { AnalyticsDialog } from './AnalyticsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
 import { Tooltip } from '../ui/Tooltip'
 import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
+import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
+import { useEdgeSwipeOpen, useSwipeToClose } from '../../lib/useSwipe'
 
 /**
  * フォルダをドラッグしていることを示すデータ形式。
@@ -1156,6 +1158,12 @@ export function SidebarPanel({
  */
 export function MobileSidebar(props: SidebarProps) {
   const [open, setOpen] = useState(false)
+  // 画面の左端から右へなぞって開く。タッチ端末でだけ効かせる
+  const isTouch = useIsTouchDevice()
+  const openSidebar = useCallback(() => setOpen(true), [])
+  useEdgeSwipeOpen(isTouch && !open, openSidebar)
+  // 開いている引き出しの上で左へなぞったら閉じる
+  const swipeToClose = useSwipeToClose(() => setOpen(false))
 
   return (
     <>
@@ -1182,7 +1190,7 @@ export function MobileSidebar(props: SidebarProps) {
         <Portal>
           <Drawer.Backdrop />
           <Drawer.Positioner>
-            <Drawer.Content bg="bg.subtle">
+            <Drawer.Content bg="bg.subtle" {...swipeToClose}>
               {/* 閉じるボタンは専用の行に置く。
                   Drawer.CloseTriggerはChakraのレシピで絶対配置になり中身と重なるため、
                   通常のボタンで自前に閉じる */}
