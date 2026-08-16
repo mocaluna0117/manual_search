@@ -7,6 +7,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>Manualy</title>
+    <style>
+      /*
+        iOS Safariは、文字が16px未満の入力欄にカーソルが入ると
+        「読みにくいだろう」と画面を勝手に拡大する。拡大されたままだと
+        画面が横にはみ出し、送信ボタンが画面の外に出てしまう。
+
+        タッチ端末では入力欄の文字を16pxにして、これを起こさせない。
+        viewportで拡大を禁止する手もあるが、それだと本当に拡大したい人が
+        困るのでやらない(ピンチでの拡大はこれまで通りできる)。
+
+        Chakraの見た目はレイヤー(@layer)に入っているので、レイヤーに
+        属さないこの指定が優先される。個々の入力欄に書かなくても、
+        後から増えたものまで含めて効く
+      */
+      @media (hover: none) and (pointer: coarse) {
+        input,
+        textarea,
+        select {
+          font-size: 16px;
+        }
+      }
+    </style>
     <script>
       // 配色を<html>のクラスに反映する。Reactの描画より先に実行するので、
       // 起動時に明るい画面が一瞬見える現象が起きない。
