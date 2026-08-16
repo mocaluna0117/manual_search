@@ -64,7 +64,9 @@ export class AnalyticsService {
         ) AS question,
         a.content AS answer,
         a.created_at AS asked_at,
-        (a.feedback = 'BAD') AS rated_bad,
+        -- NULL = 'BAD' はfalseではなくNULLになる。そのまま返すと
+        -- GraphQLの非nullな項目に入れられずエラーになるので、falseに畳む
+        COALESCE(a.feedback = 'BAD', false) AS rated_bad,
         a.feedback_reason
       FROM "Message" a
       WHERE a.role = 'ASSISTANT'
