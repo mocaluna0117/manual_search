@@ -643,41 +643,38 @@ export function ChatHome({
             }
           }}
         />
+        {/* 送るボタンは文字を置かず、丸い矢印にする。AIとの対話画面で
+            見慣れた形なので一目で分かり、その分の幅を入力欄に回せる */}
         {loading ? (
           // 送信中は「停止」に切り替える(待たされ続けないための逃げ道)
-          <Button
-            size={{ base: 'md', md: 'lg' }}
-            colorPalette="red"
-            variant="outline"
-            onClick={() => abortRef.current?.abort()}
-            alignSelf="flex-end"
-            aria-label="停止"
-          >
-            <LuCircleStop />
-            <Box as="span" hideBelow="md">
-              停止
-            </Box>
-          </Button>
+          <Tooltip label="停止">
+            <IconButton
+              aria-label="停止"
+              size={{ base: 'md', md: 'lg' }}
+              colorPalette="red"
+              variant="outline"
+              borderRadius="full"
+              onClick={() => abortRef.current?.abort()}
+              alignSelf="flex-end"
+            >
+              <LuCircleStop />
+            </IconButton>
+          </Tooltip>
         ) : (
-          <Button
-            size={{ base: 'md', md: 'lg' }}
-            colorPalette="blue"
-            onClick={handleSubmit}
-            // 文章が無くても画像が添付されていれば送れる
-            disabled={!input.trim() && attachedImages.length === 0}
-            alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
-            aria-label="検索"
-            borderRadius={{ base: 'full', md: 'l2' }}
-          >
-            {/* スマホでは「検索」の文字を省いて丸いボタンにする。
-                その分の幅は入力欄に回す(送るボタンだと一目で分かる形) */}
-            <Box as="span" hideFrom="md">
+          <Tooltip label="検索">
+            <IconButton
+              aria-label="検索"
+              size={{ base: 'md', md: 'lg' }}
+              colorPalette="blue"
+              borderRadius="full"
+              onClick={handleSubmit}
+              // 文章が無くても画像が添付されていれば送れる
+              disabled={!input.trim() && attachedImages.length === 0}
+              alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
+            >
               <LuArrowUp />
-            </Box>
-            <Box as="span" hideBelow="md">
-              検索
-            </Box>
-          </Button>
+            </IconButton>
+          </Tooltip>
         )}
       </HStack>
 
