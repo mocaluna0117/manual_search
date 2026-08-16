@@ -2,6 +2,28 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { PrismaService } from '../prisma/service';
 
+/** メールアドレスの@より後ろ(小文字)。取れなければ空文字 */
+function domainOf(email: string): string {
+  return email.slice(email.lastIndexOf('@') + 1).toLowerCase();
+}
+
+/**
+ * この宛先にReply-Toを付けてよいかを判定する。
+ *
+ * 差出人(SESで認証したアドレス)は宛先の会社とは別のドメインなので、
+ * そこにReply-Toだけ宛先と同じ社内ドメインを載せると
+ * 「社外から来たのに社内の人を名乗るメール」の形になる。
+ * これは詐称メールの典型なので、Microsoft 365などの迷惑メール判定に
+ * 引っかかって受信箱に入らない(実際にそうなった)。
+ *
+ * 社内ドメイン宛てのぶんだけReply-Toを外す。誰からの問い合わせかは
+ * 本文の「送信者:」に必ず書いてあるので、情報は失われない。
+ */
+function canReplyTo(to: string, sender: string | null): boolean {
+  if (!sender) return false;
+  return domainOf(to) !== domainOf(sender);
+}
+
 /** 問い合わせの宛先(カンマ区切りで複数可)。運用で変える場合は環境変数で上書きする */
 const TO_EMAILS = (
   process.env.INQUIRY_TO_EMAIL ??
@@ -124,8 +146,10 @@ export class InquiryService {
           new SendEmailCommand({
             FromEmailAddress: FROM_EMAIL,
             Destination: { ToAddresses: [to] },
-            // 送信者へそのまま返信できるようにする
-            ReplyToAddresses: userEmail ? [userEmail] : undefined,
+            // 送信者へそのまま返信できるようにする(同じ社内ドメイン宛ては除く)
+            ReplyToAddresses: canReplyTo(to, userEmail)
+              ? [userEmail as string]
+              : undefined,
             // 添付があるときは、こちらで組み立てたメール全体を渡す。
             // Simple形式は添付を扱えないため
             Content: attachments.length
@@ -134,7 +158,7 @@ export class InquiryService {
                     Data: buildRawEmail({
                       from: FROM_EMAIL,
                       to,
-                      replyTo: userEmail,
+                      replyTo: canReplyTo(to, userEmail) ? userEmail : null,
                       subject,
                       body,
                       attachments,
