@@ -983,8 +983,9 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
       />
 
       {/* マニュアル追加(管理者のみ。本命の防御はバックエンドの@Roles)。
-          ボタンは下部のアイコン列に置いてあるので、ここはダイアログだけ */}
-      {isAdmin && showManuals && (
+          ボタンは下部のアイコン列(showFooterのパネル)に置いてあるので、
+          ダイアログも同じパネルに置く */}
+      {isAdmin && showFooter && (
         <UploadManualDialog
           open={uploadOpen}
           onClose={() => setUploadOpen(false)}
@@ -1019,20 +1020,21 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
               縦に積むと画面の半分近くを占めてしまうため */}
           {isAdmin && (
             <>
-              {showManuals && (
-                <Tooltip label="マニュアルを追加">
-                  <IconButton
-                    aria-label="マニュアルを追加"
-                    size="xs"
-                    variant="ghost"
-                    color="fg.muted"
-                    _hover={{ bg: 'bg.emphasized' }}
-                    onClick={() => setUploadOpen(true)}
-                  >
-                    <LuUpload />
-                  </IconButton>
-                </Tooltip>
-              )}
+              {/* マニュアル欄が反対側のパネルにあるときも押せるようにする。
+                  ここに出さないと、チャットが左・マニュアルが右のときだけ
+                  追加する手段が画面から消えてしまう */}
+              <Tooltip label="マニュアルを追加">
+                <IconButton
+                  aria-label="マニュアルを追加"
+                  size="xs"
+                  variant="ghost"
+                  color="fg.muted"
+                  _hover={{ bg: 'bg.emphasized' }}
+                  onClick={() => setUploadOpen(true)}
+                >
+                  <LuUpload />
+                </IconButton>
+              </Tooltip>
               <Tooltip label="利用状況">
                 <IconButton
                   aria-label="利用状況"
