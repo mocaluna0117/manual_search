@@ -8,8 +8,14 @@ export function LoginScreen() {
   return (
     <VStack h="100dvh" justify="center" gap={6} px={4}>
       <Heading size="2xl">Manualy</Heading>
-      <Text color="fg.muted">
+      {/* 全角30文字あり、狭い画面では文の途中で折り返して読みにくい。
+          スマホでは短い文にする(何をすればよいかは下のボタンで分かる)。
+          表示の出し分けはCSSで行うので、開いた瞬間に文が入れ替わらない */}
+      <Text color="fg.muted" whiteSpace="nowrap" hideBelow="md">
         このサイトは社内向けです。アカウントでサインインしてください
+      </Text>
+      <Text color="fg.muted" fontSize="sm" whiteSpace="nowrap" hideFrom="md">
+        社内向けのサイトです
       </Text>
       <Button
         size="lg"
