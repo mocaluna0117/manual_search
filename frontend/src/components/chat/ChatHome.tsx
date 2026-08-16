@@ -37,6 +37,11 @@ import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
 import { PromptTemplateMenu } from './PromptTemplateMenu'
 import { Tooltip } from '../ui/Tooltip'
 import { toastError } from '../../lib/toast'
+import {
+  ALLOWED_IMAGE_TYPES,
+  MAX_IMAGE_BYTES,
+  fileToBase64,
+} from '../../lib/image'
 
 interface ChatHomeProps {
   /** nullなら新規チャット。IDがあれば既存の会話を読み込んで続きから */
@@ -50,13 +55,7 @@ interface ChatHomeProps {
 // 表示用: サーバーのメッセージ + 送信時だけ持つ画像プレビューURL
 type LocalMessage = ChatMessage & { imageUrl?: string }
 
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024 // 4MB
-const ALLOWED_IMAGE_TYPES: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpeg',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-}
+
 
 // 引用をマニュアル単位にまとめる(同じマニュアルの複数ページを1カードに集約)
 interface PageLink {
@@ -127,18 +126,7 @@ function formatChatTime(iso: string): string {
   return sameDay ? time : `${d.getMonth() + 1}/${d.getDate()} ${time}`
 }
 
-/** File → base64文字列(data:プレフィックスを除いた本体) */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
-      resolve(result.split(',', 2)[1] ?? '')
-    }
-    reader.onerror = () => reject(new Error('画像を読み込めませんでした'))
-    reader.readAsDataURL(file)
-  })
-}
+
 
 /** AI検索のチャット画面。質問前は中央に検索欄、質問後はスレッド表示 */
 export function ChatHome({

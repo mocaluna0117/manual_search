@@ -2,14 +2,22 @@ import { useMutation } from '@apollo/client/react'
 import {
   Button,
   Dialog,
+  HStack,
+  IconButton,
+  Image,
   Portal,
   Text,
   Textarea,
   VStack,
 } from '@chakra-ui/react'
-import { useState } from 'react'
-import { LuCircleCheck, LuSend } from 'react-icons/lu'
+import { useRef, useState } from 'react'
+import { LuCircleCheck, LuImage, LuSend, LuX } from 'react-icons/lu'
 import { SEND_INQUIRY_MUTATION } from '../../graphql/inquiry'
+import {
+  ALLOWED_IMAGE_TYPES,
+  checkImage,
+  fileToBase64,
+} from '../../lib/image'
 import { errorMessage, toastError } from '../../lib/toast'
 
 interface InquiryDialogProps {
@@ -23,20 +31,50 @@ const MAX_LENGTH = 2000
 export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
   const [message, setMessage] = useState('')
   const [sent, setSent] = useState(false)
+  // 添付する画面写真(任意)。プレビュー用のURLも一緒に持つ
+  const [image, setImage] = useState<{ file: File; url: string } | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [sendInquiry, { loading }] = useMutation(SEND_INQUIRY_MUTATION)
+
+  const clearImage = () => {
+    // プレビュー用に作ったURLは、使い終わったら開放する
+    if (image) URL.revokeObjectURL(image.url)
+    setImage(null)
+  }
 
   const close = () => {
     setMessage('')
+    clearImage()
     setSent(false)
     onClose()
+  }
+
+  const pickImage = (file: File | undefined) => {
+    if (!file) return
+    const problem = checkImage(file)
+    if (problem) {
+      toastError('この画像は使えません', problem)
+      return
+    }
+    clearImage()
+    setImage({ file, url: URL.createObjectURL(file) })
   }
 
   const handleSend = async () => {
     if (!message.trim()) return
     try {
-      await sendInquiry({ variables: { message: message.trim() } })
+      await sendInquiry({
+        variables: {
+          message: message.trim(),
+          imageBase64: image ? await fileToBase64(image.file) : undefined,
+          imageFormat: image
+            ? ALLOWED_IMAGE_TYPES[image.file.type]
+            : undefined,
+        },
+      })
       setSent(true)
       setMessage('')
+      clearImage()
     } catch (e) {
       toastError('送信できませんでした', errorMessage(e, ''))
     }
@@ -80,6 +118,55 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                   <Text fontSize="xs" color="fg.subtle" textAlign="right">
                     {message.length} / {MAX_LENGTH}
                   </Text>
+
+                  {/* 画面写真の添付。言葉で説明しにくい不具合を伝えやすくする */}
+                  {image ? (
+                    <HStack
+                      gap={2}
+                      p={2}
+                      borderWidth="1px"
+                      borderRadius="md"
+                      align="center"
+                    >
+                      <Image
+                        src={image.url}
+                        alt="添付する画像"
+                        boxSize="48px"
+                        objectFit="cover"
+                        borderRadius="sm"
+                      />
+                      <Text fontSize="xs" flex="1" truncate>
+                        {image.file.name}
+                      </Text>
+                      <IconButton
+                        aria-label="添付を取り消す"
+                        size="xs"
+                        variant="ghost"
+                        onClick={clearImage}
+                      >
+                        <LuX />
+                      </IconButton>
+                    </HStack>
+                  ) : (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      alignSelf="flex-start"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <LuImage /> 画面の写真を添える
+                    </Button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      pickImage(e.target.files?.[0])
+                      e.target.value = '' // 同じ画像を選び直せるように
+                    }}
+                  />
                 </VStack>
               )}
             </Dialog.Body>

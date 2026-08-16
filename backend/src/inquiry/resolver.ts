@@ -12,7 +12,15 @@ export class InquiryResolver {
   sendInquiry(
     @Args('message') message: string,
     @CurrentUser() authUser: AuthUser,
+    // 画面のスクリーンショットを添えられるようにする(任意)
+    @Args('imageBase64', { type: () => String, nullable: true })
+    imageBase64?: string,
+    @Args('imageFormat', { type: () => String, nullable: true })
+    imageFormat?: string,
   ) {
-    return this.inquiryService.send(message, authUser.email ?? null);
+    const image = imageBase64
+      ? { base64: imageBase64, format: imageFormat ?? 'png' }
+      : undefined;
+    return this.inquiryService.send(message, authUser.email ?? null, image);
   }
 }

@@ -289,7 +289,7 @@ type Mutation {
   createClassificationRule(text: String!): ClassificationRule!
   updateClassificationRule(id: ID!, text: String!): ClassificationRule!
   deleteClassificationRule(id: ID!): ClassificationRule!
-  sendInquiry(message: String!): Boolean!
+  sendInquiry(message: String!, imageBase64: String, imageFormat: String): Boolean!
   createPromptTemplate(title: String!, body: String!): PromptTemplate!
   updatePromptTemplate(id: ID!, title: String!, body: String!): PromptTemplate!
   deletePromptTemplate(id: ID!): PromptTemplate!
