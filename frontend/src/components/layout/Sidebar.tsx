@@ -7,7 +7,6 @@ import {
 import {
   Box,
   Button,
-  Drawer,
   HStack,
   IconButton,
   Image,
@@ -18,7 +17,7 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
 import {
   LuBot,
@@ -76,7 +75,7 @@ import { UserManagementDialog } from './UserManagementDialog'
 import { Tooltip } from '../ui/Tooltip'
 import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
 import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
-import { useEdgeSwipeOpen, useSwipeToClose } from '../../lib/useSwipe'
+import { drawerWidth, useDrawerDrag } from '../../lib/useDrawerDrag'
 
 /**
  * フォルダをドラッグしていることを示すデータ形式。
@@ -1158,12 +1157,25 @@ export function SidebarPanel({
  */
 export function MobileSidebar(props: SidebarProps) {
   const [open, setOpen] = useState(false)
-  // 画面の左端から右へなぞって開く。タッチ端末でだけ効かせる
   const isTouch = useIsTouchDevice()
-  const openSidebar = useCallback(() => setOpen(true), [])
-  useEdgeSwipeOpen(isTouch && !open, openSidebar)
-  // 開いている引き出しの上で左へなぞったら閉じる
-  const swipeToClose = useSwipeToClose(() => setOpen(false))
+  // 指の位置に合わせてその場で動かす。0(閉)〜1(開)
+  const { progress, isDragging } = useDrawerDrag(isTouch, open, setOpen)
+  const width = typeof window === 'undefined' ? 320 : drawerWidth()
+
+  // 指を離したあとだけ滑らせる。動かしている最中に効かせると指から遅れる
+  const glide = isDragging
+    ? 'none'
+    : 'transform 260ms cubic-bezier(0.32, 0.72, 0, 1), opacity 260ms'
+
+  // Escで閉じる(タッチ端末以外でも、キーボードから抜けられるように)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   return (
     <>
@@ -1181,50 +1193,66 @@ export function MobileSidebar(props: SidebarProps) {
         <LuMenu />
       </IconButton>
 
-      <Drawer.Root
-        open={open}
-        onOpenChange={(e) => setOpen(e.open)}
-        placement="start"
-        size="xs"
-      >
-        <Portal>
-          {/* 背景をなぞっても閉じられるようにする(指が引き出しから外れても効く) */}
-          <Drawer.Backdrop {...swipeToClose} />
-          <Drawer.Positioner>
-            <Drawer.Content bg="bg.subtle" {...swipeToClose}>
-              {/* 閉じるボタンは専用の行に置く。
-                  Drawer.CloseTriggerはChakraのレシピで絶対配置になり中身と重なるため、
-                  通常のボタンで自前に閉じる */}
-              <HStack justify="space-between" px={2} pt={2} flexShrink={0}>
-                <AppBrand
-                  onClick={() => {
-                    props.onSelectCategory(null)
-                    setOpen(false)
-                  }}
-                />
-                <IconButton
-                  aria-label="メニューを閉じる"
-                  variant="ghost"
-                  size="sm"
-                  color="fg.muted"
-                  onClick={() => setOpen(false)}
-                >
-                  <LuX />
-                </IconButton>
-              </HStack>
-              <Drawer.Body p={0} overflow="hidden">
-                {/* 項目を選んだらDrawerを閉じる */}
-                <SidebarContent
-                  {...props}
-                  sections="both"
-                  showFooter
-                  onNavigate={() => setOpen(false)}
-                />
-              </Drawer.Body>
-            </Drawer.Content>
-          </Drawer.Positioner>
-        </Portal>
-      </Drawer.Root>
+      <Portal>
+        {/* 背景。開き具合に合わせて濃くする */}
+        <Box
+          position="fixed"
+          inset={0}
+          zIndex={1400}
+          bg="black"
+          display={{ base: 'block', md: 'none' }}
+          opacity={progress * 0.5}
+          pointerEvents={progress > 0 ? 'auto' : 'none'}
+          transition={glide}
+          onClick={() => setOpen(false)}
+        />
+        {/* 引き出し本体。指の位置に合わせて左右に動かす */}
+        <Box
+          position="fixed"
+          top={0}
+          left={0}
+          bottom={0}
+          zIndex={1401}
+          width={`${width}px`}
+          maxW="85vw"
+          bg="bg.subtle"
+          display={{ base: 'flex', md: 'none' }}
+          flexDirection="column"
+          boxShadow={progress > 0 ? 'lg' : 'none'}
+          // translate3dにするとGPUで動き、指に付いてくる
+          transform={`translate3d(${(progress - 1) * width}px, 0, 0)`}
+          transition={glide}
+          // 中身は開いているときだけ触れるようにする(閉じている間の誤タップを防ぐ)
+          visibility={progress > 0 ? 'visible' : 'hidden'}
+        >
+          <HStack justify="space-between" px={2} pt={2} flexShrink={0}>
+            <AppBrand
+              onClick={() => {
+                props.onSelectCategory(null)
+                setOpen(false)
+              }}
+            />
+            <IconButton
+              aria-label="メニューを閉じる"
+              variant="ghost"
+              size="sm"
+              color="fg.muted"
+              onClick={() => setOpen(false)}
+            >
+              <LuX />
+            </IconButton>
+          </HStack>
+          <Box flex="1" minH={0} overflow="hidden">
+            {/* 項目を選んだら閉じる */}
+            <SidebarContent
+              {...props}
+              sections="both"
+              showFooter
+              onNavigate={() => setOpen(false)}
+            />
+          </Box>
+        </Box>
+      </Portal>
     </>
   )
 }
