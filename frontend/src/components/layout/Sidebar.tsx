@@ -1188,7 +1188,8 @@ export function MobileSidebar(props: SidebarProps) {
         size="xs"
       >
         <Portal>
-          <Drawer.Backdrop />
+          {/* 背景をなぞっても閉じられるようにする(指が引き出しから外れても効く) */}
+          <Drawer.Backdrop {...swipeToClose} />
           <Drawer.Positioner>
             <Drawer.Content bg="bg.subtle" {...swipeToClose}>
               {/* 閉じるボタンは専用の行に置く。

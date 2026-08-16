@@ -1,23 +1,35 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 /** これ以上動かしたらスワイプとみなす距離(px) */
-const THRESHOLD = 60
-
-/** 画面の左端から何pxまでを「引き出しを開く操作」の起点にするか */
-const EDGE_WIDTH = 24
+const THRESHOLD = 50
 
 /**
- * 縦スクロールと取り違えないための判定。
- * 横の移動量が縦より大きいときだけスワイプとして扱う
+ * 「引き出しを開く操作」の起点にする範囲(画面左からの割合と上限px)。
+ *
+ * 画面のいちばん外側だけを起点にすると、iOSのSafariが「前の画面へ戻る」の
+ * ジェスチャーとして先に横取りしてしまい、こちらまで指の動きが届かない。
+ * そのため少し内側まで広げて拾う。
  */
-function isHorizontal(dx: number, dy: number): boolean {
-  return Math.abs(dx) > Math.abs(dy)
+const START_ZONE_RATIO = 0.3
+const START_ZONE_MAX = 140
+
+/** その位置から開く操作を始めてよいか */
+function inStartZone(x: number): boolean {
+  return x <= Math.min(window.innerWidth * START_ZONE_RATIO, START_ZONE_MAX)
 }
 
 /**
- * 画面の左端から右へなぞったら開く(スマホの引き出し操作)。
+ * 縦スクロールと取り違えないための判定。
+ * 内側から拾う分だけ誤作動しやすくなるので、はっきり横向きのときだけ通す
+ */
+function isHorizontal(dx: number, dy: number): boolean {
+  return Math.abs(dx) > Math.abs(dy) * 1.5
+}
+
+/**
+ * 画面の左側から右へなぞったら開く(スマホの引き出し操作)。
  *
- * 起点を左端に限るのが要点。画面のどこからでも拾うと、一覧を横に
+ * 起点を左側に限るのが要点。画面のどこからでも拾うと、一覧を横に
  * スクロールしたり文字を選んだりする操作を奪ってしまう。
  */
 export function useEdgeSwipeOpen(enabled: boolean, onOpen: () => void) {
@@ -30,7 +42,7 @@ export function useEdgeSwipeOpen(enabled: boolean, onOpen: () => void) {
     const onStart = (e: TouchEvent) => {
       const touch = e.touches[0]
       if (!touch) return
-      tracking = touch.clientX <= EDGE_WIDTH
+      tracking = inStartZone(touch.clientX)
       startX = touch.clientX
       startY = touch.clientY
     }
@@ -68,31 +80,29 @@ export function useEdgeSwipeOpen(enabled: boolean, onOpen: () => void) {
  * 戻り値をそのまま要素へ展開して使う
  */
 export function useSwipeToClose(onClose: () => void) {
-  let startX = 0
-  let startY = 0
-  let tracking = false
+  // 指を置いてから動かすまでの間に画面が描き直されることがある。
+  // 普通の変数だと作り直されて「触り始めた位置」を見失うのでrefで持つ
+  const start = useRef<{ x: number; y: number } | null>(null)
 
   return {
     onTouchStart: (e: React.TouchEvent) => {
       const touch = e.touches[0]
       if (!touch) return
-      tracking = true
-      startX = touch.clientX
-      startY = touch.clientY
+      start.current = { x: touch.clientX, y: touch.clientY }
     },
     onTouchMove: (e: React.TouchEvent) => {
-      if (!tracking) return
+      const from = start.current
       const touch = e.touches[0]
-      if (!touch) return
-      const dx = touch.clientX - startX
-      const dy = touch.clientY - startY
+      if (!from || !touch) return
+      const dx = touch.clientX - from.x
+      const dy = touch.clientY - from.y
       if (dx < -THRESHOLD && isHorizontal(dx, dy)) {
-        tracking = false
+        start.current = null
         onClose()
       }
     },
     onTouchEnd: () => {
-      tracking = false
+      start.current = null
     },
   }
 }
