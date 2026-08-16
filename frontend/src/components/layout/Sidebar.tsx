@@ -1290,6 +1290,25 @@ export function MobileSidebar(props: SidebarProps) {
         <LuMenu />
       </IconButton>
 
+      {/* 新しいチャット。一番よく使う操作なので、サイドバーを開かずに
+          その場で始められるようにする */}
+      <IconButton
+        aria-label="新しいチャット"
+        variant="ghost"
+        size="md"
+        position="fixed"
+        top={2}
+        right={2}
+        zIndex={10}
+        display={{ base: 'flex', md: 'none' }}
+        bg="bg.panel"
+        borderRadius="full"
+        boxShadow="xs"
+        onClick={() => props.onSelectCategory(null)}
+      >
+        <LuMessageSquarePlus />
+      </IconButton>
+
       <Portal>
         {/* 背景。開き具合に合わせて濃くする */}
         <Box
