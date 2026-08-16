@@ -590,12 +590,15 @@ export function ChatHome({
         pt={{ base: 12, md: 0 }}
       >
         <Heading size={{ base: 'xl', md: '2xl' }}>Manualy</Heading>
+        {/* 折り返すと2行になって見出しとの間が間延びするので、
+            一番狭い画面でも1行に収まる長さにしてある(全角20文字) */}
         <Text
           color="fg.muted"
           fontSize={{ base: 'sm', md: 'md' }}
           textAlign="center"
+          whiteSpace="nowrap"
         >
-          知りたいことを入力すると、AIが最適なマニュアルを案内します
+          知りたいことを入力すると、AIが案内します
         </Text>
         {searchInput}
       </VStack>
