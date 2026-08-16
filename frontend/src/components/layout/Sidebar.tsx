@@ -478,7 +478,17 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
   }
 
   return (
-    <VStack as="nav" h="100%" p={3} gap={4} align="stretch" color="fg">
+    <VStack
+      as="nav"
+      h="100%"
+      p={3}
+      // スマホでホーム画面から開くと画面の一番下まで表示領域になるので、
+      // 一番下の項目がホームバーと重ならないよう余白を足す(PCでは0)
+      pb="calc(0.75rem + env(safe-area-inset-bottom))"
+      gap={4}
+      align="stretch"
+      color="fg"
+    >
       {/* 目立たせすぎず、下部の「マニュアルを追加」と同じ枠線スタイルに揃える */}
       {showChat && (
         <Button

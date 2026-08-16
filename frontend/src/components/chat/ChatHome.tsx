@@ -963,6 +963,10 @@ export function ChatHome({
         w="100%"
         borderTopWidth="1px"
         p={{ base: 2, md: 4 }}
+        // ホーム画面から開いたときは画面の一番下まで表示領域になり、
+        // ボタンがiPhoneのホームバーと重なって見切れる。
+        // その分の余白を足す(重ならない端末では0なので何も変わらない)
+        pb={{ base: 'calc(0.5rem + env(safe-area-inset-bottom))', md: '1rem' }}
         display="flex"
         justifyContent="center"
       >
