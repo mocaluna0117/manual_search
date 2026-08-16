@@ -15,10 +15,12 @@ import { ME_QUERY } from '../../graphql/me'
 import {
   ManualItemList,
   ViewModeSwitch,
+} from './ManualItemList'
+import {
   formatDateTime,
   useViewMode,
-} from './ManualItemList'
-import { useManualViewer } from './ManualViewerProvider'
+} from '../../lib/manualListView'
+import { useManualViewer } from './manualViewerContext'
 import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
 
 /** ゴミ箱に入れてから自動削除されるまでの日数(サーバー側の設定と合わせる) */

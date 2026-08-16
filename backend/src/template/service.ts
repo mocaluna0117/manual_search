@@ -71,7 +71,9 @@ export class TemplateService {
   }
 
   private async ensureExists(id: string) {
-    const found = await this.prisma.promptTemplate.findUnique({ where: { id } });
+    const found = await this.prisma.promptTemplate.findUnique({
+      where: { id },
+    });
     if (!found) {
       throw new BadRequestException('テンプレートが見つかりません');
     }

@@ -273,7 +273,8 @@ export class RagService {
           const data = JSON.parse(raw) as Record<string, unknown>;
           if (event === 'delta') onDelta(String(data.text ?? ''));
           else if (event === 'reset') onReset();
-          else if (event === 'error') failure = String(data.message ?? '不明なエラー');
+          else if (event === 'error')
+            failure = String(data.message ?? '不明なエラー');
           else if (event === 'done') done = data as unknown as DoneEvent;
         }
         sep = buffer.indexOf('\n\n');
@@ -282,7 +283,9 @@ export class RagService {
 
     if (failure) throw new ServiceUnavailableException(failure);
     if (!done) {
-      throw new ServiceUnavailableException('RAGサービスの応答が途中で切れました');
+      throw new ServiceUnavailableException(
+        'RAGサービスの応答が途中で切れました',
+      );
     }
     return {
       answer: done.answer,

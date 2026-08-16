@@ -37,9 +37,7 @@ export class CategoryResolver {
   // フォルダの並び替え(ドラッグ)。渡された順に並び順を振り直す
   @Roles(UserRole.ADMIN)
   @Mutation(() => Int)
-  reorderManualCategories(
-    @Args('ids', { type: () => [ID] }) ids: string[],
-  ) {
+  reorderManualCategories(@Args('ids', { type: () => [ID] }) ids: string[]) {
     return this.categoryService.reorder(ids);
   }
 }

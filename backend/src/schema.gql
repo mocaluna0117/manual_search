@@ -237,11 +237,6 @@ type Conversation {
   messages: [ChatMessage!]!
 }
 
-type AskResult {
-  conversationId: ID!
-  message: ChatMessage!
-}
-
 type PromptTemplate {
   id: ID!
   title: String!
@@ -282,7 +277,6 @@ type Mutation {
   updateManualCategory(id: ID!, name: String!): ManualCategory!
   deleteManualCategory(id: ID!): ManualCategory!
   reorderManualCategories(ids: [ID!]!): Int!
-  askQuestion(question: String!, conversationId: ID, images: [ChatImageInput!]): AskResult!
   rateAnswer(messageId: ID!, feedback: MessageFeedback, reason: String): ChatMessage!
   renameConversation(id: ID!, title: String!): Conversation!
   deleteConversation(id: ID!): Conversation!
@@ -323,11 +317,6 @@ input RegisterManualInput {
   autoCategorize: Boolean
   fileLastModified: DateTime
   forceReplace: Boolean
-}
-
-input ChatImageInput {
-  base64: String!
-  format: String!
 }
 
 input InquiryImageInput {

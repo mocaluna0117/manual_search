@@ -1,6 +1,5 @@
 import {
   Args,
-  Context,
   ID,
   Mutation,
   Parent,
@@ -8,18 +7,10 @@ import {
   ResolveField,
   Resolver,
 } from '@nestjs/graphql';
-import type { Response } from 'express';
 import type { AuthUser } from '../auth/current-user';
 import { CurrentUser } from '../auth/current-user';
-import { UserRole } from '../auth/roles';
 import { UserService } from '../user/service';
-import { ChatImageInput } from './input';
-import {
-  AskResult,
-  ChatMessage,
-  Conversation,
-  MessageFeedback,
-} from './model';
+import { ChatMessage, Conversation, MessageFeedback } from './model';
 import { ChatService } from './service';
 
 @Resolver(() => Conversation)
@@ -50,35 +41,6 @@ export class ChatResolver {
   @ResolveField(() => [ChatMessage])
   messages(@Parent() conversation: Conversation) {
     return this.chatService.messages(conversation.id);
-  }
-
-  // 質問を投げる。conversationId省略で新規会話が始まる。画像添付は任意
-  @Mutation(() => AskResult)
-  async askQuestion(
-    @Args('question') question: string,
-    @CurrentUser() authUser: AuthUser,
-    @Context() ctx: { res?: Response },
-    @Args('conversationId', { type: () => ID, nullable: true })
-    conversationId?: string,
-    // 画面のスクリーンショットを添えて質問できる(任意・複数可)
-    @Args('images', { type: () => [ChatImageInput], nullable: true })
-    images?: ChatImageInput[],
-  ) {
-    const user = await this.userService.ensure(authUser);
-    // フロントの「停止」ボタン(=接続の切断)をRAG呼び出しの中断につなげる。
-    // 正常終了でも'close'は発火するため、レスポンス送信済みかどうかで見分ける
-    const controller = new AbortController();
-    ctx.res?.on('close', () => {
-      if (!ctx.res?.writableEnded) controller.abort();
-    });
-    return this.chatService.ask(
-      question,
-      user.id,
-      conversationId,
-      images ?? [],
-      controller.signal,
-      user.role === UserRole.ADMIN, // 管理者ならチャットの管理操作(フォルダ作成等)が有効
-    );
   }
 
   // 回答への評価(👍/👎)。同じものを押し直したときは画面側からnullが届く

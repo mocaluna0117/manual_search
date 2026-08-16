@@ -13,12 +13,7 @@ import { RagCitation } from '../rag/model';
 import { RagService, type RagAction } from '../rag/service';
 import { RuleService } from '../rule/service';
 import { StorageService } from '../storage/service';
-import {
-  AskResult,
-  ChatMessage,
-  MessageFeedback,
-  MessageRole,
-} from './model';
+import { AskResult, ChatMessage, MessageFeedback, MessageRole } from './model';
 
 // 再分類の確認ボタンの文言。クリックするとこの文字列がそのまま質問として届くので、
 // pendingActionと合わせて確定的に照合する(確認の判定をLLMに任せない)
@@ -199,7 +194,9 @@ export class ChatService {
     } else if (isAdmin && /^分類ルールを?追加\s*[:：]\s*.+$/s.test(question)) {
       // 1.6) 明示形式のルール操作はLLMを介さず確定的に処理する
       //      (モデルの「実行したフリ」の影響を受けない確実な経路)
-      const text = question.replace(/^分類ルールを?追加\s*[:：]\s*/s, '').trim();
+      const text = question
+        .replace(/^分類ルールを?追加\s*[:：]\s*/s, '')
+        .trim();
       try {
         const rule = await this.ruleService.create(text);
         return await this.respond(
@@ -219,11 +216,7 @@ export class ChatService {
       /^分類ルール(の一覧|一覧|を見せて|を教えて|見せて)$/.test(question.trim())
     ) {
       const rules = await this.ruleService.findAll();
-      return this.respond(
-        conversation.id,
-        question,
-        this.formatRules(rules),
-      );
+      return this.respond(conversation.id, question, this.formatRules(rules));
     } else if (
       isAdmin &&
       /^分類ルール\s*\d+\s*(?:番目?)?\s*を?削除$/.test(question.trim())
@@ -281,6 +274,8 @@ export class ChatService {
             .trim() || '(管理操作を実行しました)';
       }
       return {
+        // 'user' | 'assistant' に絞る(そのままだとstring扱いになり、
+        // RAGへ渡すときに型が合わない)
         role: (m.role === MessageRole.USER ? 'user' : 'assistant') as
           | 'user'
           | 'assistant',
@@ -363,7 +358,9 @@ export class ChatService {
           // そのまま使うと伝える(利用者の目的は「そこに入ること」なので達成できる)
           const existing = await this.categoryService.findByName(name);
           if (existing) {
-            lines.push(`📁 フォルダ「${name}」は既にあるので、そのまま使います。`);
+            lines.push(
+              `📁 フォルダ「${name}」は既にあるので、そのまま使います。`,
+            );
           } else {
             try {
               await this.categoryService.create(name);
@@ -472,13 +469,18 @@ export class ChatService {
         await this.prisma.conversation.update({
           where: { id: conversation.id },
           data: {
-            pendingAction: { type: 'reclassify_all', instruction: instruction ?? null },
+            pendingAction: {
+              type: 'reclassify_all',
+              instruction: instruction ?? null,
+            },
           },
         });
         lines.push(
           `全${manualCount}件のマニュアルを、AIが工種・業務分野ごとのフォルダへ再分類します` +
             '(足りないフォルダは新しく作られます)。' +
-            (pinnedCount > 0 ? `📌 ピン留めされた${pinnedCount}件は動かしません。` : '') +
+            (pinnedCount > 0
+              ? `📌 ピン留めされた${pinnedCount}件は動かしません。`
+              : '') +
             (instruction ? `分類方針:「${instruction}」。` : '') +
             '今の分類は上書きされます。実行してよいですか？',
         );
@@ -576,7 +578,7 @@ export class ChatService {
         content,
         // 根拠マニュアルは回答時点のスナップショットとしてJSONで保持
         citations: citations as unknown as Prisma.InputJsonValue,
-        options: options as unknown as Prisma.InputJsonValue,
+        options: options,
         answeredFromManuals,
         answerOutcome,
       },

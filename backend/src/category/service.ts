@@ -71,7 +71,9 @@ export class CategoryService {
     });
     const known = new Set(categories.map((c) => c.id));
     const ordered = ids.filter((id) => known.has(id));
-    const rest = categories.map((c) => c.id).filter((id) => !ordered.includes(id));
+    const rest = categories
+      .map((c) => c.id)
+      .filter((id) => !ordered.includes(id));
     const finalOrder = [...ordered, ...rest];
 
     // 全件をまとめて更新する(順序の整合が崩れた中間状態を残さない)

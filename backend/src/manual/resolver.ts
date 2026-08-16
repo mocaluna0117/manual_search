@@ -1,10 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Roles, UserRole } from '../auth/roles';
-import {
-  SUPPORTED_EXTENSIONS,
-  fileTypeOf,
-} from '../storage/file-types';
+import { SUPPORTED_EXTENSIONS, fileTypeOf } from '../storage/file-types';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
 import {
@@ -198,9 +195,7 @@ export class ManualResolver {
   // 既存のフォルダの中から選ばせる(新しいフォルダは作らない)
   @Roles(UserRole.ADMIN)
   @Mutation(() => ReclassifySelectedResult)
-  reclassifySelectedManuals(
-    @Args('ids', { type: () => [ID] }) ids: string[],
-  ) {
+  reclassifySelectedManuals(@Args('ids', { type: () => [ID] }) ids: string[]) {
     return this.manualService.reclassifySelected(ids);
   }
 

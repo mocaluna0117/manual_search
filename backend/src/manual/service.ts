@@ -401,7 +401,12 @@ export class ManualService implements OnApplicationBootstrap {
           error: null,
           finishedAt: new Date(),
         };
-        onFinish?.({ ok: true, movedCount, createdCategories, emptiedCategories });
+        onFinish?.({
+          ok: true,
+          movedCount,
+          createdCategories,
+          emptiedCategories,
+        });
       })
       .catch((e: unknown) => {
         const error = e instanceof Error ? e.message : '不明なエラー';
@@ -581,7 +586,9 @@ export class ManualService implements OnApplicationBootstrap {
       .map((m) => m.title);
     // 取り込みが終わっていないものは中身が読めないので分類できない
     const skippedNotReady = targets
-      .filter((m) => !m.categoryPinned && m.ingestStatus !== IngestStatus.COMPLETED)
+      .filter(
+        (m) => !m.categoryPinned && m.ingestStatus !== IngestStatus.COMPLETED,
+      )
       .map((m) => m.title);
 
     const result = await this.organizeManuals({ id: { in: ids } }, true);
@@ -670,7 +677,10 @@ export class ManualService implements OnApplicationBootstrap {
         where: { id: assignment.manualId },
         data: { categoryId: category.id },
       });
-      moved.push({ manualId: assignment.manualId, categoryName: category.name });
+      moved.push({
+        manualId: assignment.manualId,
+        categoryName: category.name,
+      });
     }
     return { movedCount: moved.length, createdCategories, moved };
   }
@@ -777,7 +787,8 @@ export class ManualService implements OnApplicationBootstrap {
       // 完全に一致する1件があればそれで確定する(部分一致のままだと
       // 「ANDPAD導入周知文」が「ANDPAD導入周知文書」も拾って選び直しになる)
       const exact = manuals.filter(
-        (m) => m.title.normalize('NFC').toLowerCase() === manualNeedle.toLowerCase(),
+        (m) =>
+          m.title.normalize('NFC').toLowerCase() === manualNeedle.toLowerCase(),
       );
       if (exact.length !== 1) {
         return { status: 'manual_ambiguous' as const, manuals };
@@ -840,7 +851,8 @@ export class ManualService implements OnApplicationBootstrap {
       url,
       fileName: manual.fileName,
       // 画面はここを見て、埋め込み表示かダウンロード案内かを決める
-      viewableInBrowser: fileTypeOf(manual.fileName)?.viewableInBrowser ?? false,
+      viewableInBrowser:
+        fileTypeOf(manual.fileName)?.viewableInBrowser ?? false,
     };
   }
 

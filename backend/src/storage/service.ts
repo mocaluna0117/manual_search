@@ -11,7 +11,10 @@ import { randomUUID } from 'node:crypto';
 import { fileTypeOf, mimeTypeOf } from './file-types';
 
 /** endpointは値があるときだけ設定する(未設定ならAWS S3の既定URLが使われる) */
-function withEndpoint(config: S3ClientConfig, endpoint?: string): S3ClientConfig {
+function withEndpoint(
+  config: S3ClientConfig,
+  endpoint?: string,
+): S3ClientConfig {
   return endpoint ? { ...config, endpoint } : config;
 }
 
@@ -41,9 +44,7 @@ export class StorageService {
     };
 
     // サーバー内部からの操作用(削除など)。MinIOのときだけendpointを指定
-    this.s3 = new S3Client(
-      withEndpoint(baseConfig, process.env.S3_ENDPOINT),
-    );
+    this.s3 = new S3Client(withEndpoint(baseConfig, process.env.S3_ENDPOINT));
 
     // 署名付きURL生成用。コンテナ環境では「ブラウザから見えるアドレス」が
     // 内部アドレス(minio:9000)と違うため、S3_PUBLIC_ENDPOINTで上書きできる。
@@ -73,7 +74,9 @@ export class StorageService {
       // 「Excelなのにapplication/pdfで保存される」状態を防げる
       ContentType: mimeTypeOf(fileName),
     });
-    const uploadUrl = await getSignedUrl(this.presignS3, command, { expiresIn: 900 });
+    const uploadUrl = await getSignedUrl(this.presignS3, command, {
+      expiresIn: 900,
+    });
 
     return { uploadUrl, fileKey };
   }

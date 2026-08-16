@@ -8,33 +8,13 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import {
-  createContext,
-  useContext,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { LuDownload, LuExternalLink, LuX } from 'react-icons/lu'
 import { MANUAL_DOWNLOAD_URL_QUERY } from '../../graphql/manuals'
 import { fileTypeOf } from '../../lib/fileTypes'
 import { toastError } from '../../lib/toast'
+import { ManualViewerContext } from './manualViewerContext'
 import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
-
-interface ManualViewerContextValue {
-  /** どの画面からでもこれを呼ぶと、アプリ内モーダルでPDFが開く(pageで特定ページを直接表示) */
-  openManual: (id: string, title: string, page?: number | null) => void
-}
-
-const ManualViewerContext = createContext<ManualViewerContextValue | null>(null)
-
-export function useManualViewer() {
-  const ctx = useContext(ManualViewerContext)
-  if (!ctx) {
-    throw new Error('useManualViewerはManualViewerProviderの内側で使うこと')
-  }
-  return ctx
-}
 
 /** アプリ全体に「PDFビューアを開く機能」を配るProvider。モーダル本体もここが1つだけ持つ */
 export function ManualViewerProvider({ children }: { children: ReactNode }) {

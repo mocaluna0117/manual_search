@@ -180,7 +180,10 @@ export class AnalyticsService {
           lastCitedAt: hit?.lastCited ?? null,
         };
       })
-      .sort((a, b) => b.citedCount - a.citedCount || a.title.localeCompare(b.title, 'ja'));
+      .sort(
+        (a, b) =>
+          b.citedCount - a.citedCount || a.title.localeCompare(b.title, 'ja'),
+      );
   }
 
   /**

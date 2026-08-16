@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@apollo/client/react'
 import { Box, Button, Heading, HStack, Spinner, Text } from '@chakra-ui/react'
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useState } from 'react'
 import { LuDownload, LuSearch, LuTrash2 } from 'react-icons/lu'
 import {
   DELETE_MANUAL_MUTATION,
@@ -15,10 +15,12 @@ import { ME_QUERY } from '../../graphql/me'
 import {
   ManualItemList,
   ViewModeSwitch,
-  useViewMode,
 } from './ManualItemList'
+import {
+  useViewMode,
+} from '../../lib/manualListView'
 import { useBulkDownload } from './useBulkDownload'
-import { useManualViewer } from './ManualViewerProvider'
+import { useManualViewer } from './manualViewerContext'
 import { errorMessage, toastError, toastSuccess } from '../../lib/toast'
 
 interface ManualSearchResultsProps {
@@ -60,11 +62,9 @@ export function ManualSearchResults({ keyword }: ManualSearchResultsProps) {
   const [viewMode, changeViewMode] = useViewMode()
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // 検索結果からもまとめてダウンロードできるようにする(キーワードで絞ってから一括)
+  // 検索結果からもまとめてダウンロードできるようにする(キーワードで絞ってから一括)。
+  // キーワードが変わるとApp側がkeyでこの画面ごと作り直すので、選択の解除は要らない
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
-  useEffect(() => {
-    setCheckedIds(new Set())
-  }, [keyword])
   const { download, progress } = useBulkDownload()
 
   const [deleteManual] = useMutation(DELETE_MANUAL_MUTATION, {

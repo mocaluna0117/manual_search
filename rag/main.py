@@ -178,6 +178,32 @@ def extract_references(answer: str, total: int) -> tuple[str, list[int] | None]:
 TOP_K = 8  # Claudeに渡す抜粋の数
 
 
+# RRFの定数。順位の差を緩やかにするための下駄で、元論文の推奨値。
+# 小さくすると1位が強くなりすぎ、大きくすると順位の差が消える
+RRF_K = 60
+
+
+def fuse_by_rrf(routes: list[list[tuple]]) -> list[tuple]:
+    """複数の検索ルートの結果を、順位の逆数の和で1つに並べ直す。
+
+    score = Σ 1/(RRF_K + そのルートでの順位)。
+    同じチャンクが複数のルートに出てくるほど強くなるので、
+    「意味も近いし語も一致する」ものが上に来る。
+
+    各行は (chunk_id, manual_id, title, content, page_number) の並び。
+    先に見つけたルートの内容を採用する(どのルートでも中身は同じ)。
+    """
+    scores: dict[str, float] = {}
+    meta: dict[str, tuple] = {}
+    for rows in routes:
+        for rank, row in enumerate(rows, start=1):
+            scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (RRF_K + rank)
+            meta.setdefault(row[0], row[1:5])
+
+    ranked = sorted(scores, key=lambda cid: scores[cid], reverse=True)[:TOP_K]
+    return [meta[cid] for cid in ranked]  # (manual_id, title, content, page_number)
+
+
 def hybrid_search(cur, query_vec: str, terms: list[str]):
     """ベクトル・キーワード・タイトルの3ルートをRRF(Reciprocal Rank Fusion)で融合する。
 
@@ -280,21 +306,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
         )
         title_rows = cur.fetchall()
 
-    # RRFで融合(同じチャンクが複数ルートに出たら得点が加算される)
-    scores: dict[str, float] = {}
-    meta: dict[str, tuple] = {}
-    for rank, row in enumerate(vector_rows, start=1):
-        scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
-        meta[row[0]] = row[1:5]
-    for rank, row in enumerate(keyword_rows, start=1):
-        scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
-        meta.setdefault(row[0], row[1:5])
-    for rank, row in enumerate(title_rows, start=1):
-        scores[row[0]] = scores.get(row[0], 0.0) + 1.0 / (60 + rank)
-        meta.setdefault(row[0], row[1:5])
-
-    ranked = sorted(scores, key=lambda cid: scores[cid], reverse=True)[:TOP_K]
-    return [meta[cid] for cid in ranked]  # (manual_id, title, content, page_number)
+    return fuse_by_rrf([vector_rows, keyword_rows, title_rows])
 
 
 def extract_options(answer: str) -> tuple[str, list[str]]:

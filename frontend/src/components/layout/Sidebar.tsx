@@ -65,7 +65,7 @@ import {
   START_RECLASSIFY_MUTATION,
 } from '../../graphql/manuals'
 import { ME_QUERY } from '../../graphql/me'
-import { useManualViewer } from '../manual/ManualViewerProvider'
+import { useManualViewer } from '../manual/manualViewerContext'
 import { HelpDialog } from './HelpDialog'
 import { UploadManualDialog } from '../manual/UploadManualDialog'
 import { ClassificationRuleDialog } from './ClassificationRuleDialog'
@@ -249,7 +249,9 @@ export function SidebarContent({
   // 全件再分類(サイドバーのボタン)。数分かかるので開始だけして進捗はポーリングで見る
   const client = useApolloClient()
   const [startReclassify] = useMutation(START_RECLASSIFY_MUTATION)
-  const [reclassifying, setReclassifying] = useState(false)
+  // 押した直後はサーバーがまだ「実行中」を返さないので、その間だけ自分で覚える。
+  // 実行中かどうかはサーバーの状態と合わせてその場で導く(状態に写さない)
+  const [justStartedReclassify, setJustStartedReclassify] = useState(false)
 
   const { openManual } = useManualViewer()
   // 「使い方」はマニュアルとして登録済みのガイドPDFを開く
@@ -275,22 +277,21 @@ export function SidebarContent({
     }
     openManual(guide.id, guide.title)
   }
-  // 実行中は短い間隔で、それ以外も控えめに監視する。
-  // チャットから始めた再分類もここで拾えるようにするため(一覧の自動更新用)
+  // このボタンから始めたときだけ短い間隔で見る(完了をすぐ知らせるため)。
+  // それ以外は控えめに。チャットから始めた再分類は、完了メッセージを見た
+  // チャット側が一覧を取り直すので、ここが速く気づく必要はない
   const { data: statusData } = useQuery(RECLASSIFY_STATUS_QUERY, {
     skip: !isAdmin,
-    pollInterval: reclassifying ? 3000 : 30000,
+    pollInterval: justStartedReclassify ? 3000 : 30000,
     fetchPolicy: 'network-only',
   })
   const [fetchCounts] = useLazyQuery(RECLASSIFY_COUNTS_QUERY, {
     fetchPolicy: 'network-only',
   })
 
-  // 再読み込みしても実行中なら進捗表示を復元する
+  // 再読み込みしても、サーバーが実行中と言えばそのまま進捗表示になる
   const running = statusData?.reclassifyStatus.running ?? false
-  useEffect(() => {
-    if (running) setReclassifying(true)
-  }, [running])
+  const reclassifying = justStartedReclassify || running
 
   // 実行中→完了に変わったら一覧を最新化する。
   // ダイアログでの通知は、このボタンから始めたときだけ(チャットから始めた
@@ -300,7 +301,7 @@ export function SidebarContent({
   useEffect(() => {
     if (wasRunningRef.current && !running) {
       const status = statusData?.reclassifyStatus
-      setReclassifying(false)
+      setJustStartedReclassify(false)
       void client.refetchQueries({ include: ['ManualCategories', 'Manuals'] })
       if (status && startedHereRef.current) {
         if (status.error) {
@@ -342,7 +343,7 @@ export function SidebarContent({
         return
       }
       startedHereRef.current = true
-      setReclassifying(true)
+      setJustStartedReclassify(true)
     } catch (e) {
       toastError('再分類を開始できませんでした', errorMessage(e, ''))
     }

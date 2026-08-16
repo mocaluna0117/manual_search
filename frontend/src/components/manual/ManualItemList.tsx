@@ -10,6 +10,11 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { FcFolder } from 'react-icons/fc'
 import { extensionOf } from '../../lib/fileTypes'
 import { updatedDateOf } from '../../lib/manualDate'
+import {
+  formatDateTime,
+  type SortKey,
+  type ViewMode,
+} from '../../lib/manualListView'
 import { FileIcon } from './FileIcon'
 import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
 import {
@@ -39,42 +44,6 @@ import { Tooltip } from '../ui/Tooltip'
  */
 
 /** 表示形式(Windowsの「詳細」と「中アイコン」に相当) */
-export type ViewMode = 'details' | 'icons'
-const VIEW_MODE_KEY = 'manualSearch.explorerViewMode'
-
-export type SortKey = 'name' | 'type' | 'updatedAt' | 'size'
-
-/** 表示形式をlocalStorageに保存して共有する(一覧をどこで開いても同じ形式) */
-export function useViewMode(): [ViewMode, (mode: ViewMode) => void] {
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    try {
-      return localStorage.getItem(VIEW_MODE_KEY) === 'icons'
-        ? 'icons'
-        : 'details'
-    } catch {
-      return 'details'
-    }
-  })
-  const change = (mode: ViewMode) => {
-    setViewMode(mode)
-    try {
-      localStorage.setItem(VIEW_MODE_KEY, mode)
-    } catch {
-      // 保存できない環境では今回だけ有効
-    }
-  }
-  return [viewMode, change]
-}
-
-/** 「2026/08/11 19:59」形式(Windowsの日付列と同じ見た目) */
-export function formatDateTime(iso: string | undefined): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 /** 取り込み状態の目印(色付きアイコン)。正常時は何も出さない */
 export function StatusIcon({ manual }: { manual: Manual }) {
   switch (manual.ingestStatus) {

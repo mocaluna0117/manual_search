@@ -66,12 +66,13 @@ export class Conversation {
   updatedAt!: Date;
 }
 
-// askQuestionの戻り値。新規会話の場合はconversationIdで新しいIDを知らせる
-@ObjectType()
-export class AskResult {
-  @Field(() => ID)
-  conversationId!: string;
-
-  @Field(() => ChatMessage)
-  message!: ChatMessage;
+/**
+ * 質問への応答。新規会話の場合はconversationIdで新しいIDを知らせる。
+ *
+ * GraphQLの型ではない(回答はSSEの /chat/stream で返しており、
+ * これはサーバー内部とSSEの本文で使う形)
+ */
+export interface AskResult {
+  conversationId: string;
+  message: ChatMessage;
 }

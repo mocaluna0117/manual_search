@@ -4,7 +4,8 @@ import { LuCheck, LuCopy } from 'react-icons/lu'
 import ReactMarkdown from 'react-markdown'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
-import { IconLine, splitLeadingIcon, withInlineIcons } from './MessageIcons'
+import { splitLeadingIcon, withInlineIcons } from '../../lib/messageIcons'
+import { IconLine } from './MessageIcons'
 import { toastError } from '../../lib/toast'
 
 /** 描画された要素から元の文字列だけを取り出す(コピー用) */

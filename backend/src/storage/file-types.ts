@@ -31,7 +31,8 @@ export const FILE_TYPES: FileType[] = [
   },
   {
     ext: '.xlsx',
-    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    mimeType:
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     viewableInBrowser: false,
     label: 'Excel',
   },

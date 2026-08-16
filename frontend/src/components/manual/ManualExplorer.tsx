@@ -34,13 +34,15 @@ import { ME_QUERY } from '../../graphql/me'
 import {
   ManualItemList,
   ViewModeSwitch,
+} from './ManualItemList'
+import {
   useViewMode,
   type SortKey,
-} from './ManualItemList'
+} from '../../lib/manualListView'
 import { extensionOf } from '../../lib/fileTypes'
 import { updatedDateOf } from '../../lib/manualDate'
 import { useBulkDownload } from './useBulkDownload'
-import { useManualViewer } from './ManualViewerProvider'
+import { useManualViewer } from './manualViewerContext'
 import { Tooltip } from '../ui/Tooltip'
 import { errorMessage, toastError, toastReport, toastSuccess } from '../../lib/toast'
 
@@ -176,11 +178,8 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  // 一括ダウンロード用のチェック。フォルダを移動したら選択は解除する
+  // 一括ダウンロード用のチェック
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
-  useEffect(() => {
-    setCheckedIds(new Set())
-  }, [folder])
   const toggleCheck = (id: string) =>
     setCheckedIds((prev) => {
       const next = new Set(prev)
@@ -191,9 +190,19 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
   const [checkedFolderIds, setCheckedFolderIds] = useState<Set<string>>(
     new Set(),
   )
-  useEffect(() => {
+
+  // フォルダを移動したら選択は解除する。
+  // 描画のあと(effect)で消すと、移動先の一覧を前のフォルダの選択が付いたまま
+  // 一度描いてしまうので、描画中にその場で合わせる
+  const folderKey = isUncategorized
+    ? 'uncategorized'
+    : (folder?.id ?? 'root')
+  const [lastFolderKey, setLastFolderKey] = useState(folderKey)
+  if (lastFolderKey !== folderKey) {
+    setLastFolderKey(folderKey)
+    setCheckedIds(new Set())
     setCheckedFolderIds(new Set())
-  }, [folder])
+  }
   const toggleFolderCheck = (id: string) =>
     setCheckedFolderIds((prev) => {
       const next = new Set(prev)
