@@ -146,10 +146,11 @@ export function SidebarContent({
 }: SidebarProps) {
   const showChat = sections === 'both' || sections === 'chat'
   const showManuals = sections === 'both' || sections === 'manuals'
-  // 狭い画面では両方並べると長くなるので、見出しから折りたためるようにする。
+  // 1つのパネルに両方を並べているときは、片方を畳めるようにする。
+  // 左右に振り分けている設定では、そもそも並ばないので畳む必要がない。
   // 閉じたことは覚えておく(開くたびに畳み直す手間をなくす)
   const isTouch = useIsTouchDevice()
-  const collapsible = isTouch && sections === 'both'
+  const collapsible = sections === 'both'
   // 狭い画面では、幅いっぱいのボタンが縦に積まれて場所を取りすぎる。
   // アイコンだけにして下部の1行にまとめる
   const compactFooter = isTouch
@@ -656,34 +657,42 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
           bg="bg.subtle"
           py={1}
         >
-          {/* 狭い画面では折りたたみの開閉。広い画面ではエクスプローラーを開く */}
-          <Button
-            variant="ghost"
-            size="xs"
-            px={1}
-            color="fg.muted"
-            fontWeight="normal"
-            _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-            onClick={() => {
-              if (collapsible) {
-                toggle('manuals')
-                return
-              }
-              onSelectManualsRoot()
-              onNavigate?.()
-            }}
-          >
-            {collapsible ? (
-              manualsOpen ? (
-                <LuChevronDown />
-              ) : (
-                <LuChevronRight />
-              )
-            ) : (
-              <LuFolderTree />
-            )}{' '}
-            マニュアル
-          </Button>
+          <HStack gap={0} minW={0}>
+            {/* 開閉は専用のボタンに分ける。「マニュアル」を押したときは
+                エクスプローラーが開く動きを残したいため。
+                指で押す端末では見出し全体でも開閉できるようにする */}
+            {collapsible && (
+              <IconButton
+                aria-label={manualsOpen ? 'マニュアルを閉じる' : 'マニュアルを開く'}
+                size="2xs"
+                variant="ghost"
+                color="fg.muted"
+                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                onClick={() => toggle('manuals')}
+              >
+                {manualsOpen ? <LuChevronDown /> : <LuChevronRight />}
+              </IconButton>
+            )}
+            <Button
+              variant="ghost"
+              size="xs"
+              px={1}
+              color="fg.muted"
+              fontWeight="normal"
+              _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+              onClick={() => {
+                // 指で押す端末は、狭いシェブロンを狙わなくても畳めるようにする
+                if (collapsible && isTouch) {
+                  toggle('manuals')
+                  return
+                }
+                onSelectManualsRoot()
+                onNavigate?.()
+              }}
+            >
+              {!collapsible && <LuFolderTree />} マニュアル
+            </Button>
+          </HStack>
           {isAdmin && (
             <HStack gap={0}>
               <Tooltip label="AIで全マニュアルを再分類">
