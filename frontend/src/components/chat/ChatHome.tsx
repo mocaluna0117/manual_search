@@ -19,6 +19,7 @@ import {
   LuCircleStop,
   LuCopy,
   LuExternalLink,
+  LuArrowUp,
   LuImagePlus,
   LuMessageSquareText,
   LuPencil,
@@ -469,7 +470,9 @@ export function ChatHome({
         </HStack>
       )}
 
-      <HStack gap={2}>
+      {/* スマホでは全体をひと回り小さくする。ボタンが大きいままだと
+          入力欄に残る幅が狭くなり、行が膨らんで画面を占領してしまう */}
+      <HStack gap={{ base: 1, md: 2 }}>
         {/* 画像添付(スクリーンショットを添えて質問できる) */}
         <input
           ref={fileInputRef}
@@ -486,7 +489,7 @@ export function ChatHome({
           <Tooltip label="よく使う質問から選ぶ">
             <IconButton
               aria-label="よく使う質問から選ぶ"
-              size="lg"
+              size={{ base: 'md', md: 'lg' }}
               variant="outline"
               borderRadius="full"
               color="fg.muted"
@@ -498,10 +501,10 @@ export function ChatHome({
         </PromptTemplateMenu>
         <IconButton
           aria-label="画像を添付"
-          size="lg"
+          size={{ base: 'md', md: 'lg' }}
           variant="outline"
           borderRadius="full"
-          fontSize="xl"
+          fontSize={{ base: 'lg', md: 'xl' }}
           color="fg.muted"
           alignSelf="flex-end" // 入力欄が伸びても下端に揃える
           onClick={() => fileInputRef.current?.click()}
@@ -510,7 +513,7 @@ export function ChatHome({
         </IconButton>
         <Textarea
           ref={textareaRef}
-          size="lg"
+          size={{ base: 'md', md: 'lg' }}
           rows={1}
           autoresize // 入力量に応じて高さが自動で伸びる
           maxH="10em" // 伸びすぎ防止(超えたら内部スクロール)
@@ -539,24 +542,37 @@ export function ChatHome({
         {loading ? (
           // 送信中は「停止」に切り替える(待たされ続けないための逃げ道)
           <Button
-            size="lg"
+            size={{ base: 'md', md: 'lg' }}
             colorPalette="red"
             variant="outline"
             onClick={() => abortRef.current?.abort()}
             alignSelf="flex-end"
+            aria-label="停止"
           >
-            <LuCircleStop /> 停止
+            <LuCircleStop />
+            <Box as="span" hideBelow="md">
+              停止
+            </Box>
           </Button>
         ) : (
           <Button
-            size="lg"
+            size={{ base: 'md', md: 'lg' }}
             colorPalette="blue"
             onClick={handleSubmit}
             // 文章が無くても画像が添付されていれば送れる
             disabled={!input.trim() && !attachedImage}
             alignSelf="flex-end" // 入力欄が伸びてもボタンは下端に揃える
+            aria-label="検索"
+            borderRadius={{ base: 'full', md: 'l2' }}
           >
-            検索
+            {/* スマホでは「検索」の文字を省いて丸いボタンにする。
+                その分の幅は入力欄に回す(送るボタンだと一目で分かる形) */}
+            <Box as="span" hideFrom="md">
+              <LuArrowUp />
+            </Box>
+            <Box as="span" hideBelow="md">
+              検索
+            </Box>
           </Button>
         )}
       </HStack>
@@ -566,9 +582,19 @@ export function ChatHome({
   // 質問前(新規チャット): 中央に大きく検索欄(ChatGPT風の空状態)
   if (messages.length === 0 && !loadingHistory) {
     return (
-      <VStack h="100%" justify="center" gap={6} px={4} pt={{ base: 12, md: 0 }}>
-        <Heading size="2xl">Manualy</Heading>
-        <Text color="fg.muted">
+      <VStack
+        h="100%"
+        justify="center"
+        gap={{ base: 4, md: 6 }}
+        px={{ base: 3, md: 4 }}
+        pt={{ base: 12, md: 0 }}
+      >
+        <Heading size={{ base: 'xl', md: '2xl' }}>Manualy</Heading>
+        <Text
+          color="fg.muted"
+          fontSize={{ base: 'sm', md: 'md' }}
+          textAlign="center"
+        >
           知りたいことを入力すると、AIが最適なマニュアルを案内します
         </Text>
         {searchInput}
@@ -816,7 +842,7 @@ export function ChatHome({
       <Box
         w="100%"
         borderTopWidth="1px"
-        p={4}
+        p={{ base: 2, md: 4 }}
         display="flex"
         justifyContent="center"
       >
