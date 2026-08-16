@@ -525,10 +525,11 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             size="xs"
             w="100%"
             px={1}
-            mb={2}
             justifyContent="flex-start"
             color="fg.muted"
             fontWeight="normal"
+            // 閉じているときは中身が無いので、下の余白も要らない
+            mb={chatOpen ? 2 : 0}
             onClick={() => toggle('chat')}
           >
             {chatOpen ? <LuChevronDown /> : <LuChevronRight />} チャット履歴
@@ -636,7 +637,14 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
         </>
       )}
 
-      {showChat && showManuals && <Separator my={4} borderColor="border" />}
+      {showChat && showManuals && (
+        // 折りたたんで見出しだけが並ぶときは、上下の余白(16pxずつ)が
+        // 見出しの高さを超えて間延びして見えるので詰める
+        <Separator
+          my={collapsible && !chatOpen ? 2 : 4}
+          borderColor="border"
+        />
+      )}
 
       {showManuals && (
         <>
@@ -644,7 +652,8 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             フォルダが増えても操作ボタンに届くよう、見出しはスクロールしても上端に残す */}
         <HStack
           justify="space-between"
-          mb={2}
+          // 閉じているときは中身が無いので、下の余白も要らない
+          mb={manualsOpen ? 2 : 0}
           position="sticky"
           top={0}
           zIndex={1}
