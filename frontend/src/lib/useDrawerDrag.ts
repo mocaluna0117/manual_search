@@ -5,15 +5,6 @@ export function drawerWidth(): number {
   return Math.min(320, window.innerWidth * 0.85)
 }
 
-/**
- * 閉じているときに、ここから右へなぞり始めたら引き出しを引っ張れる範囲。
- *
- * iOSのSafariは画面のいちばん外側を「前の画面へ戻る」に使うため、
- * 外側だけを見ていると指の動きが届かない。少し内側まで拾う
- */
-const START_ZONE = 0.3
-const START_ZONE_MAX = 140
-
 /** 指を離したあと、開くか閉じるかを決める割合 */
 const SNAP_RATIO = 0.4
 
@@ -22,6 +13,24 @@ const FLICK_VELOCITY = 0.4
 
 /** 横の動きか縦の動きかを見分けるまでに必要な距離(px) */
 const DIRECTION_LOCK = 8
+
+/**
+ * 触れた場所が「横にスクロールできる中身」の内側かを調べる。
+ *
+ * 画面のどこからでも引き出しを掴めるようにすると、横に長い表やコードの
+ * スクロールを奪ってしまう。触れた要素から親をたどって確かめる
+ */
+function canScrollHorizontally(target: EventTarget | null): boolean {
+  let node = target instanceof Element ? target : null
+  while (node) {
+    if (node.scrollWidth > node.clientWidth + 1) {
+      const overflowX = getComputedStyle(node).overflowX
+      if (overflowX === 'auto' || overflowX === 'scroll') return true
+    }
+    node = node.parentElement
+  }
+  return false
+}
 
 /**
  * 指の動きに追従する引き出し。
@@ -58,12 +67,12 @@ export function useDrawerDrag(
     const onStart = (e: TouchEvent) => {
       const touch = e.touches[0]
       if (!touch) return
-      // 閉じているときは左側からのみ。開いているときはどこからでも掴める
-      const canStart = open
-        ? true
-        : touch.clientX <=
-          Math.min(window.innerWidth * START_ZONE, START_ZONE_MAX)
-      if (!canStart) return
+      // 画面のどこからでも掴める。左端だけに限ると、片手で持ったときに
+      // 親指が届く範囲(画面の右寄り)から開けない
+      //
+      // ただし、その場所が横にスクロールできる中身(長い表やコード)なら
+      // そちらを優先する。引き出しが出てしまうとスクロールできなくなる
+      if (canScrollHorizontally(e.target)) return
       state.current = {
         startX: touch.clientX,
         startY: touch.clientY,
