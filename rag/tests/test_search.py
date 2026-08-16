@@ -249,3 +249,33 @@ class TestAdminTools:
 
         assert "admin_only" in ADMIN_SYSTEM_ADDENDUM
         assert "鍵付き" in ADMIN_SYSTEM_ADDENDUM
+
+
+class TestRenameFolderTool:
+    """フォルダ名の変更。作り直すと同じ中身の箱が2つでき、元が空のまま残る"""
+
+    def tool(self, name: str) -> dict:
+        from llm import ADMIN_TOOLS
+
+        for t in ADMIN_TOOLS:
+            if t["toolSpec"]["name"] == name:
+                return t["toolSpec"]
+        raise AssertionError(f"{name} が見つかりません")
+
+    def test_名前変更のツールがある(self):
+        schema = self.tool("rename_folder")["inputSchema"]["json"]
+        assert set(schema["required"]) == {"folder", "new_name"}
+
+    def test_見せる範囲も一緒に変えられる(self):
+        props = self.tool("rename_folder")["inputSchema"]["json"]["properties"]
+        assert props["admin_only"]["type"] == "boolean"
+        # 指示が無ければ触らない(名前を変えただけで公開範囲が動かないように)
+        assert "admin_only" not in self.tool("rename_folder")["inputSchema"]["json"][
+            "required"
+        ]
+
+    def test_作り直さないよう指示文で釘を刺している(self):
+        from llm import ADMIN_SYSTEM_ADDENDUM
+
+        assert "rename_folder" in ADMIN_SYSTEM_ADDENDUM
+        assert "create_folderで作り直してはいけない" in ADMIN_SYSTEM_ADDENDUM

@@ -387,6 +387,57 @@ export class ChatService {
               );
             }
           }
+        } else if (action.name === 'rename_folder') {
+          // 名前の変更。作り直すと同じ中身の箱が2つでき、元が空のまま残る
+          const folderText = String(action.input.folder ?? '').trim();
+          const newName = String(action.input.new_name ?? '').trim();
+          if (!folderText || !newName) {
+            lines.push('⚠️ どのフォルダを何という名前に変えるか指定してください。');
+            continue;
+          }
+          const found = await this.categoryService.findByPartialName(folderText);
+          if (found.status === 'not_found') {
+            lines.push(
+              `⚠️ 「${folderText}」というフォルダはありません。現在のフォルダ:\n\n` +
+                found.folders.map((c) => `- ${c.name}`).join('\n'),
+            );
+            continue;
+          }
+          if (found.status === 'ambiguous') {
+            lines.push(
+              `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれの名前を変えますか？`,
+            );
+            options = found.folders
+              .slice(0, 10)
+              .map((c) => `「${c.name}」の名前を「${newName}」に変更`);
+            continue;
+          }
+          if (found.status === 'invalid') continue;
+          const adminOnly =
+            action.input.admin_only === undefined
+              ? undefined
+              : action.input.admin_only === true;
+          try {
+            const before = found.category.name;
+            await this.categoryService.rename(
+              found.category.id,
+              newName,
+              adminOnly,
+            );
+            const lockNote =
+              adminOnly === true
+                ? '(管理者だけに表示されます)'
+                : adminOnly === false
+                  ? '(全員に表示されます)'
+                  : '';
+            lines.push(
+              `📁 フォルダ「${before}」の名前を「${newName}」に変更しました${lockNote}。中のマニュアルはそのままです。`,
+            );
+          } catch (e) {
+            lines.push(
+              `⚠️ フォルダ「${folderText}」の名前を変更できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+            );
+          }
         } else if (action.name === 'move_manual') {
           // 特定の1件を今すぐ移動する。名前が曖昧なときは動かさず候補を出す
           const manualText = String(action.input.manual ?? '').trim();
@@ -542,6 +593,17 @@ export class ChatService {
       ) {
         notes.push(
           '⚠️ 実際には移動していません。「〇〇のマニュアルを△△フォルダに移動して」と送るか、一覧画面でドラッグして移動してください。',
+        );
+      }
+      if (
+        !ragActions.some((a) => a.name === 'rename_folder') &&
+        // 「フォルダ名を変更します」など、名前を変えると言うだけのケース
+        /(フォルダ名|フォルダの名前).{0,10}(を)?(変更|変え|改名)(し|いたし)?(ます|ました|ますね|ておきます)/.test(
+          answer,
+        )
+      ) {
+        notes.push(
+          '⚠️ 実際には名前は変わっていません。もう一度「〇〇フォルダの名前を△△に変えて」と送ってください。',
         );
       }
       if (

@@ -45,6 +45,33 @@ export class CategoryService {
     });
   }
 
+  /**
+   * 名前の一部からフォルダを探す(チャットの「〇〇フォルダの名前を変えて」用)。
+   * まず完全一致で決め、無ければ部分一致の候補を返す
+   */
+  async findByPartialName(needle: string) {
+    const text = needle.trim().normalize('NFC');
+    if (!text) return { status: 'invalid' as const };
+    const exact = await this.findByName(text);
+    if (exact) return { status: 'found' as const, category: exact };
+
+    const candidates = await this.prisma.manualCategory.findMany({
+      where: { name: { contains: text, mode: 'insensitive' }, deletedAt: null },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    if (candidates.length === 1) {
+      return { status: 'found' as const, category: candidates[0] };
+    }
+    // 見つからない/複数あるときは、選び直せるよう今あるフォルダを添えて返す
+    const all = await this.prisma.manualCategory.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    return candidates.length === 0
+      ? { status: 'not_found' as const, folders: all }
+      : { status: 'ambiguous' as const, folders: candidates };
+  }
+
   async create(name: string, adminOnly = false) {
     const trimmed = await this.validateName(name);
     // 新しいフォルダは一番下に置く
