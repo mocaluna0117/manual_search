@@ -284,11 +284,13 @@ export function ChatHome({
    * 「画像を見せて聞く」をしなくなってしまう。
    *
    * 入力欄に限らずチャット画面のどこで貼っても拾う。ただしダイアログ
-   * (お問い合わせなど)が開いているときは、そちらの貼り付けを横取りしない
+   * (お問い合わせなど)が開いているときは、そちらの貼り付けを横取りしない。
+   * 閉じているダイアログも中身はDOMに残っているので、開いているものだけを
+   * 見る(data-state。単に役割で探すと、常に見送ってしまう)
    */
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (document.querySelector('[role="dialog"]')) return
+      if (document.querySelector('[role="dialog"][data-state="open"]')) return
       const file = Array.from(e.clipboardData?.items ?? [])
         .filter((i) => i.type.startsWith('image/'))
         .map((i) => i.getAsFile())
