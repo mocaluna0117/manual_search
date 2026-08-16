@@ -13,11 +13,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { LuCircleCheck, LuImage, LuSend, LuX } from 'react-icons/lu'
 import { SEND_INQUIRY_MUTATION } from '../../graphql/inquiry'
-import {
-  ALLOWED_IMAGE_TYPES,
-  checkImage,
-  fileToBase64,
-} from '../../lib/image'
+import { ALLOWED_IMAGE_TYPES, checkImage, fileToBase64 } from '../../lib/image'
 import { errorMessage, toastError } from '../../lib/toast'
 
 interface InquiryDialogProps {
@@ -27,39 +23,70 @@ interface InquiryDialogProps {
 
 const MAX_LENGTH = 2000
 
+/** 添付できる枚数(サーバー側と合わせる) */
+const MAX_IMAGES = 5
+
 /** 管理者への問い合わせフォーム。送信するとメールで届く */
 export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
   const [message, setMessage] = useState('')
   const [sent, setSent] = useState(false)
-  // 添付する画面写真(任意)。プレビュー用のURLも一緒に持つ
-  const [image, setImage] = useState<{ file: File; url: string } | null>(null)
-  const [previewOpen, setPreviewOpen] = useState(false)
+  // 添付する画面写真(任意・複数可)。プレビュー用のURLも一緒に持つ
+  const [images, setImages] = useState<{ file: File; url: string }[]>([])
+  // 拡大表示している画像。nullなら閉じている
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [sendInquiry, { loading }] = useMutation(SEND_INQUIRY_MUTATION)
 
-  const clearImage = () => {
-    // プレビュー用に作ったURLは、使い終わったら開放する
-    if (image) URL.revokeObjectURL(image.url)
-    setImage(null)
-    setPreviewOpen(false)
+  /** すべての添付を外す(プレビュー用に作ったURLは必ず開放する) */
+  const clearImages = () => {
+    images.forEach((i) => URL.revokeObjectURL(i.url))
+    setImages([])
+    setPreviewIndex(null)
+  }
+
+  /** 1枚だけ外す */
+  const removeImage = (index: number) => {
+    const target = images[index]
+    if (target) URL.revokeObjectURL(target.url)
+    setImages(images.filter((_, i) => i !== index))
+    setPreviewIndex(null)
   }
 
   const close = () => {
     setMessage('')
-    clearImage()
+    clearImages()
     setSent(false)
     onClose()
   }
 
-  const pickImage = (file: File | undefined) => {
-    if (!file) return
-    const problem = checkImage(file)
-    if (problem) {
-      toastError('この画像は使えません', problem)
+  /** 選ばれた画像を添付に足す(使えないものは理由を伝えて飛ばす) */
+  const addImages = (files: File[]) => {
+    if (files.length === 0) return
+    const room = MAX_IMAGES - images.length
+    if (room <= 0) {
+      toastError(`画像は${MAX_IMAGES}枚までです`)
       return
     }
-    clearImage()
-    setImage({ file, url: URL.createObjectURL(file) })
+    const rejected: string[] = []
+    const accepted: { file: File; url: string }[] = []
+    for (const file of files.slice(0, room)) {
+      const problem = checkImage(file)
+      if (problem) {
+        rejected.push(`${file.name || '画像'}: ${problem}`)
+        continue
+      }
+      accepted.push({ file, url: URL.createObjectURL(file) })
+    }
+    if (rejected.length > 0) {
+      toastError('添付できない画像がありました', rejected.join('\n'))
+    }
+    if (files.length > room) {
+      toastError(
+        `画像は${MAX_IMAGES}枚までです`,
+        `${files.length - room}枚は添付していません`,
+      )
+    }
+    if (accepted.length > 0) setImages([...images, ...accepted])
   }
 
   /**
@@ -74,14 +101,13 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
   useEffect(() => {
     if (!open || sent) return
     const onPaste = (e: ClipboardEvent) => {
-      const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
-        i.type.startsWith('image/'),
-      )
-      if (!item) return
-      const file = item.getAsFile()
-      if (!file) return
+      const files = Array.from(e.clipboardData?.items ?? [])
+        .filter((i) => i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => f !== null)
+      if (files.length === 0) return
       e.preventDefault()
-      pickImage(file)
+      addImages(files)
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
@@ -93,15 +119,17 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
       await sendInquiry({
         variables: {
           message: message.trim(),
-          imageBase64: image ? await fileToBase64(image.file) : undefined,
-          imageFormat: image
-            ? ALLOWED_IMAGE_TYPES[image.file.type]
-            : undefined,
+          images: await Promise.all(
+            images.map(async (i) => ({
+              base64: await fileToBase64(i.file),
+              format: ALLOWED_IMAGE_TYPES[i.file.type],
+            })),
+          ),
         },
       })
       setSent(true)
       setMessage('')
-      clearImage()
+      clearImages()
     } catch (e) {
       toastError('送信できませんでした', errorMessage(e, ''))
     }
@@ -147,66 +175,77 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                   </Text>
 
                   {/* 画面写真の添付。言葉で説明しにくい不具合を伝えやすくする */}
-                  {image ? (
-                    <HStack
-                      gap={2}
-                      p={2}
-                      borderWidth="1px"
-                      borderRadius="md"
-                      align="center"
-                    >
-                      {/* 押すと大きく見られる。送る前に「これで合っているか」を
-                          確かめられるようにする */}
-                      <Image
-                        src={image.url}
-                        alt="添付する画像(押すと拡大)"
-                        boxSize="48px"
-                        objectFit="cover"
-                        borderRadius="sm"
-                        cursor="zoom-in"
-                        _hover={{ opacity: 0.8 }}
-                        onClick={() => setPreviewOpen(true)}
-                      />
-                      <Text
-                        fontSize="xs"
-                        flex="1"
-                        truncate
-                        cursor="zoom-in"
-                        onClick={() => setPreviewOpen(true)}
-                      >
-                        {image.file.name}
-                      </Text>
-                      <IconButton
-                        aria-label="添付を取り消す"
-                        size="xs"
-                        variant="ghost"
-                        onClick={clearImage}
-                      >
-                        <LuX />
-                      </IconButton>
-                    </HStack>
-                  ) : (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      alignSelf="flex-start"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <LuImage /> 画面の写真を添える
-                    </Button>
+                  {images.length > 0 && (
+                    <VStack gap={1} align="stretch">
+                      {images.map((item, index) => (
+                        <HStack
+                          key={item.url}
+                          gap={2}
+                          p={2}
+                          borderWidth="1px"
+                          borderRadius="md"
+                          align="center"
+                        >
+                          {/* 押すと大きく見られる。送る前に「これで合っているか」を
+                              確かめられるようにする */}
+                          <Image
+                            src={item.url}
+                            alt={`添付する画像${index + 1}(押すと拡大)`}
+                            boxSize="48px"
+                            objectFit="cover"
+                            borderRadius="sm"
+                            cursor="zoom-in"
+                            _hover={{ opacity: 0.8 }}
+                            onClick={() => setPreviewIndex(index)}
+                          />
+                          <Text
+                            fontSize="xs"
+                            flex="1"
+                            truncate
+                            cursor="zoom-in"
+                            onClick={() => setPreviewIndex(index)}
+                          >
+                            {item.file.name || `画像${index + 1}`}
+                          </Text>
+                          <IconButton
+                            aria-label="この添付を取り消す"
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => removeImage(index)}
+                          >
+                            <LuX />
+                          </IconButton>
+                        </HStack>
+                      ))}
+                    </VStack>
                   )}
-                  {!image && (
-                    <Text fontSize="xs" color="fg.subtle">
-                      画面を撮ってそのまま貼り付け（Ctrl+V / ⌘V）でも添えられます
-                    </Text>
+                  {images.length < MAX_IMAGES && (
+                    <>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        alignSelf="flex-start"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <LuImage />
+                        {images.length === 0
+                          ? '画面の写真を添える'
+                          : 'さらに追加'}
+                      </Button>
+                      <Text fontSize="xs" color="fg.subtle">
+                        貼り付け（Ctrl+V / ⌘V）でも添えられます。
+                        {MAX_IMAGES}枚まで、1枚4MBまで
+                      </Text>
+                    </>
                   )}
                   <input
                     ref={fileInputRef}
                     type="file"
+                    multiple
                     accept="image/png,image/jpeg,image/webp,image/gif"
                     style={{ display: 'none' }}
                     onChange={(e) => {
-                      pickImage(e.target.files?.[0])
+                      addImages(Array.from(e.target.files ?? []))
                       e.target.value = '' // 同じ画像を選び直せるように
                     }}
                   />
@@ -216,8 +255,8 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
 
             {/* 添付画像の拡大表示。問い合わせの入力内容は残したまま見られる */}
             <Dialog.Root
-              open={previewOpen && !!image}
-              onOpenChange={(e) => !e.open && setPreviewOpen(false)}
+              open={previewIndex !== null && !!images[previewIndex]}
+              onOpenChange={(e) => !e.open && setPreviewIndex(null)}
               size={{ base: 'full', md: 'xl' }}
             >
               <Portal>
@@ -227,23 +266,25 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                     <Dialog.Header>
                       <HStack justify="space-between" w="100%" gap={2}>
                         <Dialog.Title truncate>
-                          {image?.file.name}
+                          {previewIndex !== null &&
+                            (images[previewIndex]?.file.name ||
+                              `画像${previewIndex + 1}`)}
                         </Dialog.Title>
                         <IconButton
                           aria-label="閉じる"
                           size="sm"
                           variant="ghost"
                           flexShrink={0}
-                          onClick={() => setPreviewOpen(false)}
+                          onClick={() => setPreviewIndex(null)}
                         >
                           <LuX />
                         </IconButton>
                       </HStack>
                     </Dialog.Header>
                     <Dialog.Body pb={4}>
-                      {image && (
+                      {previewIndex !== null && images[previewIndex] && (
                         <Image
-                          src={image.url}
+                          src={images[previewIndex].url}
                           alt="添付する画像"
                           w="100%"
                           maxH="75vh"

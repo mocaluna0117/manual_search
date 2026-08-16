@@ -14,8 +14,18 @@ const TO_EMAILS = (
 const FROM_EMAIL = process.env.INQUIRY_FROM_EMAIL ?? TO_EMAILS[0];
 const MAX_LENGTH = 2000;
 
-/** 添付できる画像の上限(バイト)。SESの受け入れ上限に対して十分な余裕を取る */
+/** 画像1枚の上限(バイト) */
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+
+/** 添付できる枚数 */
+const MAX_IMAGE_COUNT = 5;
+
+/**
+ * 添付の合計サイズの上限。
+ * メールはbase64で約1.33倍に膨らむため、受信箱側の上限(25MB前後が多い)に
+ * 引っかからないよう、手前で止める
+ */
+const MAX_TOTAL_BYTES = 10 * 1024 * 1024;
 
 /** 添付を受け付ける画像形式(拡張子はここから決める) */
 const IMAGE_TYPES: Record<string, string> = {
@@ -48,7 +58,7 @@ export class InquiryService {
   async send(
     message: string,
     userEmail: string | null,
-    image?: InquiryImage,
+    images: InquiryImage[] = [],
   ) {
     const trimmed = message.trim();
     if (!trimmed) {
@@ -63,9 +73,12 @@ export class InquiryService {
     // 画像は添付として送るだけで、DBには保存しない。
     // 「うまくいかない画面」を見せてもらうのが目的なので、
     // 本文と一緒に届けば足りる(DBを重くしない)
-    let attachment: { bytes: Buffer; mimeType: string; ext: string } | null =
-      null;
-    if (image) {
+    if (images.length > MAX_IMAGE_COUNT) {
+      throw new BadRequestException(
+        `画像は${MAX_IMAGE_COUNT}枚までにしてください`,
+      );
+    }
+    const attachments = images.map((image, i) => {
       const ext = image.format.toLowerCase();
       const mimeType = IMAGE_TYPES[ext];
       if (!mimeType) {
@@ -76,9 +89,16 @@ export class InquiryService {
         throw new BadRequestException('画像を読み取れませんでした');
       }
       if (bytes.length > MAX_IMAGE_BYTES) {
-        throw new BadRequestException('画像は4MB以下にしてください');
+        throw new BadRequestException('画像は1枚あたり4MB以下にしてください');
       }
-      attachment = { bytes, mimeType, ext };
+      // 受信側で並び順が分かるよう、名前に番号を振る
+      return { bytes, mimeType, filename: `screenshot-${i + 1}.${ext}` };
+    });
+    const totalBytes = attachments.reduce((sum, a) => sum + a.bytes.length, 0);
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      throw new BadRequestException(
+        '画像の合計が大きすぎます(全部で10MBまで)',
+      );
     }
 
     const inquiry = await this.prisma.inquiry.create({
@@ -105,7 +125,7 @@ export class InquiryService {
             ReplyToAddresses: userEmail ? [userEmail] : undefined,
             // 添付があるときは、こちらで組み立てたメール全体を渡す。
             // Simple形式は添付を扱えないため
-            Content: attachment
+            Content: attachments.length
               ? {
                   Raw: {
                     Data: buildRawEmail({
@@ -114,7 +134,7 @@ export class InquiryService {
                       replyTo: userEmail,
                       subject,
                       body,
-                      attachment,
+                      attachments,
                     }),
                   },
                 }
@@ -149,14 +169,14 @@ function buildRawEmail({
   replyTo,
   subject,
   body,
-  attachment,
+  attachments,
 }: {
   from: string;
   to: string;
   replyTo: string | null;
   subject: string;
   body: string;
-  attachment: { bytes: Buffer; mimeType: string; ext: string };
+  attachments: { bytes: Buffer; mimeType: string; filename: string }[];
 }): Buffer {
   // 区切り文字は本文と衝突しない文字列にする
   const boundary = `----manualy-${Date.now().toString(36)}`;
@@ -178,12 +198,14 @@ function buildRawEmail({
     'Content-Transfer-Encoding: base64',
     '',
     wrap(Buffer.from(body, 'utf8').toString('base64')),
-    `--${boundary}`,
-    `Content-Type: ${attachment.mimeType}`,
-    'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="screenshot.${attachment.ext}"`,
-    '',
-    wrap(attachment.bytes.toString('base64')),
+    ...attachments.flatMap((a) => [
+      `--${boundary}`,
+      `Content-Type: ${a.mimeType}`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${a.filename}"`,
+      '',
+      wrap(a.bytes.toString('base64')),
+    ]),
     `--${boundary}--`,
     '',
   ];
