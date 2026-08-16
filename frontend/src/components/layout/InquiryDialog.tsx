@@ -15,6 +15,7 @@ import { LuCircleCheck, LuImage, LuSend, LuX } from 'react-icons/lu'
 import { SEND_INQUIRY_MUTATION } from '../../graphql/inquiry'
 import { ALLOWED_IMAGE_TYPES, checkImage, fileToBase64 } from '../../lib/image'
 import { errorMessage, toastError } from '../../lib/toast'
+import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
 import { ImagePreview } from '../ui/ImagePreview'
 
 interface InquiryDialogProps {
@@ -37,6 +38,7 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
   const [previewIndex, setPreviewIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [sendInquiry, { loading }] = useMutation(SEND_INQUIRY_MUTATION)
+  const isTouch = useIsTouchDevice()
 
   /** すべての添付を外す(プレビュー用に作ったURLは必ず開放する) */
   const clearImages = () => {
@@ -233,8 +235,15 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                           ? '画面の写真を添える'
                           : 'さらに追加'}
                       </Button>
-                      <Text fontSize="xs" color="fg.subtle">
-                        貼り付け（Ctrl+V / ⌘V）でも添えられます。
+                      {/* スマホでは貼り付けの案内を省く。ソフトキーボードに
+                          Ctrl/⌘は無いので案内の意味が無く、狭い画面では
+                          折り返して2行になってしまう */}
+                      <Text
+                        fontSize="xs"
+                        color="fg.subtle"
+                        whiteSpace="nowrap"
+                      >
+                        {!isTouch && '貼り付け（Ctrl+V / ⌘V）でも添えられます。'}
                         {MAX_IMAGES}枚まで、1枚4MBまで
                       </Text>
                     </>
