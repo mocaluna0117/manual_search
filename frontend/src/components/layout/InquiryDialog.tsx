@@ -10,7 +10,7 @@ import {
   Textarea,
   VStack,
 } from '@chakra-ui/react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LuCircleCheck, LuImage, LuSend, LuX } from 'react-icons/lu'
 import { SEND_INQUIRY_MUTATION } from '../../graphql/inquiry'
 import {
@@ -61,6 +61,31 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
     clearImage()
     setImage({ file, url: URL.createObjectURL(file) })
   }
+
+  /**
+   * 貼り付けからも添付できるようにする。
+   *
+   * 画面を撮ってそのまま貼るのが一番早い。ファイルに保存させると手間が増え、
+   * 「伝えるのが面倒だから報告しない」につながる。
+   *
+   * 入力欄に限らずダイアログを開いている間は拾う(どこを触っていても貼れる)。
+   * 文字の貼り付けには手を出さないので、本文の入力は今まで通り
+   */
+  useEffect(() => {
+    if (!open || sent) return
+    const onPaste = (e: ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
+        i.type.startsWith('image/'),
+      )
+      if (!item) return
+      const file = item.getAsFile()
+      if (!file) return
+      e.preventDefault()
+      pickImage(file)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  })
 
   const handleSend = async () => {
     if (!message.trim()) return
@@ -169,6 +194,11 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                     >
                       <LuImage /> 画面の写真を添える
                     </Button>
+                  )}
+                  {!image && (
+                    <Text fontSize="xs" color="fg.subtle">
+                      画面を撮ってそのまま貼り付け（Ctrl+V / ⌘V）でも添えられます
+                    </Text>
                   )}
                   <input
                     ref={fileInputRef}
