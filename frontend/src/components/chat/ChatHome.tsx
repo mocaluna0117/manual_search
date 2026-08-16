@@ -37,6 +37,7 @@ import { useManualViewer } from '../manual/ManualViewerProvider'
 import { MarkdownText } from './MarkdownText'
 import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
 import { PromptTemplateMenu } from './PromptTemplateMenu'
+import { ImagePreview } from '../ui/ImagePreview'
 import { Tooltip } from '../ui/Tooltip'
 import { toastError } from '../../lib/toast'
 import {
@@ -172,6 +173,10 @@ export function ChatHome({
   const [otherText, setOtherText] = useState('')
   // コピー直後のフィードバック表示(✓)に使う。対象メッセージのIDを持つ
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  // 拡大表示している画像。nullなら閉じている
+  const [preview, setPreview] = useState<{ url: string; label: string } | null>(
+    null,
+  )
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 送信中のリクエストを「停止」ボタンから中断するためのコントローラ
@@ -520,13 +525,23 @@ export function ChatHome({
         <HStack alignSelf="flex-start" gap={2} flexWrap="wrap" px={1} pt={1}>
           {attachedImages.map((item, index) => (
             <Box key={item.url} position="relative">
+              {/* 押すと大きく見られる。送る前に「これで合っているか」を
+                  確かめられるようにする */}
               <Image
                 src={item.url}
-                alt={`添付する画像${index + 1}`}
+                alt={`添付する画像${index + 1}(押すと拡大)`}
                 boxSize="56px"
                 objectFit="cover"
                 borderRadius="lg"
                 borderWidth="1px"
+                cursor="zoom-in"
+                _hover={{ opacity: 0.8 }}
+                onClick={() =>
+                  setPreview({
+                    url: item.url,
+                    label: item.file.name || `画像${index + 1}`,
+                  })
+                }
               />
               <IconButton
                 aria-label={`${index + 1}枚目の添付を取り消す`}
@@ -665,6 +680,14 @@ export function ChatHome({
           </Button>
         )}
       </HStack>
+
+      {/* 画像の拡大表示。添付中のものも、送信済みのものもここから開く
+          (入力欄は新規チャットでもスレッドでも出るので、置き場所はここ1つでよい) */}
+      <ImagePreview
+        src={preview?.url ?? null}
+        label={preview?.label}
+        onClose={() => setPreview(null)}
+      />
     </VStack>
   )
 
@@ -735,10 +758,13 @@ export function ChatHome({
                     <Image
                       key={url}
                       src={url}
-                      alt={`添付画像${i + 1}`}
+                      alt={`添付画像${i + 1}(押すと拡大)`}
                       maxH="160px"
                       maxW="100%"
                       borderRadius="md"
+                      cursor="zoom-in"
+                      _hover={{ opacity: 0.8 }}
+                      onClick={() => setPreview({ url, label: `画像${i + 1}` })}
                     />
                   ))}
                 </HStack>

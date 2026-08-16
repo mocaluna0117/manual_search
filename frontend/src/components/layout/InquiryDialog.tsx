@@ -15,6 +15,7 @@ import { LuCircleCheck, LuImage, LuSend, LuX } from 'react-icons/lu'
 import { SEND_INQUIRY_MUTATION } from '../../graphql/inquiry'
 import { ALLOWED_IMAGE_TYPES, checkImage, fileToBase64 } from '../../lib/image'
 import { errorMessage, toastError } from '../../lib/toast'
+import { ImagePreview } from '../ui/ImagePreview'
 
 interface InquiryDialogProps {
   open: boolean
@@ -254,48 +255,20 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
             </Dialog.Body>
 
             {/* 添付画像の拡大表示。問い合わせの入力内容は残したまま見られる */}
-            <Dialog.Root
-              open={previewIndex !== null && !!images[previewIndex]}
-              onOpenChange={(e) => !e.open && setPreviewIndex(null)}
-              size={{ base: 'full', md: 'xl' }}
-            >
-              <Portal>
-                <Dialog.Backdrop />
-                <Dialog.Positioner>
-                  <Dialog.Content>
-                    <Dialog.Header>
-                      <HStack justify="space-between" w="100%" gap={2}>
-                        <Dialog.Title truncate>
-                          {previewIndex !== null &&
-                            (images[previewIndex]?.file.name ||
-                              `画像${previewIndex + 1}`)}
-                        </Dialog.Title>
-                        <IconButton
-                          aria-label="閉じる"
-                          size="sm"
-                          variant="ghost"
-                          flexShrink={0}
-                          onClick={() => setPreviewIndex(null)}
-                        >
-                          <LuX />
-                        </IconButton>
-                      </HStack>
-                    </Dialog.Header>
-                    <Dialog.Body pb={4}>
-                      {previewIndex !== null && images[previewIndex] && (
-                        <Image
-                          src={images[previewIndex].url}
-                          alt="添付する画像"
-                          w="100%"
-                          maxH="75vh"
-                          objectFit="contain"
-                        />
-                      )}
-                    </Dialog.Body>
-                  </Dialog.Content>
-                </Dialog.Positioner>
-              </Portal>
-            </Dialog.Root>
+            <ImagePreview
+              src={
+                previewIndex !== null
+                  ? (images[previewIndex]?.url ?? null)
+                  : null
+              }
+              label={
+                previewIndex !== null
+                  ? images[previewIndex]?.file.name ||
+                    `画像${previewIndex + 1}`
+                  : undefined
+              }
+              onClose={() => setPreviewIndex(null)}
+            />
 
             <Dialog.Footer>
               <Button variant="outline" onClick={close}>
