@@ -12,7 +12,6 @@ import {
   Image,
   Input,
   Portal,
-  Separator,
   Spinner,
   Text,
   VStack,
@@ -637,13 +636,10 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
         </>
       )}
 
+      {/* 区切り線は置かない。見出しがあれば境目は分かるので、線があると
+          かえって窮屈に見える。間隔だけ空ける(折りたたみ時は詰める) */}
       {showChat && showManuals && (
-        // 折りたたんで見出しだけが並ぶときは、上下の余白(16pxずつ)が
-        // 見出しの高さを超えて間延びして見えるので詰める
-        <Separator
-          my={collapsible && !chatOpen ? 2 : 4}
-          borderColor="border"
-        />
+        <Box h={collapsible && !chatOpen ? 1 : 3} />
       )}
 
       {showManuals && (
