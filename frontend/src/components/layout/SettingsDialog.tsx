@@ -11,6 +11,7 @@ import {
   type LayoutMode,
   type ThemeMode,
 } from '../../lib/settings'
+import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
 
 const LAYOUT_OPTIONS: { value: LayoutMode; label: string; hint: string }[] = [
   {
@@ -46,6 +47,10 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const sendKey = useSendKey()
   const themeMode = useThemeMode()
   const layoutMode = useLayoutMode()
+  // 指で操作する端末では意味を持たない設定は出さない。
+  // 画面の並びは1枚しか表示せず、送信キーもソフトキーボードには
+  // Shift+Enterが無く、送信はボタンで行うため
+  const isTouch = useIsTouchDevice()
 
   return (
     <Dialog.Root open={open} onOpenChange={(e) => !e.open && onClose()} size="sm">
@@ -58,8 +63,10 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             </Dialog.Header>
 
             <Dialog.Body>
+              {!isTouch && (
+                <>
               <Text fontSize="sm" fontWeight="medium" mb={2}>
-                画面の並び（パソコン表示のみ）
+                画面の並び
               </Text>
               <VStack gap={2} align="stretch" mb={6}>
                 {LAYOUT_OPTIONS.map((option) => (
@@ -86,6 +93,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                   </Button>
                 ))}
               </VStack>
+                </>
+              )}
 
               <Text fontSize="sm" fontWeight="medium" mb={2}>
                 配色（テーマ）
@@ -104,27 +113,31 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                 ))}
               </VStack>
 
-              <Text fontSize="sm" fontWeight="medium" mb={2}>
-                メッセージの送信キー
-              </Text>
-              <VStack gap={2} align="stretch">
-                <Button
-                  variant={sendKey === 'enter' ? 'solid' : 'outline'}
-                  colorPalette="blue"
-                  justifyContent="flex-start"
-                  onClick={() => setSendKey('enter')}
-                >
-                  Enter で送信（Shift+Enter で改行）
-                </Button>
-                <Button
-                  variant={sendKey === 'shift-enter' ? 'solid' : 'outline'}
-                  colorPalette="blue"
-                  justifyContent="flex-start"
-                  onClick={() => setSendKey('shift-enter')}
-                >
-                  Enter で改行（Shift+Enter で送信）
-                </Button>
-              </VStack>
+              {!isTouch && (
+                <>
+                  <Text fontSize="sm" fontWeight="medium" mb={2}>
+                    メッセージの送信キー
+                  </Text>
+                  <VStack gap={2} align="stretch">
+                    <Button
+                      variant={sendKey === 'enter' ? 'solid' : 'outline'}
+                      colorPalette="blue"
+                      justifyContent="flex-start"
+                      onClick={() => setSendKey('enter')}
+                    >
+                      Enter で送信（Shift+Enter で改行）
+                    </Button>
+                    <Button
+                      variant={sendKey === 'shift-enter' ? 'solid' : 'outline'}
+                      colorPalette="blue"
+                      justifyContent="flex-start"
+                      onClick={() => setSendKey('shift-enter')}
+                    >
+                      Enter で改行（Shift+Enter で送信）
+                    </Button>
+                  </VStack>
+                </>
+              )}
             </Dialog.Body>
 
             <Dialog.Footer>
