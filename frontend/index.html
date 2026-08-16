@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <!-- ?v= はブラウザの頑固なfaviconキャッシュを破るためのバージョン番号 -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=4" />
+    <!--
+      ホーム画面に置いたときのアイコン。これが無いと、iOSは画面の縮小画像か
+      頭文字(「M」)で勝手に作ってしまう。iOSはPNGしか見ないのでSVGとは別に用意する。
+      角丸はOS側が付けるので、元絵は端まで塗った四角にしてある(public/app-icon.svg)
+    -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=1" />
+    <link rel="manifest" href="/manifest.json?v=1" />
+    <!-- ホーム画面に出る名前。長いと省略されるので短くしておく -->
+    <meta name="apple-mobile-web-app-title" content="Manualy" />
+    <!-- ホーム画面から開いたときにブラウザの枠を出さない(アプリのように見せる) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>Manualy</title>
