@@ -21,6 +21,8 @@ import { useEffect, useRef, useState } from 'react'
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc'
 import {
   LuBot,
+  LuChevronDown,
+  LuChevronRight,
   LuCircleHelp,
   LuFolderTree,
   LuLogOut,
@@ -74,6 +76,7 @@ import { AnalyticsDialog } from './AnalyticsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
 import { Tooltip } from '../ui/Tooltip'
 import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
+import { useCollapsedSections } from '../../lib/useCollapsedSections'
 import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
 import { drawerWidth, useDrawerDrag } from '../../lib/useDrawerDrag'
 
@@ -144,6 +147,15 @@ export function SidebarContent({
 }: SidebarProps) {
   const showChat = sections === 'both' || sections === 'chat'
   const showManuals = sections === 'both' || sections === 'manuals'
+  // 狭い画面では両方並べると長くなるので、見出しから折りたためるようにする。
+  // 閉じたことは覚えておく(開くたびに畳み直す手間をなくす)
+  const isTouch = useIsTouchDevice()
+  const collapsible = isTouch && sections === 'both'
+  const [collapsed, setCollapsed] = useCollapsedSections()
+  const chatOpen = !collapsible || !collapsed.chat
+  const manualsOpen = !collapsible || !collapsed.manuals
+  const toggle = (key: 'chat' | 'manuals') =>
+    setCollapsed({ ...collapsed, [key]: !collapsed[key] })
   const auth = useAuth()
   const { data, loading } = useQuery(CATEGORIES_QUERY)
   const { data: chatData, loading: loadingChats } = useQuery(CONVERSATIONS_QUERY)
@@ -504,16 +516,32 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
       <Box flex="1" overflowY="auto">
       {showChat && (
         <>
-        <Text fontSize="xs" color="fg.muted" mb={2}>
-          チャット履歴
-        </Text>
-        {loadingChats && <Spinner size="sm" />}
-        {chatData && chatData.conversations.length === 0 && (
+        {collapsible ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            w="100%"
+            px={1}
+            mb={2}
+            justifyContent="flex-start"
+            color="fg.muted"
+            fontWeight="normal"
+            onClick={() => toggle('chat')}
+          >
+            {chatOpen ? <LuChevronDown /> : <LuChevronRight />} チャット履歴
+          </Button>
+        ) : (
+          <Text fontSize="xs" color="fg.muted" mb={2}>
+            チャット履歴
+          </Text>
+        )}
+        {chatOpen && loadingChats && <Spinner size="sm" />}
+        {chatOpen && chatData && chatData.conversations.length === 0 && (
           <Text fontSize="sm" color="fg.muted">
             履歴はまだありません
           </Text>
         )}
-        <VStack gap={1} align="stretch">
+        <VStack gap={1} align="stretch" display={chatOpen ? 'flex' : 'none'}>
           {chatData?.conversations.map((conversation) =>
             editingChatId === conversation.id ? (
               // 編集モード: その場で名前を書き換える
@@ -620,7 +648,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
           bg="bg.subtle"
           py={1}
         >
-          {/* クリックでエクスプローラーのルート(全フォルダのアイコン表示)を開く */}
+          {/* 狭い画面では折りたたみの開閉。広い画面ではエクスプローラーを開く */}
           <Button
             variant="ghost"
             size="xs"
@@ -629,11 +657,24 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             fontWeight="normal"
             _hover={{ color: 'fg', bg: 'bg.emphasized' }}
             onClick={() => {
+              if (collapsible) {
+                toggle('manuals')
+                return
+              }
               onSelectManualsRoot()
               onNavigate?.()
             }}
           >
-            <LuFolderTree /> マニュアル
+            {collapsible ? (
+              manualsOpen ? (
+                <LuChevronDown />
+              ) : (
+                <LuChevronRight />
+              )
+            ) : (
+              <LuFolderTree />
+            )}{' '}
+            マニュアル
           </Button>
           {isAdmin && (
             <HStack gap={0}>
@@ -710,13 +751,13 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
           />
         )}
 
-        {loading && <Spinner size="sm" />}
-        {data && data.manualCategories.length === 0 && (
+        {manualsOpen && loading && <Spinner size="sm" />}
+        {manualsOpen && data && data.manualCategories.length === 0 && (
           <Text fontSize="sm" color="fg.muted">
             カテゴリはまだありません
           </Text>
         )}
-        <VStack gap={1} align="stretch">
+        <VStack gap={1} align="stretch" display={manualsOpen ? 'flex' : 'none'}>
           {data?.manualCategories.map((category) =>
             editingCategory?.id === category.id ? (
               // 編集モード: その場で名前を書き換える
