@@ -169,7 +169,9 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                     autoFocus
                     rows={7}
                     maxLength={MAX_LENGTH}
-                    placeholder="例: 〇〇のマニュアルを探しても出てきません"
+                    // 画像を添えられる欄なので、例も画面の不具合にする
+                    // (何を書けばよいか迷わず、添付の使いどころも伝わる)
+                    placeholder="例: マニュアルを開こうとしたらエラーが表示されました"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                   />
