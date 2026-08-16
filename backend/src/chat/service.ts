@@ -387,12 +387,18 @@ export class ChatService {
               );
             }
           }
-        } else if (action.name === 'rename_folder') {
-          // 名前の変更。作り直すと同じ中身の箱が2つでき、元が空のまま残る
+        } else if (action.name === 'update_folder') {
+          // 名前や見せる範囲の変更。作り直すと同じ中身の箱が2つでき、元が空で残る
           const folderText = String(action.input.folder ?? '').trim();
-          const newName = String(action.input.new_name ?? '').trim();
-          if (!folderText || !newName) {
-            lines.push('⚠️ どのフォルダを何という名前に変えるか指定してください。');
+          const newNameRaw = String(action.input.new_name ?? '').trim();
+          const adminOnly =
+            action.input.admin_only === undefined
+              ? undefined
+              : action.input.admin_only === true;
+          if (!folderText || (!newNameRaw && adminOnly === undefined)) {
+            lines.push(
+              '⚠️ どのフォルダをどう変えるか(名前・表示範囲)を指定してください。',
+            );
             continue;
           }
           const found = await this.categoryService.findByPartialName(folderText);
@@ -404,19 +410,22 @@ export class ChatService {
             continue;
           }
           if (found.status === 'ambiguous') {
+            const what = newNameRaw
+              ? `の名前を「${newNameRaw}」に変更`
+              : adminOnly
+                ? 'を鍵付きに変更'
+                : 'を全員に表示に変更';
             lines.push(
-              `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれの名前を変えますか？`,
+              `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれを変更しますか？`,
             );
             options = found.folders
               .slice(0, 10)
-              .map((c) => `「${c.name}」の名前を「${newName}」に変更`);
+              .map((c) => `「${c.name}」${what}`);
             continue;
           }
           if (found.status === 'invalid') continue;
-          const adminOnly =
-            action.input.admin_only === undefined
-              ? undefined
-              : action.input.admin_only === true;
+          // 名前の指定が無ければ今の名前のまま(見せる範囲だけを変える)
+          const newName = newNameRaw || found.category.name;
           try {
             const before = found.category.name;
             await this.categoryService.rename(
@@ -424,18 +433,71 @@ export class ChatService {
               newName,
               adminOnly,
             );
+            const renamed = newName !== before;
             const lockNote =
               adminOnly === true
-                ? '(管理者だけに表示されます)'
+                ? '管理者だけに表示するようにしました'
                 : adminOnly === false
-                  ? '(全員に表示されます)'
+                  ? '全員に表示するようにしました'
                   : '';
+            if (renamed && lockNote) {
+              lines.push(
+                `🔒 フォルダ「${before}」の名前を「${newName}」に変更し、${lockNote}。中のマニュアルはそのままです。`,
+              );
+            } else if (renamed) {
+              lines.push(
+                `📁 フォルダ「${before}」の名前を「${newName}」に変更しました。中のマニュアルはそのままです。`,
+              );
+            } else {
+              lines.push(
+                `${adminOnly ? '🔒' : '📁'} フォルダ「${before}」を${lockNote}。`,
+              );
+            }
+          } catch (e) {
             lines.push(
-              `📁 フォルダ「${before}」の名前を「${newName}」に変更しました${lockNote}。中のマニュアルはそのままです。`,
+              `⚠️ フォルダ「${folderText}」を変更できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+            );
+          }
+        } else if (action.name === 'delete_folder') {
+          const folderText = String(action.input.folder ?? '').trim();
+          if (!folderText) {
+            lines.push('⚠️ どのフォルダを削除するか指定してください。');
+            continue;
+          }
+          const found = await this.categoryService.findByPartialName(folderText);
+          if (found.status === 'not_found') {
+            lines.push(
+              `⚠️ 「${folderText}」というフォルダはありません。現在のフォルダ:\n\n` +
+                found.folders.map((c) => `- ${c.name}`).join('\n'),
+            );
+            continue;
+          }
+          if (found.status === 'ambiguous') {
+            // 消す操作なので、当てはまるものが複数あるときは絶対に推測しない
+            lines.push(
+              `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれを削除しますか？`,
+            );
+            options = found.folders
+              .slice(0, 10)
+              .map((c) => `「${c.name}」フォルダを削除`);
+            continue;
+          }
+          if (found.status === 'invalid') continue;
+          try {
+            const name = found.category.name;
+            const count = await this.manualService.countInCategory(
+              found.category.id,
+            );
+            await this.categoryService.delete(found.category.id);
+            lines.push(
+              `🗑 フォルダ「${name}」をゴミ箱に移動しました。` +
+                (count > 0
+                  ? `中のマニュアル${count}件も一緒に移動しています。ゴミ箱から元に戻せます。`
+                  : 'ゴミ箱から元に戻せます。'),
             );
           } catch (e) {
             lines.push(
-              `⚠️ フォルダ「${folderText}」の名前を変更できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+              `⚠️ フォルダ「${folderText}」を削除できませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
             );
           }
         } else if (action.name === 'move_manual') {
@@ -596,7 +658,7 @@ export class ChatService {
         );
       }
       if (
-        !ragActions.some((a) => a.name === 'rename_folder') &&
+        !ragActions.some((a) => a.name === 'update_folder') &&
         // 「フォルダ名を変更します」など、名前を変えると言うだけのケース
         /(フォルダ名|フォルダの名前).{0,10}(を)?(変更|変え|改名)(し|いたし)?(ます|ました|ますね|ておきます)/.test(
           answer,
@@ -604,6 +666,16 @@ export class ChatService {
       ) {
         notes.push(
           '⚠️ 実際には名前は変わっていません。もう一度「〇〇フォルダの名前を△△に変えて」と送ってください。',
+        );
+      }
+      if (
+        !ragActions.some((a) => a.name === 'delete_folder') &&
+        /フォルダ.{0,12}(を)?(削除|消)(し|いたし)?(ます|ました|ますね|ておきます)/.test(
+          answer,
+        )
+      ) {
+        notes.push(
+          '⚠️ 実際には削除していません。もう一度「〇〇フォルダを削除して」と送ってください。',
         );
       }
       if (

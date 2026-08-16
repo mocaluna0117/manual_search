@@ -446,6 +446,13 @@ export class ManualService implements OnApplicationBootstrap {
     return true;
   }
 
+  /** そのフォルダに入っている(ゴミ箱以外の)マニュアルの数 */
+  countInCategory(categoryId: string) {
+    return this.prisma.manual.count({
+      where: { ...ALIVE, categoryId },
+    });
+  }
+
   /** 再分類の対象件数(ピン留めを除く)とピン留め件数 */
   async reclassifyCounts() {
     const [target, pinned] = await Promise.all([

@@ -251,8 +251,8 @@ class TestAdminTools:
         assert "鍵付き" in ADMIN_SYSTEM_ADDENDUM
 
 
-class TestRenameFolderTool:
-    """フォルダ名の変更。作り直すと同じ中身の箱が2つでき、元が空のまま残る"""
+class TestFolderTools:
+    """フォルダの変更・削除。作り直しや「機能が無い」で断られないこと"""
 
     def tool(self, name: str) -> dict:
         from llm import ADMIN_TOOLS
@@ -262,20 +262,23 @@ class TestRenameFolderTool:
                 return t["toolSpec"]
         raise AssertionError(f"{name} が見つかりません")
 
-    def test_名前変更のツールがある(self):
-        schema = self.tool("rename_folder")["inputSchema"]["json"]
-        assert set(schema["required"]) == {"folder", "new_name"}
+    def test_変更のツールは対象だけが必須(self):
+        # 名前だけ・鍵だけ・両方、のどれでも呼べるようにする。
+        # new_nameを必須にすると「鍵付きにして」だけの依頼で呼べなくなる
+        schema = self.tool("update_folder")["inputSchema"]["json"]
+        assert schema["required"] == ["folder"]
+        props = schema["properties"]
+        assert "new_name" in props and props["admin_only"]["type"] == "boolean"
 
-    def test_見せる範囲も一緒に変えられる(self):
-        props = self.tool("rename_folder")["inputSchema"]["json"]["properties"]
-        assert props["admin_only"]["type"] == "boolean"
-        # 指示が無ければ触らない(名前を変えただけで公開範囲が動かないように)
-        assert "admin_only" not in self.tool("rename_folder")["inputSchema"]["json"][
-            "required"
-        ]
+    def test_削除のツールがある(self):
+        schema = self.tool("delete_folder")["inputSchema"]["json"]
+        assert schema["required"] == ["folder"]
 
-    def test_作り直さないよう指示文で釘を刺している(self):
+    def test_できないと答えないよう指示文で釘を刺している(self):
         from llm import ADMIN_SYSTEM_ADDENDUM
 
-        assert "rename_folder" in ADMIN_SYSTEM_ADDENDUM
+        assert "「その機能はありません」と答えてはいけない" in ADMIN_SYSTEM_ADDENDUM
         assert "create_folderで作り直してはいけない" in ADMIN_SYSTEM_ADDENDUM
+        # 鍵付きへの変更と削除の呼び方も書いてある
+        assert "update_folder" in ADMIN_SYSTEM_ADDENDUM
+        assert "delete_folder" in ADMIN_SYSTEM_ADDENDUM
