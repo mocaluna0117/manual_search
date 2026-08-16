@@ -232,7 +232,7 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                       >
                         <LuImage />
                         {images.length === 0
-                          ? '画面の写真を添える'
+                          ? '画像を添付する'
                           : 'さらに追加'}
                       </Button>
                       {/* スマホでは貼り付けの案内を省く。ソフトキーボードに
