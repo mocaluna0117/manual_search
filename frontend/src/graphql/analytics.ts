@@ -6,8 +6,16 @@ export interface AnalyticsSummary {
   questionCount: number
   answeredCount: number
   unansweredCount: number
-  /** 可否を判定できない回答(管理操作・エラー・記録開始前のデータ) */
+  /** 可否を判定できない回答の合計(下の4つの合計) */
   unknownCount: number
+  /** 数える意味が無い回答(聞き返し・管理操作・検索対象ゼロ) */
+  outOfScopeCount: number
+  /** 回答文の生成に失敗した回答 */
+  failedCount: number
+  /** 通常の回答なのにAIが根拠を申告せず、可否を判定できなかった回答 */
+  unreportedCount: number
+  /** 結末を記録し始める前に保存されたデータ */
+  notRecordedCount: number
   neverCitedManualCount: number
 }
 
@@ -30,6 +38,10 @@ export const ANALYTICS_SUMMARY_QUERY: TypedDocumentNode<
       answeredCount
       unansweredCount
       unknownCount
+      outOfScopeCount
+      failedCount
+      unreportedCount
+      notRecordedCount
       neverCitedManualCount
     }
   }

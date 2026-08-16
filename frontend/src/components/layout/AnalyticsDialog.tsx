@@ -171,34 +171,52 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
                 ))}
               </HStack>
 
-              {/* 全体像 */}
+              {/* 全体像。可否を判定した分を上の行に、判定していない分は
+                  理由ごとに下の行へ分けて出す。ひとまとめの「未判定」にすると、
+                  対象外(聞き返し・管理操作)が大半なのか、仕組みが働いて
+                  いないのかが画面から区別できない */}
               {summary && (
-                <HStack
-                  gap={4}
+                <VStack
+                  gap={1}
                   mb={4}
                   p={3}
                   borderWidth="1px"
                   borderRadius="md"
-                  flexWrap="wrap"
-                  fontSize="sm"
+                  align="stretch"
                 >
-                  <Text>
-                    質問 <b>{summary.questionCount}</b> 件
+                  <HStack gap={4} flexWrap="wrap" fontSize="sm">
+                    <Text>
+                      質問 <b>{summary.questionCount}</b> 件
+                    </Text>
+                    <Text color="green.fg">
+                      答えられた <b>{summary.answeredCount}</b>
+                    </Text>
+                    <Text color="orange.fg">
+                      答えられなかった <b>{summary.unansweredCount}</b>
+                    </Text>
+                  </HStack>
+                  <HStack gap={3} flexWrap="wrap" fontSize="xs" color="fg.subtle">
+                    <Text>
+                      対象外 {summary.outOfScopeCount}
+                      <Text as="span" color="fg.subtle">
+                        （聞き返し・管理操作）
+                      </Text>
+                    </Text>
+                    {summary.failedCount > 0 && (
+                      <Text color="red.fg">生成失敗 {summary.failedCount}</Text>
+                    )}
+                    {summary.unreportedCount > 0 && (
+                      <Text>判定漏れ {summary.unreportedCount}</Text>
+                    )}
+                    {summary.notRecordedCount > 0 && (
+                      <Text>記録前 {summary.notRecordedCount}</Text>
+                    )}
+                  </HStack>
+                  <Text fontSize="xs" color="fg.muted">
+                    この期間に一度も引用されていないマニュアル{' '}
+                    <b>{summary.neverCitedManualCount}</b> 件
                   </Text>
-                  <Text color="green.fg">
-                    答えられた <b>{summary.answeredCount}</b>
-                  </Text>
-                  <Text color="orange.fg">
-                    答えられなかった <b>{summary.unansweredCount}</b>
-                  </Text>
-                  <Text color="fg.subtle">
-                    未判定 {summary.unknownCount}
-                  </Text>
-                  <Box flex="1" />
-                  <Text color="fg.muted">
-                    未引用のマニュアル <b>{summary.neverCitedManualCount}</b> 件
-                  </Text>
-                </HStack>
+                </VStack>
               )}
 
               {/* タブ */}

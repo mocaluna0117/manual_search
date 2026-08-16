@@ -396,14 +396,41 @@ Cognitoとの紐付け(コールバックURL)やCLI手順は全てこの計画�
 **マイグレーションの流し方(フェーズ6でRDSを非公開に戻した後)**
 
 `manual-search-migrate`タスク定義を単発実行する。実行イメージには
-Prisma CLIが入っていないため、Dockerfileのbuildステージを
-`backend:migrate`タグとしてpushしてある。
+マイグレーションのSQLが入っていないため(runtimeステージは`dist`しか
+コピーしない)、Dockerfileのbuildステージを`backend:migrate`タグとして
+pushしてある。**新しいマイグレーションを足したら、このタグも一緒に
+push し直すこと。** 忘れると、タスクは古いマイグレーションしか持たない。
+
+```
+docker build --platform linux/arm64 --target build \
+  -t <ECR>/manual-search/backend:migrate -f backend/Dockerfile backend
+docker push <ECR>/manual-search/backend:migrate
+```
 
 ```
 aws ecs run-task --cluster manual-search --task-definition manual-search-migrate \
   --launch-type FARGATE --network-configuration \
   "awsvpcConfiguration={subnets=[subnet-0725bfdde0b078c0b],securityGroups=[sg-058aea10195085c48],assignPublicIp=ENABLED}"
 ```
+
+**マイグレーションを手で流す場合(2026-08-16に実施)**
+
+列を1つ足すだけなら、実行中のbackendイメージから直接流したほうが速い。
+`backend:migrate`のpushを忘れていても実行できる。手順は次の3つ。
+
+1. **先にRDSのスナップショットを取る**
+   (`aws rds create-db-snapshot`。`available`になるまで待つ)
+2. `manual-search-backend`タスク定義を単発実行し、コマンド上書きで
+   `node -e` からPrismaクライアント経由でSQLを流す。接続の作り方は
+   `src/prisma/service.ts` と同じ(`PrismaPg` + RDSのCA)にする
+3. 同じ実行の中で`_prisma_migrations`に記録を1行入れる。入れないと
+   次回の`migrate deploy`が「未適用」と誤認して二重に流そうとする。
+   checksumは**migration.sqlのsha256**で、ローカルで適用済みなら
+   `SELECT checksum FROM _prisma_migrations WHERE migration_name=...`
+   でそのまま取れる(`shasum -a 256`の結果と一致する)
+
+流したあとは`pg_indexes`を数えて、生SQLで作った検索用インデックス
+(HNSW / pg_trgm)が残っていることを必ず確認する。
 
 **管理者(ADMIN)ユーザーの用意**
 

@@ -190,27 +190,65 @@ export class AnalyticsService {
       .sort((a, b) => b.citedCount - a.citedCount || a.title.localeCompare(b.title, 'ja'));
   }
 
+  // 可否を数えなくてよい結末。聞き返しは会話の途中、管理操作はマニュアルへの
+  // 質問ではなく、検索対象ゼロは「探す先が無い」だけで、いずれも
+  // 「答えられなかった」に混ぜると「作るべきマニュアル」の一覧が濁る
+  private static readonly OUT_OF_SCOPE = ['clarify', 'admin', 'no_manuals'];
+
   /** 画面の見出しに出す全体像 */
   async summary(days?: number) {
     const since = this.since(days);
     const where = since ? { createdAt: { gte: since } } : {};
-    const [questionCount, answeredCount, unansweredCount, total, usage] =
-      await Promise.all([
-        this.prisma.message.count({ where: { ...where, role: 'USER' } }),
-        this.prisma.message.count({
-          where: { ...where, role: 'ASSISTANT', answeredFromManuals: true },
-        }),
-        this.prisma.message.count({
-          where: { ...where, role: 'ASSISTANT', answeredFromManuals: false },
-        }),
-        this.prisma.message.count({ where: { ...where, role: 'ASSISTANT' } }),
-        this.manualUsage(days),
-      ]);
+    const answers = { ...where, role: 'ASSISTANT' as const };
+    const [
+      questionCount,
+      answeredCount,
+      unansweredCount,
+      outOfScopeCount,
+      failedCount,
+      unreportedCount,
+      total,
+      usage,
+    ] = await Promise.all([
+      this.prisma.message.count({ where: { ...where, role: 'USER' } }),
+      this.prisma.message.count({
+        where: { ...answers, answeredFromManuals: true },
+      }),
+      this.prisma.message.count({
+        where: { ...answers, answeredFromManuals: false },
+      }),
+      this.prisma.message.count({
+        where: { ...answers, answerOutcome: { in: AnalyticsService.OUT_OF_SCOPE } },
+      }),
+      this.prisma.message.count({
+        where: { ...answers, answerOutcome: 'failed' },
+      }),
+      this.prisma.message.count({
+        where: { ...answers, answerOutcome: 'unreported' },
+      }),
+      this.prisma.message.count({ where: answers }),
+      this.manualUsage(days),
+    ]);
     return {
       questionCount,
       answeredCount,
       unansweredCount,
-      // 管理操作の応答・エラー・この記録より前のデータ
+      // 聞き返し・管理操作・検索対象ゼロ。数えても意味が無いもの
+      outOfScopeCount,
+      // 生成に失敗した(マニュアルの有無とは無関係の障害)
+      failedCount,
+      // 通常の回答なのにAIが根拠を申告せず、可否を判定できなかったもの。
+      // ここが増えていたら、集計の仕組み自体を疑う手がかりになる
+      unreportedCount,
+      // この結末を記録し始める前に保存されたデータ
+      notRecordedCount:
+        total -
+        answeredCount -
+        unansweredCount -
+        outOfScopeCount -
+        failedCount -
+        unreportedCount,
+      // 古い画面との互換のために残す(内訳を出せない場合の合計)
       unknownCount: total - answeredCount - unansweredCount,
       neverCitedManualCount: usage.filter((u) => u.citedCount === 0).length,
     };

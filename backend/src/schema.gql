@@ -46,6 +46,10 @@ type AnalyticsSummary {
   answeredCount: Int!
   unansweredCount: Int!
   unknownCount: Int!
+  outOfScopeCount: Int!
+  failedCount: Int!
+  unreportedCount: Int!
+  notRecordedCount: Int!
   neverCitedManualCount: Int!
 }
 

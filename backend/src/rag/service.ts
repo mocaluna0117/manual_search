@@ -21,6 +21,8 @@ interface RagSearchResponse {
   actions?: RagAction[];
   // マニュアルから答えられたか(null=判断材料なし)。利用状況の集計に使う
   answered?: boolean | null;
+  // 判定できなかった理由まで分かる結末(answeredはここから導かれている)
+  outcome?: string | null;
 }
 
 // 用途ごとのタイムアウト(ミリ秒)。
@@ -200,6 +202,7 @@ export class RagService {
       options: body.options ?? [],
       actions: body.actions ?? [],
       answered: body.answered ?? null,
+      outcome: body.outcome ?? null,
     };
   }
 
@@ -250,6 +253,7 @@ export class RagService {
       options: string[];
       actions?: RagAction[];
       answered?: boolean | null;
+      outcome?: string | null;
     };
     let done: DoneEvent | null = null;
     let failure: string | null = null;
@@ -291,6 +295,7 @@ export class RagService {
       options: done.options ?? [],
       actions: done.actions ?? [],
       answered: done.answered ?? null,
+      outcome: done.outcome ?? null,
     };
   }
 

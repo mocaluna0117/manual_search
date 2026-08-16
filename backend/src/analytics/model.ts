@@ -67,9 +67,25 @@ export class AnalyticsSummary {
   @Field(() => Int)
   unansweredCount!: number;
 
-  // 可否を判定できない回答数(管理操作・エラー・記録開始前のデータ)
+  // 可否を判定できない回答数(内訳を出せない場合の合計。古い画面との互換用)
   @Field(() => Int)
   unknownCount!: number;
+
+  // 数える意味が無い回答数(聞き返し・管理操作・検索対象ゼロ)
+  @Field(() => Int)
+  outOfScopeCount!: number;
+
+  // 回答文の生成に失敗した数(マニュアルの有無とは無関係の障害)
+  @Field(() => Int)
+  failedCount!: number;
+
+  // 通常の回答なのにAIが根拠を申告せず、可否を判定できなかった数
+  @Field(() => Int)
+  unreportedCount!: number;
+
+  // 結末を記録し始める前に保存されたデータの数
+  @Field(() => Int)
+  notRecordedCount!: number;
 
   // 一度も引用されていないマニュアルの数
   @Field(() => Int)

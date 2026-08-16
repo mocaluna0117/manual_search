@@ -115,10 +115,51 @@ class SearchResponse(BaseModel):
     # None=判断材料がない(管理操作・検索対象ゼロ・生成失敗・申告なし)。
     # 「どのマニュアルが足りないか」を後から集計するために保存側へ渡す
     answered: bool | None = None
+    # 判定できなかった理由まで分かるようにする(answeredはここから導いている)
+    outcome: str | None = None
 
 
 OPTION_PATTERN = re.compile(r"^\[選択肢\]\s*(.+)$", re.MULTILINE)
 REFERENCE_PATTERN = re.compile(r"^\[参照\]\s*(.*)$", re.MULTILINE)
+
+
+# 回答の結末。「答えられたか」だけだと、聞き返し・管理操作・生成失敗が
+# すべて「判定できず」に混ざり、集計を見ても何も分からなくなる
+OUTCOME_ANSWERED = "answered"  # 抜粋を根拠に答えた
+OUTCOME_NO_BASIS = "no_basis"  # 根拠が無いと申告した(=答えられなかった)
+OUTCOME_CLARIFY = "clarify"  # 聞き返した(絞り込み質問)。まだ続きがある
+OUTCOME_ADMIN = "admin"  # 管理操作(フォルダ作成など)の応答
+OUTCOME_FAILED = "failed"  # 回答文の生成に失敗した
+OUTCOME_UNREPORTED = "unreported"  # 通常の回答だが[参照]の申告が無かった
+OUTCOME_NO_MANUALS = "no_manuals"  # そもそも検索できるマニュアルが無い
+
+
+def decide_outcome(
+    actions: list, used: list[int] | None, options: list[str]
+) -> tuple[str, bool | None]:
+    """回答の結末と、集計用の「答えられたか」を決める。
+
+    答えられたか(bool)は結末から導く。判定できるのは、抜粋を根拠にしたと
+    申告した場合と、根拠が無いと申告した場合の2つだけ。
+    """
+    if actions:
+        outcome = OUTCOME_ADMIN  # マニュアルへの質問ではない
+    elif used:
+        outcome = OUTCOME_ANSWERED
+    elif options:
+        # 聞き返しは「答えられなかった」ではない。ここを混ぜると
+        # 「作るべきマニュアル」の一覧が聞き返しだらけになる
+        outcome = OUTCOME_CLARIFY
+    elif used is None:
+        outcome = OUTCOME_UNREPORTED  # 申告が無く、根拠にしたか分からない
+    else:
+        outcome = OUTCOME_NO_BASIS
+
+    if outcome == OUTCOME_ANSWERED:
+        return outcome, True
+    if outcome == OUTCOME_NO_BASIS:
+        return outcome, False
+    return outcome, None
 
 
 def extract_references(answer: str, total: int) -> tuple[str, list[int] | None]:
@@ -630,6 +671,7 @@ def search(req: SearchRequest) -> SearchResponse:
             answer=NO_MANUALS_ANSWER,
             citations=[],
             answered=None,
+            outcome=OUTCOME_NO_MANUALS,
         )
 
     # 3) 取得した抜粋を根拠として、Claudeに回答文を書かせる。
@@ -646,6 +688,7 @@ def search(req: SearchRequest) -> SearchResponse:
     actions: list[ActionRequest] = []
     used_rows = rows[:3]  # 保険の既定値: 参照の申告が無ければ上位3件だけ引用に出す
     answered: bool | None = None
+    outcome: str | None = None
     try:
         raw_answer, raw_actions = answer_generator.generate(
             req.question,
@@ -666,15 +709,12 @@ def search(req: SearchRequest) -> SearchResponse:
         # [参照]行から「実際に根拠に使った抜粋」を特定し、引用をそこに絞る
         answer, used = extract_references(answer, len(rows))
         if used is not None:
+            # 申告が無い場合は保険で上位3件を引用に出す(根拠にしたかは不明)
             used_rows = [rows[i] for i in used]
-            # 申告があったときだけ可否が確定する。[参照]なし=答えられなかった。
-            # 申告が無い場合は保険で上位3件を引用に出すが、根拠にしたかは
-            # 分からないのでNoneのままにする(集計を汚さない)
-            answered = len(used) > 0
+        outcome, answered = decide_outcome(actions, used, options)
         # 管理操作の要求時は、検索抜粋はほぼ無関係なので引用を出さない
         if actions:
             used_rows = []
-            answered = None  # マニュアルへの質問ではないので集計対象外
     except Exception as e:
         answer = (
             "関連しそうなマニュアルが見つかりましたが、"
@@ -683,7 +723,9 @@ def search(req: SearchRequest) -> SearchResponse:
         # 「失敗した」と伝えた応答から管理操作が実行されるのを防ぐ
         actions = []
         options = []
-        answered = None  # 生成に失敗しただけで、マニュアルの有無とは無関係
+        # 生成に失敗しただけで、マニュアルの有無とは無関係
+        answered = None
+        outcome = OUTCOME_FAILED
 
     # 引用は「実際に使われた抜粋」だけを、同じマニュアルの同じページでまとめて返す
     citations: list[Citation] = []
@@ -702,6 +744,7 @@ def search(req: SearchRequest) -> SearchResponse:
         options=options,
         actions=actions,
         answered=answered,
+        outcome=outcome,
     )
 
 
@@ -829,7 +872,14 @@ def search_stream(req: SearchRequest):
             yield sse("delta", {"text": NO_MANUALS_ANSWER})
             yield sse(
                 "done",
-                {"answer": NO_MANUALS_ANSWER, "citations": [], "options": [], "actions": [], "answered": None},
+                {
+                    "answer": NO_MANUALS_ANSWER,
+                    "citations": [],
+                    "options": [],
+                    "actions": [],
+                    "answered": None,
+                    "outcome": OUTCOME_NO_MANUALS,
+                },
             )
             return
 
@@ -839,6 +889,7 @@ def search_stream(req: SearchRequest):
         ]
         used_rows = rows[:3]  # 保険の既定値: 参照の申告が無ければ上位3件
         answered: bool | None = None
+        outcome: str | None = None
         options: list[str] = []
         actions: list[ActionRequest] = []
         buffer = StreamBuffer()
@@ -871,10 +922,9 @@ def search_stream(req: SearchRequest):
             answer, used = extract_references(answer, len(rows))
             if used is not None:
                 used_rows = [rows[i] for i in used]
-                answered = len(used) > 0
+            outcome, answered = decide_outcome(actions, used, options)
             if actions:
                 used_rows = []
-                answered = None
         except Exception as e:
             answer = (
                 "関連しそうなマニュアルが見つかりましたが、"
@@ -883,6 +933,7 @@ def search_stream(req: SearchRequest):
             actions = []
             options = []
             answered = None
+            outcome = OUTCOME_FAILED
             yield sse("reset", {})
 
         citations: list[dict] = []
@@ -909,6 +960,7 @@ def search_stream(req: SearchRequest):
                 "options": options,
                 "actions": [a.model_dump() for a in actions],
                 "answered": answered,
+                "outcome": outcome,
             },
         )
 
