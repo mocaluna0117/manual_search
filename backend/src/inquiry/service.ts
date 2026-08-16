@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/service';
 /** 問い合わせの宛先(カンマ区切りで複数可)。運用で変える場合は環境変数で上書きする */
 const TO_EMAILS = (
   process.env.INQUIRY_TO_EMAIL ??
-  'daibon20020117@gmail.com,kimura@takamatsu-build.jp'
+  'daibon20020117@gmail.com,kimura@takamatsu-build.co.jp'
 )
   .split(',')
   .map((s) => s.trim())
@@ -108,7 +108,10 @@ export class InquiryService {
     const subject = `【Manualy】お問い合わせ (${userEmail ?? '不明'})`;
     const body = [
       `送信者: ${userEmail ?? '不明'}`,
-      `受付日時: ${inquiry.createdAt.toLocaleString('ja-JP')}`,
+      // サーバーの時計はUTCなので、時間帯を明示しないとイギリス標準時で出る
+      `受付日時: ${inquiry.createdAt.toLocaleString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+      })}`,
       '',
       trimmed,
     ].join('\n');
