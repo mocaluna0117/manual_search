@@ -213,3 +213,39 @@ class TestHideAdminOnly:
         for sql in self.run(is_admin=False):
             assert "ingest_status = 'COMPLETED'" in sql
             assert "deleted_at IS NULL" in sql
+
+
+class TestAdminTools:
+    """チャットからの管理操作。フォルダを鍵付きで作れること"""
+
+    def tool(self, name: str) -> dict:
+        from llm import ADMIN_TOOLS
+
+        for t in ADMIN_TOOLS:
+            if t["toolSpec"]["name"] == name:
+                return t["toolSpec"]
+        raise AssertionError(f"{name} が見つかりません")
+
+    def test_フォルダ作成に鍵付きの指定がある(self):
+        props = self.tool("create_folder")["inputSchema"]["json"]["properties"]
+        assert "admin_only" in props
+        assert props["admin_only"]["type"] == "boolean"
+
+    def test_鍵付きは必須ではない(self):
+        # 指定が無ければ全員に見えるフォルダになる(既定は開いている側ではなく
+        # 「これまで通り」。隠す意図があるときだけ明示させる)
+        required = self.tool("create_folder")["inputSchema"]["json"]["required"]
+        assert required == ["name"]
+
+    def test_言い回しの手がかりが説明に入っている(self):
+        desc = self.tool("create_folder")["inputSchema"]["json"]["properties"][
+            "admin_only"
+        ]["description"]
+        for word in ["鍵付き", "管理者だけ"]:
+            assert word in desc
+
+    def test_システムプロンプトが他の保管場所と取り違えないよう釘を刺している(self):
+        from llm import ADMIN_SYSTEM_ADDENDUM
+
+        assert "admin_only" in ADMIN_SYSTEM_ADDENDUM
+        assert "鍵付き" in ADMIN_SYSTEM_ADDENDUM

@@ -6,6 +6,7 @@ import {
   LuCircleStop,
   LuImage,
   LuLoaderCircle,
+  LuLock,
   LuPin,
   LuRuler,
   LuTrash2,
@@ -45,6 +46,7 @@ const ICONS: Record<string, { icon: ReactNode; color?: string }> = {
   '✅': { icon: <LuCircleCheck size={15} />, color: 'green.fg' },
   '⏹️': { icon: <LuCircleStop size={15} />, color: 'fg.muted' },
   '⏹': { icon: <LuCircleStop size={15} />, color: 'fg.muted' },
+  '🔒': { icon: <LuLock size={14} />, color: 'orange.fg' },
   '📌': { icon: <LuPin size={14} />, color: 'fg.muted' },
   '📷': { icon: <LuImage size={14} /> },
 }

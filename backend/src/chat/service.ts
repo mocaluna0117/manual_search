@@ -269,7 +269,7 @@ export class ChatService {
         content =
           content
             .split('\n')
-            .filter((line) => !/^(📏|📁|🗑|⏳|✅)/.test(line))
+            .filter((line) => !/^(📏|📁|🔒|🗑|⏳|✅)/.test(line))
             .join('\n')
             .trim() || '(管理操作を実行しました)';
       }
@@ -353,18 +353,33 @@ export class ChatService {
         if (action.name === 'create_folder') {
           const name = String(action.input.name ?? '').trim();
           if (!name) continue;
+          // 「鍵付きで」と頼まれたときは管理者だけに見せるフォルダにする
+          const adminOnly = action.input.admin_only === true;
           // 既にあるフォルダを頼まれるのは、直前の会話で作った流れでは普通のこと。
           // これを失敗として返すと「さっき作ったのに」と話が噛み合わなくなるので、
           // そのまま使うと伝える(利用者の目的は「そこに入ること」なので達成できる)
           const existing = await this.categoryService.findByName(name);
           if (existing) {
-            lines.push(
-              `📁 フォルダ「${name}」は既にあるので、そのまま使います。`,
-            );
+            // 既にある箱でも、鍵付きを頼まれたならそこは合わせる。
+            // 「作って鍵付きにして」と頼んだのに開いたままでは意図に反する
+            if (adminOnly && !existing.adminOnly) {
+              await this.categoryService.rename(existing.id, name, true);
+              lines.push(
+                `🔒 フォルダ「${name}」は既にあるのでそのまま使い、管理者だけに表示するようにしました。`,
+              );
+            } else {
+              lines.push(
+                `📁 フォルダ「${name}」は既にあるので、そのまま使います。`,
+              );
+            }
           } else {
             try {
-              await this.categoryService.create(name);
-              lines.push(`📁 フォルダ「${name}」を作成しました。`);
+              await this.categoryService.create(name, adminOnly);
+              lines.push(
+                adminOnly
+                  ? `🔒 フォルダ「${name}」を作成しました(管理者だけに表示されます)。`
+                  : `📁 フォルダ「${name}」を作成しました。`,
+              );
             } catch (e) {
               // 名前の規則違反などの失敗は会話として伝える(例外で全体を止めない)
               lines.push(
