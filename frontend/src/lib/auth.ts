@@ -10,6 +10,10 @@ export const oidcConfig = {
   redirect_uri: window.location.origin, // ログイン後に戻ってくる場所
   response_type: 'code', // 認可コードフロー(+PKCE)。SPAの標準
   scope: 'openid email profile',
+  // Cognitoのログイン画面を日本語で出す。
+  // 既定は英語で、langを付けたときだけ日本語になる(付けた後はCognitoが
+  // 言語をcookieに覚えるので、次回以降は付けなくても日本語のまま)
+  extraQueryParams: { lang: 'ja' },
   // ログインから戻った直後、URLに残る ?code=...&state=... を消して見た目を綺麗に
   onSigninCallback: () => {
     window.history.replaceState({}, document.title, window.location.pathname)
@@ -34,5 +38,6 @@ export function getIdToken(): string | null {
 /** Cognito側のセッションも含めて完全にログアウトする */
 export function signOutRedirect() {
   const logoutUri = encodeURIComponent(window.location.origin)
-  window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${logoutUri}`
+  // ログアウト後にログイン画面が出る場合もあるので、こちらにも言語を渡す
+  window.location.href = `${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${logoutUri}&lang=ja`
 }

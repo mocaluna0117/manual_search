@@ -65,6 +65,15 @@
 - CloudFront: オリジン2つ（S3 + ALB）、`/graphql`だけALBへルーティング
 - SPAフォールバック: 403/404 → `/index.html`（nginx.confのtry_filesと同じ役割）
 - Cognitoアプリクライアントのコールバック/ログアウトURLに `https://xxx.cloudfront.net` を追加
+- ログイン画面の日本語化(2026-08-16に実施):
+  - 旧来のHosted UI(`ManagedLoginVersion: 1`)は英語のみで、Accept-Languageにも
+    `ui_locales`にも反応しない(実測で確認)
+  - 新しいmanaged login(`2`)に切り替え、認可リクエストに `lang=ja` を付けると日本語になる。
+    Essentialsプラン以上 + ブランディングの作成が条件
+  - **切り替えの順番が重要**: 先に `create-managed-login-branding` を実行してから
+    `update-user-pool-domain --managed-login-version 2` を行う。逆にすると
+    ログイン画面が「Login pages unavailable」になる(切り替え直後の伝播中に実際に出た)
+  - 戻す場合は `--managed-login-version 1`
 - backendの `FRONTEND_ORIGIN` をCloudFrontドメインに設定
 
 ### フェーズ6: E2E検証 + 運用スクリプト
