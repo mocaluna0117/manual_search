@@ -14,7 +14,12 @@ import { CurrentUser } from '../auth/current-user';
 import { UserRole } from '../auth/roles';
 import { UserService } from '../user/service';
 import { ChatImageInput } from './input';
-import { AskResult, ChatMessage, Conversation } from './model';
+import {
+  AskResult,
+  ChatMessage,
+  Conversation,
+  MessageFeedback,
+} from './model';
 import { ChatService } from './service';
 
 @Resolver(() => Conversation)
@@ -73,6 +78,25 @@ export class ChatResolver {
       images ?? [],
       controller.signal,
       user.role === UserRole.ADMIN, // 管理者ならチャットの管理操作(フォルダ作成等)が有効
+    );
+  }
+
+  // 回答への評価(👍/👎)。同じものを押し直したときは画面側からnullが届く
+  @Mutation(() => ChatMessage)
+  async rateAnswer(
+    @Args('messageId', { type: () => ID }) messageId: string,
+    @CurrentUser() authUser: AuthUser,
+    @Args('feedback', { type: () => MessageFeedback, nullable: true })
+    feedback?: MessageFeedback | null,
+    @Args('reason', { type: () => String, nullable: true })
+    reason?: string | null,
+  ) {
+    const user = await this.userService.ensure(authUser);
+    return this.chatService.rateAnswer(
+      messageId,
+      user.id,
+      feedback ?? null,
+      reason ?? null,
     );
   }
 

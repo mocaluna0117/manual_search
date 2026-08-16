@@ -11,7 +11,12 @@ import { PrismaService } from '../prisma/service';
 import { RagCitation } from '../rag/model';
 import { RagService, type RagAction } from '../rag/service';
 import { RuleService } from '../rule/service';
-import { AskResult, ChatMessage, MessageRole } from './model';
+import {
+  AskResult,
+  ChatMessage,
+  MessageFeedback,
+  MessageRole,
+} from './model';
 
 // 再分類の確認ボタンの文言。クリックするとこの文字列がそのまま質問として届くので、
 // pendingActionと合わせて確定的に照合する(確認の判定をLLMに任せない)
@@ -620,6 +625,39 @@ export class ChatService {
       : oneLine;
   }
 
+  /**
+   * 回答に評価を付ける(自分の会話のものだけ)。
+   *
+   * 同じ値をもう一度押したら取り消し、というのは画面側で判断すると
+   * 二重送信でずれるので、外した状態(null)を明示的に送ってもらう。
+   */
+  async rateAnswer(
+    messageId: string,
+    userId: string,
+    feedback: MessageFeedback | null,
+    reason: string | null,
+  ): Promise<ChatMessage> {
+    // 他人の会話のメッセージは「無い」と同じ扱いにする(存在自体を漏らさない)
+    const message = await this.prisma.message.findFirst({
+      where: { id: messageId, conversation: { userId } },
+    });
+    if (!message) {
+      throw new NotFoundException('メッセージが見つかりません');
+    }
+    if (message.role !== MessageRole.ASSISTANT) {
+      throw new BadRequestException('評価できるのはAIの回答だけです');
+    }
+    const updated = await this.prisma.message.update({
+      where: { id: messageId },
+      data: {
+        feedback,
+        // 理由は👎のときだけ持つ。評価を外したり👍にしたら一緒に消す
+        feedbackReason: feedback === MessageFeedback.BAD ? reason : null,
+      },
+    });
+    return this.toChatMessage(updated);
+  }
+
   private toChatMessage(message: Message): ChatMessage {
     return {
       id: message.id,
@@ -627,6 +665,8 @@ export class ChatService {
       content: message.content,
       citations: (message.citations as RagCitation[] | null) ?? [],
       options: (message.options as string[] | null) ?? [],
+      feedback: message.feedback,
+      feedbackReason: message.feedbackReason,
       createdAt: message.createdAt,
     };
   }

@@ -16,6 +16,10 @@ export interface AnalyticsSummary {
   unreportedCount: number
   /** 結末を記録し始める前に保存されたデータ */
   notRecordedCount: number
+  /** 人が👍を押した数 */
+  ratedGoodCount: number
+  /** 人が👎を押した数 */
+  ratedBadCount: number
   neverCitedManualCount: number
 }
 
@@ -42,6 +46,8 @@ export const ANALYTICS_SUMMARY_QUERY: TypedDocumentNode<
       failedCount
       unreportedCount
       notRecordedCount
+      ratedGoodCount
+      ratedBadCount
       neverCitedManualCount
     }
   }
@@ -52,6 +58,10 @@ export interface UnansweredQuestion {
   question: string
   answer: string
   askedAt: string
+  /** 人が👎を押したもの(AIの判定ではなく利用者の判断で拾われた) */
+  ratedBad: boolean
+  /** 👎のときに選ばれた理由(任意) */
+  feedbackReason: string | null
 }
 
 interface UnansweredData {
@@ -68,6 +78,8 @@ export const UNANSWERED_QUESTIONS_QUERY: TypedDocumentNode<
       question
       answer
       askedAt
+      ratedBad
+      feedbackReason
     }
   }
 `

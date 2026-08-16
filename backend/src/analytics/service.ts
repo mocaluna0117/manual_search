@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
 
@@ -38,55 +39,43 @@ export class AnalyticsService {
    */
   async unansweredQuestions(days?: number) {
     const since = this.since(days);
-    // 期間の有無でSQLを分ける。1本にまとめて (パラメータ IS NULL OR ...) と
-    // 書くと、Postgresが汎用プランに切り替わったときにこのORが残り、
-    // created_atの索引が使われず全件走査になる
     type Row = {
       id: string;
       question: string | null;
       answer: string;
       asked_at: Date;
+      rated_bad: boolean;
+      feedback_reason: string | null;
     };
-    const rows = since
-      ? await this.prisma.$queryRaw<Row[]>`
-          SELECT
-            a.id,
-            (
-              SELECT q.content FROM "Message" q
-              WHERE q.conversation_id = a.conversation_id
-                AND q.role = 'USER'
-                AND q.created_at <= a.created_at
-              ORDER BY q.created_at DESC
-              LIMIT 1
-            ) AS question,
-            a.content AS answer,
-            a.created_at AS asked_at
-          FROM "Message" a
-          WHERE a.role = 'ASSISTANT'
-            AND a.answered_from_manuals = false
-            AND a.created_at >= ${since}
-          ORDER BY a.created_at DESC
-          LIMIT ${LIMIT}
-        `
-      : await this.prisma.$queryRaw<Row[]>`
-          SELECT
-            a.id,
-            (
-              SELECT q.content FROM "Message" q
-              WHERE q.conversation_id = a.conversation_id
-                AND q.role = 'USER'
-                AND q.created_at <= a.created_at
-              ORDER BY q.created_at DESC
-              LIMIT 1
-            ) AS question,
-            a.content AS answer,
-            a.created_at AS asked_at
-          FROM "Message" a
-          WHERE a.role = 'ASSISTANT'
-            AND a.answered_from_manuals = false
-          ORDER BY a.created_at DESC
-          LIMIT ${LIMIT}
-        `;
+    // 人が👎を押したものは、AIが「答えられた」と申告していても拾う。
+    // 逆に👍が付いていれば、AIの申告に関わらずここには出さない。
+    // 期間の有無でSQLを分けるのは、1本にまとめて (パラメータ IS NULL OR ...)
+    // と書くと汎用プランでcreated_atの索引が使われなくなるため
+    const rows = await this.prisma.$queryRaw<Row[]>`
+      SELECT
+        a.id,
+        (
+          SELECT q.content FROM "Message" q
+          WHERE q.conversation_id = a.conversation_id
+            AND q.role = 'USER'
+            AND q.created_at <= a.created_at
+          ORDER BY q.created_at DESC
+          LIMIT 1
+        ) AS question,
+        a.content AS answer,
+        a.created_at AS asked_at,
+        (a.feedback = 'BAD') AS rated_bad,
+        a.feedback_reason
+      FROM "Message" a
+      WHERE a.role = 'ASSISTANT'
+        AND (
+          a.feedback = 'BAD'
+          OR (a.feedback IS NULL AND a.answered_from_manuals = false)
+        )
+        ${since ? Prisma.sql`AND a.created_at >= ${since}` : Prisma.empty}
+      ORDER BY a.created_at DESC
+      LIMIT ${LIMIT}
+    `;
     // 質問が見つからない回答(会話の作りが壊れている場合)は出さない
     return rows
       .filter((r) => r.question)
@@ -95,6 +84,8 @@ export class AnalyticsService {
         question: r.question as string,
         answer: r.answer,
         askedAt: r.asked_at,
+        ratedBad: r.rated_bad,
+        feedbackReason: r.feedback_reason,
       }));
   }
 
@@ -190,66 +181,80 @@ export class AnalyticsService {
       .sort((a, b) => b.citedCount - a.citedCount || a.title.localeCompare(b.title, 'ja'));
   }
 
-  // 可否を数えなくてよい結末。聞き返しは会話の途中、管理操作はマニュアルへの
-  // 質問ではなく、検索対象ゼロは「探す先が無い」だけで、いずれも
-  // 「答えられなかった」に混ぜると「作るべきマニュアル」の一覧が濁る
-  private static readonly OUT_OF_SCOPE = ['clarify', 'admin', 'no_manuals'];
+  /**
+   * 回答1件ずつを「どの箱に入るか」に分ける式。
+   *
+   * 人が押した評価を最優先にする。AIの自己申告は「抜粋を根拠にしたか」しか
+   * 見ておらず、根拠はあっても知りたいことに答えていない回答を拾えないため。
+   * 聞き返し・管理操作・検索対象ゼロは、可否を数えても意味が無いので分ける。
+   */
+  private static readonly BUCKET = Prisma.sql`
+    CASE
+      WHEN feedback = 'GOOD' THEN 'answered'
+      WHEN feedback = 'BAD' THEN 'unanswered'
+      WHEN answered_from_manuals = true THEN 'answered'
+      WHEN answered_from_manuals = false THEN 'unanswered'
+      WHEN answer_outcome IN ('clarify', 'admin', 'no_manuals') THEN 'out_of_scope'
+      WHEN answer_outcome = 'failed' THEN 'failed'
+      WHEN answer_outcome = 'unreported' THEN 'unreported'
+      ELSE 'not_recorded'
+    END`;
 
   /** 画面の見出しに出す全体像 */
   async summary(days?: number) {
     const since = this.since(days);
     const where = since ? { createdAt: { gte: since } } : {};
-    const answers = { ...where, role: 'ASSISTANT' as const };
-    const [
-      questionCount,
-      answeredCount,
-      unansweredCount,
-      outOfScopeCount,
-      failedCount,
-      unreportedCount,
-      total,
-      usage,
-    ] = await Promise.all([
+    type Counts = {
+      answered: bigint;
+      unanswered: bigint;
+      out_of_scope: bigint;
+      failed: bigint;
+      unreported: bigint;
+      not_recorded: bigint;
+      rated_good: bigint;
+      rated_bad: bigint;
+    };
+    const [questionCount, rows, usage] = await Promise.all([
       this.prisma.message.count({ where: { ...where, role: 'USER' } }),
-      this.prisma.message.count({
-        where: { ...answers, answeredFromManuals: true },
-      }),
-      this.prisma.message.count({
-        where: { ...answers, answeredFromManuals: false },
-      }),
-      this.prisma.message.count({
-        where: { ...answers, answerOutcome: { in: AnalyticsService.OUT_OF_SCOPE } },
-      }),
-      this.prisma.message.count({
-        where: { ...answers, answerOutcome: 'failed' },
-      }),
-      this.prisma.message.count({
-        where: { ...answers, answerOutcome: 'unreported' },
-      }),
-      this.prisma.message.count({ where: answers }),
+      this.prisma.$queryRaw<Counts[]>`
+        SELECT
+          count(*) FILTER (WHERE bucket = 'answered') AS answered,
+          count(*) FILTER (WHERE bucket = 'unanswered') AS unanswered,
+          count(*) FILTER (WHERE bucket = 'out_of_scope') AS out_of_scope,
+          count(*) FILTER (WHERE bucket = 'failed') AS failed,
+          count(*) FILTER (WHERE bucket = 'unreported') AS unreported,
+          count(*) FILTER (WHERE bucket = 'not_recorded') AS not_recorded,
+          count(*) FILTER (WHERE feedback = 'GOOD') AS rated_good,
+          count(*) FILTER (WHERE feedback = 'BAD') AS rated_bad
+        FROM (
+          SELECT feedback, ${AnalyticsService.BUCKET} AS bucket
+          FROM "Message"
+          WHERE role = 'ASSISTANT'
+          ${since ? Prisma.sql`AND created_at >= ${since}` : Prisma.empty}
+        ) t`,
       this.manualUsage(days),
     ]);
+    const c = rows[0];
+    const n = (v: bigint) => Number(v);
     return {
       questionCount,
-      answeredCount,
-      unansweredCount,
+      answeredCount: n(c.answered),
+      unansweredCount: n(c.unanswered),
       // 聞き返し・管理操作・検索対象ゼロ。数えても意味が無いもの
-      outOfScopeCount,
+      outOfScopeCount: n(c.out_of_scope),
       // 生成に失敗した(マニュアルの有無とは無関係の障害)
-      failedCount,
+      failedCount: n(c.failed),
       // 通常の回答なのにAIが根拠を申告せず、可否を判定できなかったもの。
       // ここが増えていたら、集計の仕組み自体を疑う手がかりになる
-      unreportedCount,
+      unreportedCount: n(c.unreported),
       // この結末を記録し始める前に保存されたデータ
-      notRecordedCount:
-        total -
-        answeredCount -
-        unansweredCount -
-        outOfScopeCount -
-        failedCount -
-        unreportedCount,
+      notRecordedCount: n(c.not_recorded),
+      // 人が押した評価の数(AIの判定より確かな根拠として別に見せる)
+      ratedGoodCount: n(c.rated_good),
+      ratedBadCount: n(c.rated_bad),
       // 古い画面との互換のために残す(内訳を出せない場合の合計)
-      unknownCount: total - answeredCount - unansweredCount,
+      unknownCount:
+        n(c.out_of_scope) + n(c.failed) + n(c.unreported) + n(c.not_recorded),
       neverCitedManualCount: usage.filter((u) => u.citedCount === 0).length,
     };
   }

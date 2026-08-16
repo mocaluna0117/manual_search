@@ -114,6 +114,12 @@ enum MessageRole {
   ASSISTANT // AIの回答
 }
 
+// 回答への評価(人の判断)。AIの自己申告より確かなので、集計ではこちらを優先する
+enum MessageFeedback {
+  GOOD // 役に立った
+  BAD // 役に立たなかった
+}
+
 // 会話スレッド(サイドバー履歴の1行)。所有者にだけ見える
 model Conversation {
   id        String    @id @default(uuid())
@@ -132,26 +138,32 @@ model Conversation {
 }
 
 model Message {
-  id             String       @id @default(uuid())
-  conversationId String       @map("conversation_id")
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           MessageRole
-  content        String
+  id                  String           @id @default(uuid())
+  conversationId      String           @map("conversation_id")
+  conversation        Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role                MessageRole
+  content             String
   // 回答時点の根拠マニュアル(スナップショット)。後でマニュアルが削除されても履歴は読める
-  citations      Json?
+  citations           Json?
   // 絞り込み質問の選択肢(ASSISTANTのみ)。フロントでボタンとして表示する
-  options        Json?
+  options             Json?
   // マニュアルから答えられたか(ASSISTANTのみ)。
   // true=抜粋を根拠に回答、false=AIが「根拠なし」と申告=答えられなかった、
   // null=判断材料がない(管理操作の応答・エラー・この列より前のデータ)。
   // 「どの領域のマニュアルが足りないか」を集計するために記録する
-  answeredFromManuals Boolean? @map("answered_from_manuals")
+  answeredFromManuals Boolean?         @map("answered_from_manuals")
   // 判定できなかった理由まで残す。answeredFromManualsだけだと、聞き返し・
   // 管理操作・生成失敗・記録開始前がすべて同じnullに潰れ、集計を見ても
   // 「仕組みが動いていないのか、対象外が多いだけなのか」が分からない。
   // answered / no_basis / clarify / admin / failed / unreported / no_manuals
-  answerOutcome  String?      @map("answer_outcome")
-  createdAt      DateTime     @default(now()) @map("created_at")
+  answerOutcome       String?          @map("answer_outcome")
+  // 回答への評価(ASSISTANTのみ)。AIの自己申告(answeredFromManuals)は
+  // 「抜粋を根拠にしたか」しか見ていないので、根拠はあっても知りたいことに
+  // 答えていない回答を拾えない。人が押した評価を別に持ち、集計では優先する
+  feedback            MessageFeedback?
+  // 👎のときだけ聞く理由(任意)。何が足りないかで打ち手が変わるため
+  feedbackReason      String?          @map("feedback_reason")
+  createdAt           DateTime         @default(now()) @map("created_at")
 
   // 会話を開くたびに「この会話のメッセージを古い順」で引く
   @@index([conversationId, createdAt])

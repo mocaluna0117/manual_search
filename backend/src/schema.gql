@@ -20,6 +20,8 @@ type UnansweredQuestion {
   question: String!
   answer: String!
   askedAt: DateTime!
+  ratedBad: Boolean!
+  feedbackReason: String
 }
 
 """
@@ -50,6 +52,8 @@ type AnalyticsSummary {
   failedCount: Int!
   unreportedCount: Int!
   notRecordedCount: Int!
+  ratedGoodCount: Int!
+  ratedBadCount: Int!
   neverCitedManualCount: Int!
 }
 
@@ -207,6 +211,8 @@ type ChatMessage {
   content: String!
   citations: [RagCitation!]!
   options: [String!]!
+  feedback: MessageFeedback
+  feedbackReason: String
   createdAt: DateTime!
 }
 
@@ -214,6 +220,12 @@ type ChatMessage {
 enum MessageRole {
   USER
   ASSISTANT
+}
+
+"""回答への評価(GOOD=役に立った / BAD=役に立たなかった)"""
+enum MessageFeedback {
+  GOOD
+  BAD
 }
 
 type Conversation {
@@ -270,6 +282,7 @@ type Mutation {
   deleteManualCategory(id: ID!): ManualCategory!
   reorderManualCategories(ids: [ID!]!): Int!
   askQuestion(question: String!, conversationId: ID, images: [ChatImageInput!]): AskResult!
+  rateAnswer(messageId: ID!, feedback: MessageFeedback, reason: String): ChatMessage!
   renameConversation(id: ID!, title: String!): Conversation!
   deleteConversation(id: ID!): Conversation!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!

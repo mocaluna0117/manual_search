@@ -1,5 +1,5 @@
 import { Field, ID, ObjectType, registerEnumType } from '@nestjs/graphql';
-import { MessageRole } from '../../generated/prisma/client';
+import { MessageFeedback, MessageRole } from '../../generated/prisma/client';
 import { RagCitation } from '../rag/model';
 
 registerEnumType(MessageRole, {
@@ -7,7 +7,12 @@ registerEnumType(MessageRole, {
   description: 'メッセージの発言者(USER=質問 / ASSISTANT=AI回答)',
 });
 
-export { MessageRole };
+registerEnumType(MessageFeedback, {
+  name: 'MessageFeedback',
+  description: '回答への評価(GOOD=役に立った / BAD=役に立たなかった)',
+});
+
+export { MessageFeedback, MessageRole };
 
 @ObjectType()
 export class ChatMessage {
@@ -27,6 +32,14 @@ export class ChatMessage {
   // 絞り込み質問の選択肢(クリックで回答できるボタンになる)
   @Field(() => [String])
   options!: string[];
+
+  // 回答への評価(未評価はnull)。押し直しで取り消せる
+  @Field(() => MessageFeedback, { nullable: true })
+  feedback!: MessageFeedback | null;
+
+  // 👎のときに選ばれた理由(任意)
+  @Field(() => String, { nullable: true })
+  feedbackReason!: string | null;
 
   @Field()
   createdAt!: Date;

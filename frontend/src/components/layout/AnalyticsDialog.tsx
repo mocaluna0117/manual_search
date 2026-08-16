@@ -212,6 +212,16 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
                       <Text>記録前 {summary.notRecordedCount}</Text>
                     )}
                   </HStack>
+                  {/* 人が押した評価。AIの自己申告より確かなので、
+                      上の「答えられた/答えられなかった」でも優先している */}
+                  {summary.ratedGoodCount + summary.ratedBadCount > 0 && (
+                    <HStack gap={3} fontSize="xs" color="fg.muted">
+                      <Text>
+                        利用者の評価 👍 {summary.ratedGoodCount} ・ 👎{' '}
+                        {summary.ratedBadCount}
+                      </Text>
+                    </HStack>
+                  )}
                   <Text fontSize="xs" color="fg.muted">
                     この期間に一度も引用されていないマニュアル{' '}
                     <b>{summary.neverCitedManualCount}</b> 件
@@ -252,7 +262,8 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
               {tab === 'unanswered' && (
                 <VStack gap={2} align="stretch">
                   <Text fontSize="xs" color="fg.subtle">
-                    AIが「マニュアルに根拠が無い」と判断した質問です。
+                    利用者が👎を押した質問と、AIが「マニュアルに根拠が無い」と
+                    判断した質問です。
                     ここに並ぶ内容が、次に用意すべきマニュアルの候補になります。
                   </Text>
                   {unansweredLoading && <Spinner size="sm" />}
@@ -271,9 +282,28 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
                       borderLeftWidth="3px"
                       borderLeftColor="orange.solid"
                     >
-                      <Text fontSize="sm" fontWeight="medium" overflowWrap="anywhere">
-                        {q.question}
-                      </Text>
+                      <HStack gap={2} align="flex-start">
+                        <Text
+                          fontSize="sm"
+                          fontWeight="medium"
+                          overflowWrap="anywhere"
+                          flex="1"
+                          minW={0}
+                        >
+                          {q.question}
+                        </Text>
+                        {/* 人が👎を押したものは、AIの判定より確かな手がかり */}
+                        {q.ratedBad && (
+                          <Badge colorPalette="orange" flexShrink={0}>
+                            👎 利用者の評価
+                          </Badge>
+                        )}
+                      </HStack>
+                      {q.feedbackReason && (
+                        <Text fontSize="xs" color="orange.fg" mt={1}>
+                          理由: {q.feedbackReason}
+                        </Text>
+                      )}
                       <Text fontSize="xs" color="fg.muted" mt={1} overflowWrap="anywhere">
                         AIの回答: {q.answer.slice(0, 120)}
                         {q.answer.length > 120 && '…'}

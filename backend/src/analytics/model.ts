@@ -15,6 +15,14 @@ export class UnansweredQuestion {
 
   @Field(() => Date)
   askedAt!: Date;
+
+  // 人が👎を押したもの(AIの判定ではなく利用者の判断で拾われた)
+  @Field()
+  ratedBad!: boolean;
+
+  // 👎のときに選ばれた理由(任意)
+  @Field(() => String, { nullable: true })
+  feedbackReason!: string | null;
 }
 
 /** 質問をテーマごとにまとめたもの(AIが意味の近さで束ねる) */
@@ -86,6 +94,14 @@ export class AnalyticsSummary {
   // 結末を記録し始める前に保存されたデータの数
   @Field(() => Int)
   notRecordedCount!: number;
+
+  // 人が👍を押した数
+  @Field(() => Int)
+  ratedGoodCount!: number;
+
+  // 人が👎を押した数
+  @Field(() => Int)
+  ratedBadCount!: number;
 
   // 一度も引用されていないマニュアルの数
   @Field(() => Int)

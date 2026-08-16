@@ -1,4 +1,4 @@
-import { useApolloClient, useQuery } from '@apollo/client/react'
+import { useApolloClient, useMutation, useQuery } from '@apollo/client/react'
 import {
   Box,
   Button,
@@ -23,11 +23,15 @@ import {
   LuImagePlus,
   LuMessageSquareText,
   LuPencil,
+  LuThumbsDown,
+  LuThumbsUp,
   LuX,
 } from 'react-icons/lu'
 import {
   CONVERSATION_QUERY,
+  RATE_ANSWER_MUTATION,
   type ChatMessage,
+  type MessageFeedback,
 } from '../../graphql/chat'
 import { ME_QUERY } from '../../graphql/me'
 import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
@@ -39,7 +43,7 @@ import { splitLeadingIcon, withInlineIcons } from './MessageIcons'
 import { PromptTemplateMenu } from './PromptTemplateMenu'
 import { ImagePreview } from '../ui/ImagePreview'
 import { Tooltip } from '../ui/Tooltip'
-import { toastError } from '../../lib/toast'
+import { errorMessage, toastError } from '../../lib/toast'
 import {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGE_BYTES,
@@ -118,6 +122,15 @@ function groupCitations(
 /** 1つの質問に添えられる画像の枚数(サーバー側の上限と合わせる) */
 const MAX_IMAGES = 4
 
+/**
+ * 👎のときに選べる理由。
+ *
+ * 自由記述にすると書いてもらえないので、次の打ち手が変わる3つに絞る。
+ * 「マニュアルが無い」なら作る、「内容が古い」なら差し替える、
+ * 「欲しい答えと違う」なら検索や回答の作り方を見直す
+ */
+const BAD_REASONS = ['マニュアルが無い', '内容が古い', '欲しい答えと違う']
+
 /** 発言時刻の表示。今日なら「14:32」、それ以外は「8/12 14:32」 */
 function formatChatTime(iso: string): string {
   const d = new Date(iso)
@@ -177,6 +190,9 @@ export function ChatHome({
   const [preview, setPreview] = useState<{ url: string; label: string } | null>(
     null,
   )
+  // 👎を押した直後に理由を聞く吹き出しを出す対象(メッセージID)
+  const [askingReason, setAskingReason] = useState<string | null>(null)
+  const [rateAnswer] = useMutation(RATE_ANSWER_MUTATION)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 送信中のリクエストを「停止」ボタンから中断するためのコントローラ
@@ -346,6 +362,57 @@ export function ChatHome({
     return () => document.removeEventListener('paste', onPaste)
   })
 
+  /**
+   * 回答に👍/👎を付ける(同じものをもう一度押すと取り消し)。
+   *
+   * AIの自己申告だけでは「根拠はあるが知りたいことに答えていない」回答を
+   * 拾えない。人の判断を記録して、利用状況の集計ではそちらを優先する。
+   */
+  const rate = async (message: LocalMessage, value: MessageFeedback) => {
+    const next = message.feedback === value ? null : value
+    const before = message.feedback ?? null
+    // 押した瞬間に色を変える(通信の往復を待たせない)
+    const apply = (feedback: MessageFeedback | null) =>
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === message.id
+            ? {
+                ...m,
+                feedback,
+                // 👎を外したら理由も消える
+                feedbackReason: feedback === 'BAD' ? m.feedbackReason : null,
+              }
+            : m,
+        ),
+      )
+    apply(next)
+    setAskingReason(next === 'BAD' ? message.id : null)
+    try {
+      await rateAnswer({ variables: { messageId: message.id, feedback: next } })
+    } catch (e) {
+      apply(before) // 送れなかったら元に戻す(押せたように見せない)
+      setAskingReason(null)
+      toastError('評価を送れませんでした', errorMessage(e, ''))
+    }
+  }
+
+  /** 👎の理由を送る(任意。選ばなくてもよい) */
+  const sendReason = async (message: LocalMessage, reason: string) => {
+    setAskingReason(null)
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === message.id ? { ...m, feedbackReason: reason } : m,
+      ),
+    )
+    try {
+      await rateAnswer({
+        variables: { messageId: message.id, feedback: 'BAD', reason },
+      })
+    } catch {
+      // 理由は付け足しなので、送れなくても評価そのものは残す
+    }
+  }
+
   /** 質問を送る。入力欄からの送信・選択肢ボタン・その他入力のすべてから使う */
   const send = async (rawQuestion: string) => {
     // 画像だけでも送れるようにする(質問文が無いときは既定の問いかけを補う。
@@ -373,6 +440,8 @@ export function ChatHome({
         content: question,
         citations: [],
         options: [],
+        feedback: null,
+        feedbackReason: null,
         createdAt: new Date().toISOString(),
         imageUrls: images.map((i) => i.url),
       },
@@ -414,6 +483,8 @@ export function ChatHome({
                 content: text,
                 citations: [],
                 options: [],
+                feedback: null,
+                feedbackReason: null,
                 createdAt: new Date().toISOString(),
               },
             ]
@@ -450,6 +521,8 @@ export function ChatHome({
               '⏹ 回答を停止しました。この質問は保存されていません。質問の編集ボタン(鉛筆マーク)から編集して再送信できます。',
             citations: [],
             options: [],
+            feedback: null,
+            feedbackReason: null,
             createdAt: new Date().toISOString(),
           },
         ])
@@ -463,6 +536,8 @@ export function ChatHome({
           content: `エラーが発生しました: ${e instanceof Error ? e.message : '不明なエラー'}`,
           citations: [],
           options: [],
+          feedback: null,
+          feedbackReason: null,
           createdAt: new Date().toISOString(),
         },
       ])
@@ -943,7 +1018,78 @@ export function ChatHome({
                     </IconButton>
                   </Tooltip>
                 )}
+                {/* 回答の評価。書き足し中の吹き出しにはまだIDが無いので出さない */}
+                {message.role === 'ASSISTANT' &&
+                  message.id !== streamingId && (
+                    <>
+                      <Tooltip label="役に立った">
+                        <IconButton
+                          aria-label="役に立った"
+                          size="2xs"
+                          variant="ghost"
+                          color={
+                            message.feedback === 'GOOD'
+                              ? 'green.fg'
+                              : 'fg.muted'
+                          }
+                          onClick={() => void rate(message, 'GOOD')}
+                        >
+                          <LuThumbsUp />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip label="役に立たなかった">
+                        <IconButton
+                          aria-label="役に立たなかった"
+                          size="2xs"
+                          variant="ghost"
+                          color={
+                            message.feedback === 'BAD'
+                              ? 'orange.fg'
+                              : 'fg.muted'
+                          }
+                          onClick={() => void rate(message, 'BAD')}
+                        >
+                          <LuThumbsDown />
+                        </IconButton>
+                      </Tooltip>
+                    </>
+                  )}
               </HStack>
+
+              {/* 👎の理由。任意なので、選ばなくても閉じられる。
+                  何が足りないかで次にやること(作る・直す・書き足す)が変わる */}
+              {askingReason === message.id && (
+                <HStack mt={2} gap={1} flexWrap="wrap">
+                  <Text fontSize="xs" color="fg.muted">
+                    差し支えなければ理由を:
+                  </Text>
+                  {BAD_REASONS.map((reason) => (
+                    <Button
+                      key={reason}
+                      size="2xs"
+                      variant="outline"
+                      onClick={() => void sendReason(message, reason)}
+                    >
+                      {reason}
+                    </Button>
+                  ))}
+                  <IconButton
+                    aria-label="閉じる"
+                    size="2xs"
+                    variant="ghost"
+                    color="fg.muted"
+                    onClick={() => setAskingReason(null)}
+                  >
+                    <LuX />
+                  </IconButton>
+                </HStack>
+              )}
+              {/* 選んだ理由は残しておく(あとから見て何が問題か分かるように) */}
+              {message.feedbackReason && askingReason !== message.id && (
+                <Text mt={1} fontSize="xs" color="fg.muted">
+                  評価の理由: {message.feedbackReason}
+                </Text>
+              )}
             </Box>
           ))}
 

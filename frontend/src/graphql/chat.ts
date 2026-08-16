@@ -3,12 +3,17 @@ import type { RagCitation } from './rag'
 
 export type MessageRole = 'USER' | 'ASSISTANT'
 
+/** 回答への評価。未評価はnull */
+export type MessageFeedback = 'GOOD' | 'BAD'
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
   citations: RagCitation[]
   options: string[] // 絞り込み質問の選択肢(ボタン表示)
+  feedback: MessageFeedback | null
+  feedbackReason: string | null // 👎のときに選ばれた理由(任意)
   createdAt: string // 発言時刻(吹き出しの下に表示)
 }
 
@@ -61,6 +66,8 @@ export const CONVERSATION_QUERY: TypedDocumentNode<
           pageNumber
         }
         options
+        feedback
+        feedbackReason
         createdAt
       }
     }
@@ -110,6 +117,8 @@ export const ASK_MUTATION: TypedDocumentNode<AskData, AskVars> = gql`
           pageNumber
         }
         options
+        feedback
+        feedbackReason
         createdAt
       }
     }
@@ -157,6 +166,33 @@ export const DELETE_CONVERSATION_MUTATION: TypedDocumentNode<
     deleteConversation(id: $id) {
       id
       title
+    }
+  }
+`
+
+// --- 回答への評価(👍/👎) ---
+
+interface RateAnswerData {
+  rateAnswer: ChatMessage
+}
+
+interface RateAnswerVars {
+  messageId: string
+  /** nullを渡すと評価を取り消す(同じボタンをもう一度押したとき) */
+  feedback?: MessageFeedback | null
+  /** 👎のときだけ送る理由(任意) */
+  reason?: string | null
+}
+
+export const RATE_ANSWER_MUTATION: TypedDocumentNode<
+  RateAnswerData,
+  RateAnswerVars
+> = gql`
+  mutation RateAnswer($messageId: ID!, $feedback: MessageFeedback, $reason: String) {
+    rateAnswer(messageId: $messageId, feedback: $feedback, reason: $reason) {
+      id
+      feedback
+      feedbackReason
     }
   }
 `
