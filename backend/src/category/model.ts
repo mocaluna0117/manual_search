@@ -18,6 +18,10 @@ export class ManualCategory {
   @Field(() => Int)
   manualCount!: number;
 
+  // 管理者だけに見せるフォルダか(一般利用者にはこのフォルダ自体が返らない)
+  @Field()
+  adminOnly!: boolean;
+
   // ゴミ箱に入った日時(nullなら通常のフォルダ)
   @Field(() => Date, { nullable: true })
   deletedAt!: Date | null;

@@ -91,20 +91,36 @@ export class ManualService implements OnApplicationBootstrap {
     );
   }
 
-  findAll(categoryId?: string, uncategorized?: boolean) {
+  /**
+   * 管理者だけに見せるフォルダの中身を隠すための条件。
+   *
+   * 未分類(categoryIdがnull)は誰でも見えるので、そのままにする。
+   * 呼び出し側が権限を渡し忘れても隠れる側に倒すため、既定はfalse
+   */
+  private visibleTo(includeAdminOnly: boolean) {
+    return includeAdminOnly
+      ? {}
+      : { OR: [{ categoryId: null }, { category: { adminOnly: false } }] };
+  }
+
+  findAll(
+    categoryId?: string,
+    uncategorized?: boolean,
+    includeAdminOnly = false,
+  ) {
     return this.prisma.manual.findMany({
       // uncategorized=trueなら「カテゴリ未設定」だけに絞る(nullでの絞り込み)
       where: uncategorized
         ? { ...ALIVE, categoryId: null }
         : categoryId
-          ? { ...ALIVE, categoryId }
-          : ALIVE,
+          ? { ...ALIVE, categoryId, ...this.visibleTo(includeAdminOnly) }
+          : { ...ALIVE, ...this.visibleTo(includeAdminOnly) },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   /** キーワード検索。タイトル/説明/ファイル名/本文(チャンク)を部分一致で探す */
-  async search(keyword: string) {
+  async search(keyword: string, includeAdminOnly = false) {
     const kw = keyword.trim();
     if (!kw) return [];
 
@@ -113,6 +129,7 @@ export class ManualService implements OnApplicationBootstrap {
     const manuals = await this.prisma.manual.findMany({
       where: {
         ...ALIVE,
+        ...this.visibleTo(includeAdminOnly),
         OR: [
           { title: contains },
           { fileName: contains },
@@ -461,12 +478,15 @@ export class ManualService implements OnApplicationBootstrap {
     instruction?: string,
   ) {
     const manuals = await this.prisma.manual.findMany({
-      // ピン留め(手動分類)されたものはAIの分類で動かさない
+      // ピン留め(手動分類)されたものはAIの分類で動かさない。
+      // 管理者だけに見せるフォルダの中身も動かさない。AIが別の箱へ移すと
+      // 全員に見える場所へ出てしまい、隠している意味が無くなる
       where: {
         ...where,
         ...ALIVE,
         ingestStatus: IngestStatus.COMPLETED,
         categoryPinned: false,
+        OR: [{ categoryId: null }, { category: { adminOnly: false } }],
       },
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
@@ -495,9 +515,11 @@ export class ManualService implements OnApplicationBootstrap {
     for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
       const batch = manuals.slice(i, i + BATCH_SIZE);
       // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)。
-      // ゴミ箱の中のフォルダは候補に出さない(選ばれても入れられないため)
+      // ゴミ箱の中のフォルダは候補に出さない(選ばれても入れられないため)。
+      // 管理者だけに見せるフォルダも候補にしない。AIの判断で普通の資料が
+      // そこへ入ると、置いた覚えのないものが誰にも見えなくなる
       const categories = await this.prisma.manualCategory.findMany({
-        where: ALIVE,
+        where: { ...ALIVE, adminOnly: false },
       });
       const assignments = await this.rag.organize(
         batch.map((m) => ({
@@ -614,8 +636,9 @@ export class ManualService implements OnApplicationBootstrap {
         include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
       });
       if (!manual || manual.categoryId) return;
+      // 取り込み直後の自動分類でも、隠しフォルダは行き先にしない
       const categories = await this.prisma.manualCategory.findMany({
-        where: ALIVE,
+        where: { ...ALIVE, adminOnly: false },
       });
       const assignments = await this.rag.organize(
         [
@@ -661,8 +684,10 @@ export class ManualService implements OnApplicationBootstrap {
       let category = await this.prisma.manualCategory.findFirst({
         // ゴミ箱の中のフォルダには絶対に入れない。入れてしまうと画面のどこにも
         // 出てこない(サイドバーはゴミ箱のフォルダを出さず、未分類でもなく、
-        // マニュアル自体は生きているのでゴミ箱にも出ない)迷子になる
-        where: { name, ...ALIVE },
+        // マニュアル自体は生きているのでゴミ箱にも出ない)迷子になる。
+        // 管理者だけに見せるフォルダも同じく行き先にしない(候補にも出していないが、
+        // AIが名前を言い当てた場合に備えてここでも止める)
+        where: { name, ...ALIVE, adminOnly: false },
       });
       if (!category) {
         // 既存カテゴリ限定モードでは、AIが指示を破って作った未知の名前は無視する
@@ -838,8 +863,12 @@ export class ManualService implements OnApplicationBootstrap {
     });
   }
 
-  async getDownloadUrl(id: string) {
-    const manual = await this.prisma.manual.findUnique({ where: { id } });
+  async getDownloadUrl(id: string, includeAdminOnly = false) {
+    const manual = await this.prisma.manual.findFirst({
+      // 隠しフォルダの中身は、IDを知っていても開けないようにする。
+      // 一覧に出さないだけでは、リンクを共有された時点で読めてしまう
+      where: { id, ...this.visibleTo(includeAdminOnly) },
+    });
     if (!manual) {
       throw new NotFoundException('マニュアルが見つかりません');
     }
@@ -860,10 +889,14 @@ export class ManualService implements OnApplicationBootstrap {
    * 一括ダウンロード用に、複数マニュアルの署名付きURLをまとめて発行する。
    * ブラウザ側がこのURLからファイルを取得してZIPにまとめる
    */
-  async getDownloadTargets(ids: string[]) {
+  async getDownloadTargets(ids: string[], includeAdminOnly = false) {
     if (ids.length === 0) return [];
     const manuals = await this.prisma.manual.findMany({
-      where: { ...ALIVE, id: { in: ids } },
+      where: {
+        ...ALIVE,
+        id: { in: ids },
+        ...this.visibleTo(includeAdminOnly),
+      },
       orderBy: { title: 'asc' },
     });
     return Promise.all(

@@ -5,10 +5,16 @@ import { PrismaService } from '../prisma/service';
 export class CategoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
+  /**
+   * フォルダ一覧。
+   *
+   * @param includeAdminOnly 管理者だけに見せるフォルダも含めるか。
+   *   既定はfalse(呼び出し側が権限を渡し忘れても漏れない側に倒す)
+   */
+  async findAll(includeAdminOnly = false) {
     // 管理者が決めた並び順が優先。同値(未設定)なら名前順で安定させる
     const categories = await this.prisma.manualCategory.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...(includeAdminOnly ? {} : { adminOnly: false }) },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     // 一覧の「サイズ」列に出す、フォルダ内のファイル合計。
@@ -39,7 +45,7 @@ export class CategoryService {
     });
   }
 
-  async create(name: string) {
+  async create(name: string, adminOnly = false) {
     const trimmed = await this.validateName(name);
     // 新しいフォルダは一番下に置く
     const last = await this.prisma.manualCategory.findFirst({
@@ -54,6 +60,7 @@ export class CategoryService {
         name: trimmed,
         sortOrder: (last?.sortOrder ?? 0) + 1,
         createdByAi: false,
+        adminOnly,
       },
     });
   }
@@ -88,7 +95,11 @@ export class CategoryService {
     return finalOrder.length;
   }
 
-  async rename(id: string, name: string) {
+  /**
+   * フォルダの名前と見せる範囲を変える。
+   * adminOnlyを省いたときは今のままにする(名前の変更だけで公開範囲が動かないように)
+   */
+  async rename(id: string, name: string, adminOnly?: boolean) {
     const trimmed = await this.validateName(name, id);
     const category = await this.prisma.manualCategory.findUnique({
       where: { id },
@@ -98,7 +109,7 @@ export class CategoryService {
     }
     return this.prisma.manualCategory.update({
       where: { id },
-      data: { name: trimmed },
+      data: { name: trimmed, ...(adminOnly === undefined ? {} : { adminOnly }) },
     });
   }
 

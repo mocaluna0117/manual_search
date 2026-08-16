@@ -166,3 +166,50 @@ class TestDecideOutcome:
 
     def test_申告が無ければ判定漏れとして残す(self):
         assert decide_outcome([], None, []) == ("unreported", None)
+
+
+class TestHideAdminOnly:
+    """管理者だけに見せるフォルダを、検索の3ルートすべてから外せているか。
+
+    ここが抜けると、一覧に出していないマニュアルの中身がAIの回答として出る。
+    実際にSQLを組み立てて、条件が入っているかを見る。
+    """
+
+    class FakeCursor:
+        """SQLを受け取って覚えておくだけの偽物(DBには繋がない)"""
+
+        def __init__(self):
+            self.queries: list[str] = []
+
+        def execute(self, sql, params=None):
+            self.queries.append(sql)
+
+        def fetchall(self):
+            return []
+
+    def run(self, is_admin: bool) -> list[str]:
+        from main import hybrid_search
+
+        cur = self.FakeCursor()
+        hybrid_search(cur, "[0,0]", ["水栓", "漏水"], is_admin)
+        return cur.queries
+
+    def test_一般利用者には3ルートすべてに除外条件が入る(self):
+        queries = self.run(is_admin=False)
+        assert len(queries) == 3, "ベクトル・キーワード・タイトルの3本が動くこと"
+        for sql in queries:
+            assert "admin_only" in sql
+
+    def test_管理者には除外条件が入らない(self):
+        for sql in self.run(is_admin=True):
+            assert "admin_only" not in sql
+
+    def test_除外条件は未分類を巻き込まない(self):
+        # NOT EXISTS(...)なので、categoryIdがnullの行は残る
+        sql = self.run(is_admin=False)[0]
+        assert "NOT EXISTS" in sql and '"ManualCategory"' in sql
+
+    def test_取り込み済み・ゴミ箱以外という条件は残っている(self):
+        for sql in self.run(is_admin=False):
+            assert "ingest_status = 'COMPLETED'" in sql
+            assert "deleted_at IS NULL" in sql

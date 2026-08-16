@@ -6,6 +6,7 @@ export interface Category {
   updatedAt?: string // 詳細表示の「更新日時」列に使う
   totalSize?: number // フォルダ内のファイル合計サイズ(バイト)
   manualCount?: number // フォルダ内のファイル数
+  adminOnly?: boolean // 管理者だけに見せるフォルダか
 }
 
 interface CategoriesData {
@@ -20,6 +21,7 @@ export const CATEGORIES_QUERY: TypedDocumentNode<CategoriesData> = gql`
       updatedAt
       totalSize
       manualCount
+      adminOnly
     }
   }
 `
@@ -51,16 +53,19 @@ interface CreateCategoryData {
 
 interface CreateCategoryVars {
   name: string
+  /** 管理者だけに見せるフォルダにするか */
+  adminOnly?: boolean
 }
 
 export const CREATE_CATEGORY_MUTATION: TypedDocumentNode<
   CreateCategoryData,
   CreateCategoryVars
 > = gql`
-  mutation CreateManualCategory($name: String!) {
-    createManualCategory(name: $name) {
+  mutation CreateManualCategory($name: String!, $adminOnly: Boolean) {
+    createManualCategory(name: $name, adminOnly: $adminOnly) {
       id
       name
+      adminOnly
     }
   }
 `
@@ -74,16 +79,23 @@ interface UpdateCategoryData {
 interface UpdateCategoryVars {
   id: string
   name: string
+  /** 省略すると今の設定のまま(名前の変更だけで公開範囲が動かないように) */
+  adminOnly?: boolean
 }
 
 export const UPDATE_CATEGORY_MUTATION: TypedDocumentNode<
   UpdateCategoryData,
   UpdateCategoryVars
 > = gql`
-  mutation UpdateManualCategory($id: ID!, $name: String!) {
-    updateManualCategory(id: $id, name: $name) {
+  mutation UpdateManualCategory(
+    $id: ID!
+    $name: String!
+    $adminOnly: Boolean
+  ) {
+    updateManualCategory(id: $id, name: $name, adminOnly: $adminOnly) {
       id
       name
+      adminOnly
     }
   }
 `

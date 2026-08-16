@@ -23,6 +23,10 @@ model ManualCategory {
   // 既定をfalseにしてあるのは安全側に倒すため(書き忘れても
   // 「消してよい候補」に入らない)。AIが作る経路だけが明示的にtrueを入れる
   createdByAi Boolean   @default(false) @map("created_by_ai")
+  // 管理者だけに見せるフォルダ。一般利用者には一覧にも検索にも出さず、
+  // AIの回答の根拠にもしない。一覧から隠すだけでは、質問への回答を通して
+  // 中身が漏れてしまうため、検索の段階で除く
+  adminOnly   Boolean   @default(false) @map("admin_only")
   // 管理者がドラッグで決めた並び順(小さいほど上)。同値なら名前順
   sortOrder   Int       @default(0) @map("sort_order")
   // ゴミ箱。中のマニュアルごとフォルダを捨てられるようにするための印。

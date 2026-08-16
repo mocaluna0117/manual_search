@@ -82,6 +82,7 @@ type ManualCategory {
   name: String!
   totalSize: Float!
   manualCount: Int!
+  adminOnly: Boolean!
   deletedAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -273,8 +274,8 @@ type Mutation {
   inviteUser(email: String!, role: UserRole): ManagedUser!
   updateUserRole(cognitoSub: ID!, role: UserRole!): ManagedUser!
   deleteUser(cognitoSub: ID!): Boolean!
-  createManualCategory(name: String!): ManualCategory!
-  updateManualCategory(id: ID!, name: String!): ManualCategory!
+  createManualCategory(name: String!, adminOnly: Boolean): ManualCategory!
+  updateManualCategory(id: ID!, name: String!, adminOnly: Boolean): ManualCategory!
   deleteManualCategory(id: ID!): ManualCategory!
   reorderManualCategories(ids: [ID!]!): Int!
   rateAnswer(messageId: ID!, feedback: MessageFeedback, reason: String): ChatMessage!

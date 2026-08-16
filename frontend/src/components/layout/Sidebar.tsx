@@ -7,6 +7,7 @@ import {
 import {
   Box,
   Button,
+  Checkbox,
   HStack,
   IconButton,
   Image,
@@ -25,6 +26,8 @@ import {
   LuCircleHelp,
   LuFolderTree,
   LuLogOut,
+  LuLock,
+  LuLockOpen,
   LuMail,
   LuMenu,
   LuMessageSquarePlus,
@@ -199,6 +202,8 @@ export function SidebarContent({
   // カテゴリ管理(ADMINのみUIに出る。本命の防御はバックエンド)
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
+  // 管理者だけに見せるフォルダとして作るか
+  const [newCategoryAdminOnly, setNewCategoryAdminOnly] = useState(false)
   const [createCategory] = useMutation(CREATE_CATEGORY_MUTATION, {
     refetchQueries: ['ManualCategories'],
   })
@@ -215,11 +220,40 @@ export function SidebarContent({
     const name = newCategoryName.trim()
     if (!name) return
     try {
-      await createCategory({ variables: { name } })
+      await createCategory({
+        variables: { name, adminOnly: newCategoryAdminOnly },
+      })
       setNewCategoryName('')
+      setNewCategoryAdminOnly(false)
       setAddingCategory(false)
     } catch (e) {
       toastError('カテゴリを作成できませんでした', errorMessage(e, ''))
+    }
+  }
+
+  /** フォルダの見せる範囲を切り替える(管理者だけ ⇄ 全員) */
+  const handleToggleAdminOnly = async (category: Category) => {
+    const next = !category.adminOnly
+    if (
+      next &&
+      !window.confirm(
+        `フォルダ「${category.name}」を管理者だけに表示しますか？\n` +
+          '中のマニュアルは一般の利用者の一覧・検索・AIの回答から出なくなります。',
+      )
+    ) {
+      return
+    }
+    try {
+      await updateCategory({
+        variables: { id: category.id, name: category.name, adminOnly: next },
+      })
+      toastSuccess(
+        next
+          ? `「${category.name}」を管理者だけに表示にしました`
+          : `「${category.name}」を全員に表示にしました`,
+      )
+    } catch (e) {
+      toastError('表示範囲を変更できませんでした', errorMessage(e, ''))
     }
   }
 
@@ -749,31 +783,53 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
 
         {/* カテゴリ追加フォーム(+ボタンを押すと出る) */}
         {addingCategory && (
-          <Input
-            size="sm"
+          <Box
             mb={2}
-            autoFocus
-            placeholder="フォルダ名を入力してEnter"
-            bg="bg.panel"
-            borderColor="border.emphasized"
-            _placeholder={{ color: 'fg.subtle' }}
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-            // 作らずに他をクリックしたら閉じる(入力欄が出しっぱなしにならない)。
-            // 名前の変更欄と同じ振る舞いに揃えている
-            onBlur={() => {
+            // 作らずに枠の外を触ったら閉じる(入力欄が出しっぱなしにならない)。
+            // 枠で受けるのは、チェックボックスを押したときに閉じないようにするため
+            onBlur={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                return
+              }
               setAddingCategory(false)
               setNewCategoryName('')
+              setNewCategoryAdminOnly(false)
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing)
-                void handleCreateCategory()
-              if (e.key === 'Escape') {
-                setAddingCategory(false)
-                setNewCategoryName('')
-              }
-            }}
-          />
+          >
+            <Input
+              size="sm"
+              autoFocus
+              placeholder="フォルダ名を入力してEnter"
+              bg="bg.panel"
+              borderColor="border.emphasized"
+              _placeholder={{ color: 'fg.subtle' }}
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+                  void handleCreateCategory()
+                if (e.key === 'Escape') {
+                  setAddingCategory(false)
+                  setNewCategoryName('')
+                  setNewCategoryAdminOnly(false)
+                }
+              }}
+            />
+            {/* 管理者だけに見せるフォルダ。人事や取引条件のように、
+                全員には見せられない資料を置くための箱 */}
+            <Checkbox.Root
+              mt={1}
+              size="sm"
+              checked={newCategoryAdminOnly}
+              onCheckedChange={(e) => setNewCategoryAdminOnly(!!e.checked)}
+            >
+              <Checkbox.HiddenInput />
+              <Checkbox.Control />
+              <Checkbox.Label fontSize="xs" color="fg.muted">
+                管理者だけに表示する
+              </Checkbox.Label>
+            </Checkbox.Root>
+          </Box>
         )}
 
         {manualsOpen && loading && <Spinner size="sm" />}
@@ -886,6 +942,15 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
                   <Text as="span" minW={0} truncate>
                     {category.name}
                   </Text>
+                  {/* 管理者だけに見えているフォルダだと分かるようにする。
+                      うっかり全員向けの資料を置かないため */}
+                  {category.adminOnly && (
+                    <Box flexShrink={0} display="inline-flex" color="fg.muted">
+                      <Tooltip label="管理者だけに表示されます">
+                        <LuLock size={12} />
+                      </Tooltip>
+                    </Box>
+                  )}
                 </Button>
                 {isAdmin && (
                   <>
@@ -902,6 +967,32 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
                     >
                       <LuPencil />
                     </IconButton>
+                    <Tooltip
+                      label={
+                        category.adminOnly
+                          ? '全員に表示する'
+                          : '管理者だけに表示する'
+                      }
+                    >
+                      <IconButton
+                        aria-label={
+                          category.adminOnly
+                            ? '全員に表示する'
+                            : '管理者だけに表示する'
+                        }
+                        size="xs"
+                        variant="ghost"
+                        color={category.adminOnly ? 'orange.fg' : 'fg.muted'}
+                        _hover={{ color: 'fg', bg: 'bg.emphasized' }}
+                        onClick={() => void handleToggleAdminOnly(category)}
+                      >
+                        {category.adminOnly ? (
+                          <LuLock />
+                        ) : (
+                          <LuLockOpen />
+                        )}
+                      </IconButton>
+                    </Tooltip>
                     <IconButton
                       aria-label="カテゴリを削除"
                       size="xs"

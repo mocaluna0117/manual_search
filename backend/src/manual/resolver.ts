@@ -1,6 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
+import type { AuthUser } from '../auth/current-user';
+import { CurrentUser } from '../auth/current-user';
 import { Roles, UserRole } from '../auth/roles';
+import { UserService } from '../user/service';
 import { SUPPORTED_EXTENSIONS, fileTypeOf } from '../storage/file-types';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
@@ -26,17 +29,29 @@ export class ManualResolver {
   constructor(
     private readonly manualService: ManualService,
     private readonly storageService: StorageService,
+    private readonly userService: UserService,
   ) {}
+
+  /** 管理者だけに見せるフォルダの中身まで返してよいか */
+  private async isAdmin(authUser: AuthUser) {
+    const user = await this.userService.ensure(authUser);
+    return user.role === UserRole.ADMIN;
+  }
 
   // 一覧。categoryIdで絞り込み、uncategorized=trueでカテゴリ未設定のみ
   @Query(() => [Manual])
-  manuals(
+  async manuals(
+    @CurrentUser() authUser: AuthUser,
     @Args('categoryId', { type: () => ID, nullable: true })
     categoryId?: string,
     @Args('uncategorized', { type: () => Boolean, nullable: true })
     uncategorized?: boolean,
   ) {
-    return this.manualService.findAll(categoryId, uncategorized);
+    return this.manualService.findAll(
+      categoryId,
+      uncategorized,
+      await this.isAdmin(authUser),
+    );
   }
 
   @Roles(UserRole.ADMIN)
@@ -56,21 +71,36 @@ export class ManualResolver {
 
   // キーワード検索(タイトル/説明/ファイル名/本文の部分一致)
   @Query(() => [ManualSearchResult])
-  searchManuals(@Args('keyword') keyword: string) {
-    return this.manualService.search(keyword);
+  async searchManuals(
+    @Args('keyword') keyword: string,
+    @CurrentUser() authUser: AuthUser,
+  ) {
+    return this.manualService.search(keyword, await this.isAdmin(authUser));
   }
 
   // マニュアルを開くための署名付きURL(15分有効)と、形式の情報を返す
   @Query(() => ManualViewTarget)
-  manualDownloadUrl(@Args('id', { type: () => ID }) id: string) {
-    return this.manualService.getDownloadUrl(id);
+  async manualDownloadUrl(
+    @Args('id', { type: () => ID }) id: string,
+    @CurrentUser() authUser: AuthUser,
+  ) {
+    return this.manualService.getDownloadUrl(
+      id,
+      await this.isAdmin(authUser),
+    );
   }
 
   // 一括ダウンロード用。複数の署名付きURLをまとめて発行する
   // (閲覧できる人はダウンロードもできるので、権限は通常の認証のみ)
   @Query(() => [ManualDownloadTarget])
-  manualDownloadUrls(@Args('ids', { type: () => [ID] }) ids: string[]) {
-    return this.manualService.getDownloadTargets(ids);
+  async manualDownloadUrls(
+    @Args('ids', { type: () => [ID] }) ids: string[],
+    @CurrentUser() authUser: AuthUser,
+  ) {
+    return this.manualService.getDownloadTargets(
+      ids,
+      await this.isAdmin(authUser),
+    );
   }
 
   // アップロード完了後にメタデータをDBへ登録。

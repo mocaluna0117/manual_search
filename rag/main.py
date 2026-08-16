@@ -204,7 +204,19 @@ def fuse_by_rrf(routes: list[list[tuple]]) -> list[tuple]:
     return [meta[cid] for cid in ranked]  # (manual_id, title, content, page_number)
 
 
-def hybrid_search(cur, query_vec: str, terms: list[str]):
+# 管理者だけに見せるフォルダの中身を、検索から外すための条件。
+#
+# 画面の一覧から隠すだけでは足りない。AIは検索で拾った抜粋を根拠に答えるので、
+# 検索に残っていると回答文や引用として中身がそのまま出てしまう。
+# 未分類(categoryIdがnull)は誰でも見えるフォルダ外の資料なので対象外
+HIDE_ADMIN_ONLY = """
+              AND NOT EXISTS (
+                  SELECT 1 FROM "ManualCategory" c
+                  WHERE c.id = m."categoryId" AND c.admin_only
+              )"""
+
+
+def hybrid_search(cur, query_vec: str, terms: list[str], is_admin: bool = False):
     """ベクトル・キーワード・タイトルの3ルートをRRF(Reciprocal Rank Fusion)で融合する。
 
     取り込みが完了していないマニュアル(差し替え直後・失敗)は検索対象から除く。
@@ -224,6 +236,8 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
     # 「JOINしてからソート」の計画を選びHNSWインデックスが使われなくなる。
     # AS MATERIALIZED でCTEのインライン展開も防ぎ、確実に索引を使わせる。
     # 内側は多めに取り、取り込み未完了ぶんを除いた後にTOPまで絞る
+    # 管理者のときだけ隠しフォルダも含める
+    hidden = "" if is_admin else HIDE_ADMIN_ONLY
     cur.execute(
         """
         WITH nearest AS MATERIALIZED (
@@ -238,11 +252,12 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
         FROM nearest n
         JOIN "Manual" m ON m.id = n.manual_id
         WHERE m.ingest_status = 'COMPLETED' AND m.deleted_at IS NULL
+        {hidden}
         -- JOINを挟むと内側のORDER BYは保たれないので、距離で明示的に並べ直す。
         -- これを忘れるとRRFに渡る順位が崩れ、検索精度が静かに落ちる
         ORDER BY n.distance
         LIMIT 20
-        """,
+        """.format(hidden=hidden),
         (query_vec,),
     )
     vector_rows = cur.fetchall()
@@ -267,7 +282,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
             FROM "ManualChunk" mc
             JOIN "Manual" m ON m.id = mc.manual_id
             WHERE m.ingest_status = 'COMPLETED' AND m.deleted_at IS NULL
-              AND ({any_match})
+              AND ({any_match}){hidden}
             ORDER BY hits DESC
             LIMIT 20
             """,
@@ -296,7 +311,7 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
                 FROM "ManualChunk" mc
                 JOIN "Manual" m ON m.id = mc.manual_id
                 WHERE m.ingest_status = 'COMPLETED' AND m.deleted_at IS NULL
-                  AND ({title_any_match})
+                  AND ({title_any_match}){hidden}
                 ORDER BY m.id, mc.chunk_index
             ) t
             ORDER BY hits DESC
@@ -659,7 +674,8 @@ def retrieve(req: SearchRequest):
     terms = [t for t in re.split(r"\s+", retrieval_query) if len(t) >= 2][:10]
     with db_connect() as conn:
         with conn.cursor() as cur:
-            rows = hybrid_search(cur, query_vec, terms)
+            # 管理者以外には、管理者だけに見せるフォルダの中身を検索させない
+            rows = hybrid_search(cur, query_vec, terms, req.is_admin)
 
     return rows, images
 
