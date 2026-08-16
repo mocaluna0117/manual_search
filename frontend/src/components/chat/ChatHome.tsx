@@ -277,6 +277,30 @@ export function ChatHome({
     setAttachedImage(file)
   }
 
+  /**
+   * 貼り付けからも画像を添付できるようにする。
+   *
+   * 画面を撮ってそのまま貼るのが一番早い。一度ファイルに保存させると手間が増え、
+   * 「画像を見せて聞く」をしなくなってしまう。
+   *
+   * 入力欄に限らずチャット画面のどこで貼っても拾う。ただしダイアログ
+   * (お問い合わせなど)が開いているときは、そちらの貼り付けを横取りしない
+   */
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return
+      const file = Array.from(e.clipboardData?.items ?? [])
+        .filter((i) => i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .find((f): f is File => f !== null)
+      if (!file) return
+      e.preventDefault() // 画像のファイル名などが本文に入らないように
+      handleAttach(file)
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  })
+
   /** 質問を送る。入力欄からの送信・選択肢ボタン・その他入力のすべてから使う */
   const send = async (rawQuestion: string) => {
     // 画像だけでも送れるようにする(質問文が無いときは既定の問いかけを補う。
@@ -499,18 +523,20 @@ export function ChatHome({
             </IconButton>
           </Tooltip>
         </PromptTemplateMenu>
-        <IconButton
-          aria-label="画像を添付"
-          size={{ base: 'md', md: 'lg' }}
-          variant="outline"
-          borderRadius="full"
-          fontSize={{ base: 'lg', md: 'xl' }}
-          color="fg.muted"
-          alignSelf="flex-end" // 入力欄が伸びても下端に揃える
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <LuImagePlus />
-        </IconButton>
+        <Tooltip label="画像を添付（貼り付けでも添えられます）">
+          <IconButton
+            aria-label="画像を添付"
+            size={{ base: 'md', md: 'lg' }}
+            variant="outline"
+            borderRadius="full"
+            fontSize={{ base: 'lg', md: 'xl' }}
+            color="fg.muted"
+            alignSelf="flex-end" // 入力欄が伸びても下端に揃える
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <LuImagePlus />
+          </IconButton>
+        </Tooltip>
         <Textarea
           ref={textareaRef}
           size={{ base: 'md', md: 'lg' }}
