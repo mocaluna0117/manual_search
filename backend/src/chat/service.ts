@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma, type Message } from '../../generated/prisma/client';
 import { CategoryService } from '../category/service';
 import { IngestStatus } from '../manual/model';
@@ -11,6 +12,7 @@ import { PrismaService } from '../prisma/service';
 import { RagCitation } from '../rag/model';
 import { RagService, type RagAction } from '../rag/service';
 import { RuleService } from '../rule/service';
+import { StorageService } from '../storage/service';
 import {
   AskResult,
   ChatMessage,
@@ -44,7 +46,57 @@ export class ChatService {
     private readonly categoryService: CategoryService,
     private readonly manualService: ManualService,
     private readonly ruleService: RuleService,
+    private readonly storage: StorageService,
   ) {}
+
+  /**
+   * 質問に添えられた画像をS3へ置き、そのキーを返す。
+   *
+   * 置けなくても質問自体は通す(回答には手元のデータをそのまま使うので、
+   * 保存の失敗で会話を止める理由が無い)。その場合は履歴から画像が
+   * 見返せなくなるだけで済む
+   */
+  private async storeImages(
+    conversationId: string,
+    images: { base64: string; format: string }[],
+  ): Promise<string[]> {
+    const keys: string[] = [];
+    for (const image of images) {
+      try {
+        const key = `chat/${conversationId}/${randomUUID()}.${image.format}`;
+        await this.storage.putBytes(
+          key,
+          Buffer.from(image.base64, 'base64'),
+          `image/${image.format}`,
+        );
+        keys.push(key);
+      } catch (e) {
+        console.warn(
+          `添付画像を保存できませんでした: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+    return keys;
+  }
+
+  /** 保存済みの画像に、表示用の署名付きURLを付ける */
+  private async withImageUrls(messages: ChatMessage[], sources: Message[]) {
+    return Promise.all(
+      messages.map(async (m, i) => {
+        const keys = (sources[i].imageKeys as string[] | null) ?? [];
+        if (keys.length === 0) return m;
+        const urls = await Promise.all(
+          keys.map((key) =>
+            this.storage
+              // 拡張子から形式を復元する(保存時に付けてある)
+              .createImageUrl(key, `image/${key.split('.').pop() ?? 'png'}`)
+              .catch(() => null),
+          ),
+        );
+        return { ...m, imageUrls: urls.filter((u): u is string => u !== null) };
+      }),
+    );
+  }
 
   /** 分類ルール一覧の表示(チャットのどの経路でも同じ文面にする) */
   private formatRules(rules: { text: string }[]) {
@@ -79,7 +131,10 @@ export class ChatService {
       where: { conversationId },
       orderBy: { createdAt: 'asc' },
     });
-    return messages.map((m) => this.toChatMessage(m));
+    return this.withImageUrls(
+      messages.map((m) => this.toChatMessage(m)),
+      messages,
+    );
   }
 
   /** 質問を受けて、会話の作成→質問の保存→RAG検索→回答の保存までを行う */
@@ -234,11 +289,15 @@ export class ChatService {
     });
 
     // 3) 質問を保存(画像そのものは保存しない。添付があったことだけ履歴に残す)
+    // 画像はS3へ置いてから、その場所を質問と一緒に残す。
+    // 本文だけ残すと、会話を開き直したときに何を見せて聞いたのか分からない
+    const imageKeys = await this.storeImages(conversation.id, images);
     const userMessage = await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
         role: MessageRole.USER,
         content: withImageNote(question, images.length),
+        imageKeys: imageKeys.length > 0 ? imageKeys : undefined,
       },
     });
 
@@ -613,8 +672,21 @@ export class ChatService {
 
   async deleteConversation(id: string, userId: string) {
     const conversation = await this.conversation(id, userId); // 所有者チェック
+    // 添付画像はS3にあり、DBを消しても残ってしまうので先に集めておく
+    const withImages = await this.prisma.message.findMany({
+      where: { conversationId: id },
+      select: { imageKeys: true },
+    });
     // メッセージはonDelete: Cascadeで一緒に消える
     await this.prisma.conversation.delete({ where: { id } });
+    // S3側は後始末。失敗しても会話の削除はやり直せないので、ここでは止めない
+    for (const row of withImages) {
+      for (const key of (row.imageKeys as string[] | null) ?? []) {
+        await this.storage.deleteObject(key).catch((e) => {
+          console.warn(`添付画像を消せませんでした ${key}: ${e}`);
+        });
+      }
+    }
     return conversation;
   }
 
@@ -665,6 +737,8 @@ export class ChatService {
       content: message.content,
       citations: (message.citations as RagCitation[] | null) ?? [],
       options: (message.options as string[] | null) ?? [],
+      // URLは署名付きで期限があるので、必要になったところで付ける
+      imageUrls: [],
       feedback: message.feedback,
       feedbackReason: message.feedbackReason,
       createdAt: message.createdAt,

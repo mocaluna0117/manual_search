@@ -163,6 +163,10 @@ model Message {
   feedback            MessageFeedback?
   // 👎のときだけ聞く理由(任意)。何が足りないかで打ち手が変わるため
   feedbackReason      String?          @map("feedback_reason")
+  // 質問に添えた画像の置き場所(S3のキー)。会話を開き直しても
+  // 「あのとき送った画面」を見返せるようにするため、画像自体も残す。
+  // 会話を消したときは、この一覧を見てS3側も片付ける
+  imageKeys           Json?            @map("image_keys")
   createdAt           DateTime         @default(now()) @map("created_at")
 
   // 会話を開くたびに「この会話のメッセージを古い順」で引く

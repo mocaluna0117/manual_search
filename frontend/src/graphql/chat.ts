@@ -12,6 +12,7 @@ export interface ChatMessage {
   content: string
   citations: RagCitation[]
   options: string[] // 絞り込み質問の選択肢(ボタン表示)
+  imageUrls: string[] // 質問に添えた画像(署名付きURL。添付が無ければ空)
   feedback: MessageFeedback | null
   feedbackReason: string | null // 👎のときに選ばれた理由(任意)
   createdAt: string // 発言時刻(吹き出しの下に表示)
@@ -66,6 +67,7 @@ export const CONVERSATION_QUERY: TypedDocumentNode<
           pageNumber
         }
         options
+        imageUrls
         feedback
         feedbackReason
         createdAt
@@ -117,6 +119,7 @@ export const ASK_MUTATION: TypedDocumentNode<AskData, AskVars> = gql`
           pageNumber
         }
         options
+        imageUrls
         feedback
         feedbackReason
         createdAt

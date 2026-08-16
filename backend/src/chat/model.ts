@@ -33,6 +33,10 @@ export class ChatMessage {
   @Field(() => [String])
   options!: string[];
 
+  // 質問に添えた画像の表示用URL(署名付き・15分有効)。添付が無ければ空
+  @Field(() => [String])
+  imageUrls!: string[];
+
   // 回答への評価(未評価はnull)。押し直しで取り消せる
   @Field(() => MessageFeedback, { nullable: true })
   feedback!: MessageFeedback | null;

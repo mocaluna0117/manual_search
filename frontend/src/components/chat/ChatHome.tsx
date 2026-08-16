@@ -59,8 +59,9 @@ interface ChatHomeProps {
   onConversationNotFound?: () => void
 }
 
-// 表示用: サーバーのメッセージ + 送信時だけ持つ画像プレビューURL
-type LocalMessage = ChatMessage & { imageUrls?: string[] }
+// 表示用。imageUrlsは、送信直後は手元のプレビューURL、
+// 会話を開き直したあとはサーバーが返す署名付きURLが入る
+type LocalMessage = ChatMessage
 
 
 
@@ -483,6 +484,7 @@ export function ChatHome({
                 content: text,
                 citations: [],
                 options: [],
+                imageUrls: [],
                 feedback: null,
                 feedbackReason: null,
                 createdAt: new Date().toISOString(),
@@ -521,6 +523,7 @@ export function ChatHome({
               '⏹ 回答を停止しました。この質問は保存されていません。質問の編集ボタン(鉛筆マーク)から編集して再送信できます。',
             citations: [],
             options: [],
+            imageUrls: [],
             feedback: null,
             feedbackReason: null,
             createdAt: new Date().toISOString(),
@@ -536,6 +539,7 @@ export function ChatHome({
           content: `エラーが発生しました: ${e instanceof Error ? e.message : '不明なエラー'}`,
           citations: [],
           options: [],
+          imageUrls: [],
           feedback: null,
           feedbackReason: null,
           createdAt: new Date().toISOString(),

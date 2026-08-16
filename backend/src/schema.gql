@@ -211,6 +211,7 @@ type ChatMessage {
   content: String!
   citations: [RagCitation!]!
   options: [String!]!
+  imageUrls: [String!]!
   feedback: MessageFeedback
   feedbackReason: String
   createdAt: DateTime!

@@ -112,6 +112,41 @@ export class StorageService {
     return getSignedUrl(client, command, { expiresIn: 900 });
   }
 
+  /**
+   * サーバーが持っているバイト列をそのまま保存する。
+   *
+   * マニュアルはフロントから直接PUTさせているが、チャットの添付画像は
+   * base64で本文と一緒に届くので、ここで置く方が往復が少ない。
+   */
+  async putBytes(fileKey: string, body: Uint8Array, contentType: string) {
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: fileKey,
+        Body: body,
+        ContentType: contentType,
+      }),
+    );
+    return fileKey;
+  }
+
+  /**
+   * 画像を画面に表示するための署名付きURL(15分有効)。
+   *
+   * createDownloadUrlはマニュアル用で、扱えない形式をダウンロードさせる
+   * 作りになっている。画像はその場に出したいので別に用意する
+   */
+  createImageUrl(fileKey: string, contentType: string) {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: fileKey,
+      ResponseContentDisposition: 'inline',
+      ResponseContentType: contentType,
+      ResponseCacheControl: 'private, max-age=900',
+    });
+    return getSignedUrl(this.presignS3, command, { expiresIn: 900 });
+  }
+
   async deleteObject(fileKey: string) {
     await this.s3.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: fileKey }),

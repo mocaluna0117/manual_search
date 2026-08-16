@@ -3,6 +3,7 @@ import { CategoryModule } from '../category/module';
 import { ManualModule } from '../manual/module';
 import { RagModule } from '../rag/module';
 import { RuleModule } from '../rule/module';
+import { StorageModule } from '../storage/module';
 import { UserModule } from '../user/module';
 import { ChatResolver } from './resolver';
 import { ChatStreamController } from './stream-controller';
@@ -10,7 +11,15 @@ import { ChatService } from './service';
 
 @Module({
   // Category/Manualはチャット経由の管理操作(フォルダ作成・再分類)で使う
-  imports: [RagModule, UserModule, CategoryModule, ManualModule, RuleModule],
+  imports: [
+    RagModule,
+    UserModule,
+    CategoryModule,
+    ManualModule,
+    RuleModule,
+    // 質問に添えられた画像をS3へ置く(会話を開き直しても見返せるように)
+    StorageModule,
+  ],
   controllers: [ChatStreamController],
   providers: [ChatService, ChatResolver],
 })
