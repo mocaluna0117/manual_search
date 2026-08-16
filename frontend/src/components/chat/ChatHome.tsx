@@ -29,6 +29,7 @@ import {
   type ChatMessage,
 } from '../../graphql/chat'
 import { ME_QUERY } from '../../graphql/me'
+import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
 import { useSendKey } from '../../lib/settings'
 import { askStream } from '../../lib/chatStream'
 import { useManualViewer } from '../manual/ManualViewerProvider'
@@ -171,6 +172,7 @@ export function ChatHome({
   // 設定: Enterで送信(既定) / Shift+Enterで送信
   const sendKey = useSendKey()
   const sendOnPlainEnter = sendKey === 'enter'
+  const isTouch = useIsTouchDevice()
   const bottomRef = useRef<HTMLDivElement>(null)
   const lastMessageRef = useRef<HTMLDivElement>(null)
   // 履歴を開いた直後かどうか(そのときだけ一番下へ即時ジャンプする)
@@ -512,10 +514,15 @@ export function ChatHome({
           rows={1}
           autoresize // 入力量に応じて高さが自動で伸びる
           maxH="10em" // 伸びすぎ防止(超えたら内部スクロール)
+          // スマホでは短い文言にする。画面が狭いところに長い例文を入れると
+          // 折り返して入力欄が何行にも膨らみ、送信キーの案内も
+          // (Shiftキーが無いので)意味がない
           placeholder={
-            sendOnPlainEnter
-              ? '例: クイックパーツマニュアルを見せて（Shift+Enterで改行）'
-              : '例: クイックパーツマニュアルを見せて（Shift+Enterで送信）'
+            isTouch
+              ? '例: マニュアルを見せて'
+              : sendOnPlainEnter
+                ? '例: クイックパーツマニュアルを見せて（Shift+Enterで改行）'
+                : '例: クイックパーツマニュアルを見せて（Shift+Enterで送信）'
           }
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -662,9 +669,11 @@ export function ChatHome({
                         size="sm"
                         bg="bg.panel"
                         placeholder={
-                          sendOnPlainEnter
-                            ? 'その他（自由に入力してEnterで送信）'
-                            : 'その他（自由に入力してShift+Enterで送信）'
+                          isTouch
+                            ? 'その他'
+                            : sendOnPlainEnter
+                              ? 'その他（自由に入力してEnterで送信）'
+                              : 'その他（自由に入力してShift+Enterで送信）'
                         }
                         value={otherText}
                         onChange={(e) => setOtherText(e.target.value)}
