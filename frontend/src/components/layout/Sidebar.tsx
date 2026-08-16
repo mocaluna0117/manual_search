@@ -1256,6 +1256,22 @@ export function MobileSidebar(props: SidebarProps) {
 
   return (
     <>
+      {/* 上部の帯。中身はこの下を通り抜けるので、スクロールした文字が
+          メニューボタンに重なって読みづらくなるのを防ぐ。下端はぼかして、
+          隠れかけている行が途中で切られたように見えないようにする。
+          指の操作は帯を素通りさせる(下の中身をそのまま触れる) */}
+      <Box
+        position="fixed"
+        top={0}
+        left={0}
+        right={0}
+        h="56px"
+        zIndex={9}
+        display={{ base: 'block', md: 'none' }}
+        bg="bg"
+        pointerEvents="none"
+        maskImage="linear-gradient(to bottom, black 65%, transparent)"
+      />
       <IconButton
         aria-label="メニューを開く"
         variant="ghost"
@@ -1265,6 +1281,10 @@ export function MobileSidebar(props: SidebarProps) {
         left={2}
         zIndex={10}
         display={{ base: 'flex', md: 'none' }}
+        // 帯の下を中身が通るので、ボタン自体も背景を持たせて浮かせる
+        bg="bg.panel"
+        borderRadius="full"
+        boxShadow="xs"
         onClick={() => setOpen(true)}
       >
         <LuMenu />
