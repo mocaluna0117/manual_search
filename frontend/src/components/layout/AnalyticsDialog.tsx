@@ -33,10 +33,32 @@ const PERIODS = [
 
 type TabKey = 'unanswered' | 'themes' | 'manuals'
 
-const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
-  { key: 'unanswered', label: '答えられなかった質問', icon: <LuCircleHelp /> },
-  { key: 'themes', label: 'よく聞かれること', icon: <LuTrendingUp /> },
-  { key: 'manuals', label: 'マニュアルの使われ方', icon: <LuFileText /> },
+// shortLabel は狭い画面用。3つ分の見出しをそのまま並べると横にはみ出し、
+// 3つ目のタブが画面の外に出てしまうため
+const TABS: {
+  key: TabKey
+  label: string
+  shortLabel: string
+  icon: React.ReactNode
+}[] = [
+  {
+    key: 'unanswered',
+    label: '答えられなかった質問',
+    shortLabel: '未回答',
+    icon: <LuCircleHelp />,
+  },
+  {
+    key: 'themes',
+    label: 'よく聞かれること',
+    shortLabel: 'よくある質問',
+    icon: <LuTrendingUp />,
+  },
+  {
+    key: 'manuals',
+    label: 'マニュアルの使われ方',
+    shortLabel: 'マニュアル',
+    icon: <LuFileText />,
+  },
 ]
 
 /** 取得に失敗したときの表示。黙って空欄になると「0件」と読み違える */
@@ -186,13 +208,24 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
                     key={t.key}
                     size="sm"
                     variant="ghost"
+                    // 狭い画面では3つで幅を分け合う(横にはみ出さない)。
+                    // PCはこれまで通り文字の長さぶんだけ
+                    flex={{ base: '1', md: 'initial' }}
+                    minW={0}
+                    px={{ base: 1, md: 3 }}
                     borderBottomWidth="2px"
                     borderRadius={0}
                     borderColor={tab === t.key ? 'blue.solid' : 'transparent'}
                     color={tab === t.key ? 'fg' : 'fg.muted'}
                     onClick={() => setTab(t.key)}
                   >
-                    {t.icon} {t.label}
+                    {t.icon}
+                    <Box as="span" hideBelow="md">
+                      {t.label}
+                    </Box>
+                    <Box as="span" hideFrom="md" truncate>
+                      {t.shortLabel}
+                    </Box>
                   </Button>
                 ))}
               </HStack>
