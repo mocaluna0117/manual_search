@@ -1,4 +1,5 @@
 import { Field, ID, Int, ObjectType } from '@nestjs/graphql';
+import { RagCitation } from '../rag/model';
 
 /** AIがマニュアルから答えられなかった質問(=足りていないマニュアルの手がかり) */
 @ObjectType()
@@ -23,6 +24,18 @@ export class UnansweredQuestion {
   // 👎のときに選ばれた理由(任意)
   @Field(() => String, { nullable: true })
   feedbackReason!: string | null;
+}
+
+/** 答えられなかった質問から作ったマニュアルの下書き */
+@ObjectType()
+export class ManualDraft {
+  // Markdownの本文(そのままコピーして清書に使える形)
+  @Field()
+  draft!: string;
+
+  // 下書きの材料にした既存マニュアル(近い資料が既にあることの手がかり)
+  @Field(() => [RagCitation])
+  sources!: RagCitation[];
 }
 
 /** 質問をテーマごとにまとめたもの(AIが意味の近さで束ねる) */

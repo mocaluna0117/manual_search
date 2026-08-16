@@ -333,6 +333,8 @@ class AnswerGenerator(Protocol):
 
     def cluster_questions(self, questions: list[str]) -> list[dict]: ...
 
+    def draft_manual(self, question: str, contexts: list[Context]) -> str: ...
+
 
 class StubAnswerGenerator:
     """開発用: LLMを呼ばずに定型文を返す"""
@@ -393,6 +395,12 @@ class StubAnswerGenerator:
             {"theme": q, "count": n, "examples": [q]}
             for q, n in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
         ]
+
+    def draft_manual(self, question: str, contexts: list[Context]) -> str:
+        return (
+            f"# {question}\n\n"
+            "(下書きの生成はANSWER_PROVIDER=bedrockで有効になります)\n"
+        )
 
 
 class BedrockAnswerGenerator:
@@ -683,6 +691,50 @@ class BedrockAnswerGenerator:
         if not match:
             raise ValueError("集計結果のJSONを取り出せませんでした")
         return json.loads(match.group(0))
+
+    def draft_manual(self, question: str, contexts: list[Context]) -> str:
+        """答えられなかった質問から、マニュアルの下書きを作る。
+
+        利用状況で「足りない領域」が見えても、そこから書き始めるのは重い。
+        章立てと分かっている範囲の本文を先に用意して、担当者が直す形にする。
+
+        いちばん大事なのは、分からないことを埋めないこと。
+        推測で書かれた手順がそのままマニュアルになると、
+        「マニュアルに書いてあるから」と実行されてしまう。
+        """
+        excerpts = (
+            "\n\n".join(f"【{c.title}】\n{c.content}" for c in contexts)
+            if contexts
+            else "(関連する既存マニュアルは見つかりませんでした)"
+        )
+        prompt = (
+            "あなたは社内マニュアルの作成を手伝う担当者です。\n"
+            "利用者から次の質問がありましたが、既存のマニュアルでは答えられませんでした。\n"
+            "この質問に答えられるマニュアルの下書きを作ってください。\n\n"
+            "厳守すること:\n"
+            "- 事実は「関連する既存マニュアルの抜粋」に書かれていることだけを使う\n"
+            "- 抜粋に無い手順・数値・連絡先・期限は絶対に書かない。"
+            "必要な項目は見出しだけ用意し、本文は「(要確認: 〜)」と書いて空けておく\n"
+            "- それらしい手順をでっち上げない。埋まっていない下書きの方が、"
+            "間違った手順が書かれたマニュアルよりはるかに良い\n"
+            "- 想像で会社の運用を決めない(担当部署名・システム名・様式名など)\n\n"
+            "書き方:\n"
+            "- Markdownで書く。見出しは## から始める\n"
+            "- 構成: 目的 / 対象となる場面 / 手順 / 注意点 / 関連資料\n"
+            "- 手順は番号付きで、1つの操作を1行にする\n"
+            "- 冒頭に「# 」でマニュアルのタイトルを1行書く\n"
+            "- 最後に「## この下書きについて」を置き、"
+            "何を確認して埋める必要があるかを箇条書きにする\n\n"
+            f"# 答えられなかった質問\n{question}\n\n"
+            f"# 関連する既存マニュアルの抜粋\n{excerpts}"
+        )
+        res = self.client.converse(
+            modelId=self.model_id,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            # 下書きなので長さが要る。事実を作らせないよう温度は0
+            inferenceConfig={"maxTokens": 3000, "temperature": 0},
+        )
+        return res["output"]["message"]["content"][0]["text"].strip()
 
 
 def create_answer_generator() -> AnswerGenerator:

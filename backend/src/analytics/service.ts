@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/service';
 import { RagService } from '../rag/service';
@@ -89,6 +89,20 @@ export class AnalyticsService {
         ratedBad: r.rated_bad,
         feedbackReason: r.feedback_reason,
       }));
+  }
+
+  /**
+   * 答えられなかった質問から、マニュアルの下書きを作る。
+   *
+   * 利用状況で「足りない領域」が見えても、そこから書き始めるのは重い。
+   * 章立てと分かっている範囲を先に用意して、担当者が直す形にする
+   */
+  async draftManual(question: string) {
+    const text = question.trim();
+    if (!text) {
+      throw new BadRequestException('質問を指定してください');
+    }
+    return this.rag.draftManual(text);
   }
 
   /** 集計対象の質問文だけを新しい順に返す(テーマ分けの入力に使う) */

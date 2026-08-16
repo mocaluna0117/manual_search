@@ -132,3 +132,36 @@ export const QUESTION_THEMES_QUERY: TypedDocumentNode<
     }
   }
 `
+
+// --- 答えられなかった質問からマニュアルの下書きを作る(ADMIN専用) ---
+
+export interface ManualDraft {
+  /** Markdownの本文 */
+  draft: string
+  /** 下書きの材料にした既存マニュアル */
+  sources: { manualId: string; title: string; pageNumber: number | null }[]
+}
+
+interface DraftManualData {
+  draftManual: ManualDraft
+}
+
+interface DraftManualVars {
+  question: string
+}
+
+export const DRAFT_MANUAL_MUTATION: TypedDocumentNode<
+  DraftManualData,
+  DraftManualVars
+> = gql`
+  mutation DraftManual($question: String!) {
+    draftManual(question: $question) {
+      draft
+      sources {
+        manualId
+        title
+        pageNumber
+      }
+    }
+  }
+`

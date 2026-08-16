@@ -1,8 +1,9 @@
-import { Args, Int, Query, Resolver } from '@nestjs/graphql';
+import { Args, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { Roles, UserRole } from '../auth/roles';
 import { AnalyticsService } from './service';
 import {
   AnalyticsSummary,
+  ManualDraft,
   ManualUsage,
   QuestionTheme,
   UnansweredQuestion,
@@ -31,6 +32,14 @@ export class AnalyticsResolver {
     @Args('days', { type: () => Int, nullable: true }) days?: number,
   ) {
     return this.analytics.unansweredQuestions(days);
+  }
+
+  // 答えられなかった質問から、マニュアルの下書きを作る。
+  // 何も保存しないが、AIを呼ぶので副作用のある操作としてMutationにする
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => ManualDraft)
+  draftManual(@Args('question') question: string) {
+    return this.analytics.draftManual(question);
   }
 
   @Roles(UserRole.ADMIN)

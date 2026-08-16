@@ -776,6 +776,71 @@ def search(req: SearchRequest) -> SearchResponse:
     )
 
 
+class DraftManualRequest(BaseModel):
+    question: str
+
+
+class DraftSource(BaseModel):
+    """下書きの材料にした既存マニュアル"""
+
+    manual_id: str
+    title: str
+    page: int | None = None
+
+
+class DraftManualResponse(BaseModel):
+    draft: str  # Markdown
+    sources: list[DraftSource] = []
+
+
+@app.post(
+    "/draft-manual",
+    response_model=DraftManualResponse,
+    dependencies=[Depends(require_api_token)],
+)
+def draft_manual(req: DraftManualRequest) -> DraftManualResponse:
+    """答えられなかった質問から、マニュアルの下書きを作る。
+
+    既存の抜粋を材料に渡すのは、書きぶりや用語を既存のマニュアルに
+    寄せるためと、「実は近いことが書いてある資料」を担当者に示すため。
+    DBには書き込まない(下書きを返すだけ)。
+    """
+    question = req.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="質問が空です")
+
+    # 材料集めは通常の検索と同じ。管理者しか使わない機能なので隠しフォルダも見る
+    query = normalize_text(question)
+    try:
+        query_vec = to_vector_literal(embedder.embed_texts([query])[0])
+        terms = [t for t in re.split(r"\s+", query) if len(t) >= 2][:10]
+        with db_connect() as conn:
+            with conn.cursor() as cur:
+                rows = hybrid_search(cur, query_vec, terms, True)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"関連資料を探せませんでした: {e}")
+
+    contexts = [
+        Context(title=f"{title}(p.{page})" if page else title, content=content)
+        for _manual_id, title, content, page in rows
+    ]
+    try:
+        draft = answer_generator.draft_manual(question, contexts)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"下書きを作れませんでした: {e}")
+
+    # 材料にした資料は、同じマニュアルのページをまとめて返す
+    sources: list[DraftSource] = []
+    seen: set[tuple[str, int | None]] = set()
+    for manual_id, title, _content, page in rows:
+        if (manual_id, page) in seen:
+            continue
+        seen.add((manual_id, page))
+        sources.append(DraftSource(manual_id=manual_id, title=title, page=page))
+
+    return DraftManualResponse(draft=draft, sources=sources)
+
+
 class ReembedRequest(BaseModel):
     manual_id: UUID4
 

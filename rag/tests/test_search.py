@@ -282,3 +282,69 @@ class TestFolderTools:
         # 鍵付きへの変更と削除の呼び方も書いてある
         assert "update_folder" in ADMIN_SYSTEM_ADDENDUM
         assert "delete_folder" in ADMIN_SYSTEM_ADDENDUM
+
+
+class TestDraftManual:
+    """答えられなかった質問からの下書き。
+
+    ここで一番怖いのは、分からないことをもっともらしく埋めてしまうこと。
+    推測で書かれた手順がマニュアルになると「書いてあるから」と実行される。
+    プロンプトがそれを禁じていることを固定しておく。
+    """
+
+    def prompt_of(self, question: str, contexts) -> str:
+        """実際に組み立てられるプロンプトを、AWSを呼ばずに取り出す"""
+        from llm import BedrockAnswerGenerator
+
+        gen = BedrockAnswerGenerator.__new__(BedrockAnswerGenerator)
+        captured = {}
+
+        class FakeClient:
+            def converse(self, **kwargs):
+                captured["prompt"] = kwargs["messages"][0]["content"][0]["text"]
+                captured["config"] = kwargs["inferenceConfig"]
+                return {"output": {"message": {"content": [{"text": "# 下書き"}]}}}
+
+        gen.client = FakeClient()
+        gen.model_id = "dummy"
+        gen.draft_manual(question, contexts)
+        return captured["prompt"]
+
+    def test_質問と抜粋の両方が渡る(self):
+        from llm import Context
+
+        prompt = self.prompt_of(
+            "トイレの漏水はどうする？", [Context(title="漏水対応", content="止水栓を閉める")]
+        )
+        assert "トイレの漏水はどうする？" in prompt
+        assert "止水栓を閉める" in prompt and "漏水対応" in prompt
+
+    def test_でっち上げを禁じている(self):
+        prompt = self.prompt_of("q", [])
+        assert "抜粋に無い手順・数値・連絡先・期限は絶対に書かない" in prompt
+        assert "(要確認:" in prompt
+
+    def test_関連資料が無くても組み立てられる(self):
+        prompt = self.prompt_of("q", [])
+        assert "関連する既存マニュアルは見つかりませんでした" in prompt
+
+    def test_事実を作らせないよう温度は0(self):
+        from llm import BedrockAnswerGenerator
+
+        gen = BedrockAnswerGenerator.__new__(BedrockAnswerGenerator)
+        captured = {}
+
+        class FakeClient:
+            def converse(self, **kwargs):
+                captured.update(kwargs["inferenceConfig"])
+                return {"output": {"message": {"content": [{"text": "x"}]}}}
+
+        gen.client = FakeClient()
+        gen.model_id = "dummy"
+        gen.draft_manual("q", [])
+        assert captured["temperature"] == 0
+
+    def test_構成の指示が入っている(self):
+        prompt = self.prompt_of("q", [])
+        for section in ["目的", "対象となる場面", "手順", "注意点", "関連資料"]:
+            assert section in prompt

@@ -320,4 +320,31 @@ export class RagService {
     };
     return body.themes ?? [];
   }
+
+  /**
+   * 答えられなかった質問から、マニュアルの下書きを作る。
+   * DBには何も書かず、下書きの文面と材料にした資料を返すだけ
+   */
+  async draftManual(question: string) {
+    const res = await this.request('/draft-manual', TIMEOUT_MS.organize, {
+      question,
+    });
+    if (!res.ok) {
+      throw new ServiceUnavailableException(
+        `下書きを作れませんでした (HTTP ${res.status})`,
+      );
+    }
+    const body = (await res.json()) as {
+      draft: string;
+      sources?: { manual_id: string; title: string; page: number | null }[];
+    };
+    return {
+      draft: body.draft,
+      sources: (body.sources ?? []).map((s) => ({
+        manualId: s.manual_id,
+        title: s.title,
+        pageNumber: s.page ?? null,
+      })),
+    };
+  }
 }

@@ -15,6 +15,11 @@ type RagAnswer {
   options: [String!]!
 }
 
+type ManualDraft {
+  draft: String!
+  sources: [RagCitation!]!
+}
+
 type UnansweredQuestion {
   id: ID!
   question: String!
@@ -279,6 +284,7 @@ type Mutation {
   deleteManualCategory(id: ID!): ManualCategory!
   reorderManualCategories(ids: [ID!]!): Int!
   rateAnswer(messageId: ID!, feedback: MessageFeedback, reason: String): ChatMessage!
+  draftManual(question: String!): ManualDraft!
   renameConversation(id: ID!, title: String!): Conversation!
   deleteConversation(id: ID!): Conversation!
   createManualUploadUrl(fileName: String!): ManualUploadTarget!

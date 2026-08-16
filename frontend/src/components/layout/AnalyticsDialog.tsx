@@ -1,4 +1,4 @@
-import { useLazyQuery, useQuery } from '@apollo/client/react'
+import { useLazyQuery, useMutation, useQuery } from '@apollo/client/react'
 import {
   Badge,
   Box,
@@ -11,8 +11,17 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useState } from 'react'
-import { LuCircleHelp, LuFileText, LuSparkles, LuTrendingUp } from 'react-icons/lu'
 import {
+  LuCircleHelp,
+  LuFilePen,
+  LuFileText,
+  LuSparkles,
+  LuTrendingUp,
+} from 'react-icons/lu'
+import { errorMessage, toastError } from '../../lib/toast'
+import { ManualDraftDialog } from './ManualDraftDialog'
+import {
+  DRAFT_MANUAL_MUTATION,
   ANALYTICS_SUMMARY_QUERY,
   MANUAL_USAGE_QUERY,
   QUESTION_THEMES_QUERY,
@@ -88,6 +97,29 @@ function formatWhen(iso: string | null): string {
 export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
   const [days, setDays] = useState<number>(30)
   const [tab, setTab] = useState<TabKey>('unanswered')
+  // マニュアルの下書き。質問を押した時点で作り始め、できたら画面に出す
+  const [draftFor, setDraftFor] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [draftSources, setDraftSources] = useState<{ title: string }[]>([])
+  const [draftManual, { loading: drafting }] = useMutation(
+    DRAFT_MANUAL_MUTATION,
+  )
+
+  /** 答えられなかった質問から下書きを作る(押した操作から始める) */
+  const makeDraft = async (question: string) => {
+    setDraftFor(question)
+    setDraft('')
+    setDraftSources([])
+    try {
+      const { data } = await draftManual({ variables: { question } })
+      if (!data) return
+      setDraft(data.draftManual.draft)
+      setDraftSources(data.draftManual.sources)
+    } catch (e) {
+      toastError('下書きを作れませんでした', errorMessage(e, ''))
+      setDraftFor(null)
+    }
+  }
   // 期間が0(全期間)のときはサーバへnullを渡す
   const variables = { days: days === 0 ? null : days }
 
@@ -308,9 +340,21 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
                         AIの回答: {q.answer.slice(0, 120)}
                         {q.answer.length > 120 && '…'}
                       </Text>
-                      <Text fontSize="xs" color="fg.subtle" mt={1}>
-                        {formatWhen(q.askedAt)}
-                      </Text>
+                      <HStack mt={2} gap={2} justify="space-between">
+                        <Text fontSize="xs" color="fg.subtle">
+                          {formatWhen(q.askedAt)}
+                        </Text>
+                        {/* 「足りない」と分かっただけでは埋まらない。
+                            その場から書き始められるようにする */}
+                        <Button
+                          size="2xs"
+                          variant="outline"
+                          loading={drafting && draftFor === q.question}
+                          onClick={() => void makeDraft(q.question)}
+                        >
+                          <LuFilePen /> この質問から下書きを作る
+                        </Button>
+                      </HStack>
                     </Box>
                   ))}
                 </VStack>
@@ -451,6 +495,17 @@ export function AnalyticsDialog({ open, onClose }: AnalyticsDialogProps) {
                 </VStack>
               )}
             </Dialog.Body>
+
+            {/* 下書きの作成。利用状況を開いたまま作れるようにする */}
+            <ManualDraftDialog
+              question={draftFor}
+              draft={draft}
+              sources={draftSources}
+              loading={drafting}
+              onDraftChange={setDraft}
+              onRegenerate={() => draftFor && void makeDraft(draftFor)}
+              onClose={() => setDraftFor(null)}
+            />
 
             <Dialog.Footer>
               <Button variant="outline" onClick={onClose}>
