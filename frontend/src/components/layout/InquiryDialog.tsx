@@ -33,6 +33,7 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
   const [sent, setSent] = useState(false)
   // 添付する画面写真(任意)。プレビュー用のURLも一緒に持つ
   const [image, setImage] = useState<{ file: File; url: string } | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [sendInquiry, { loading }] = useMutation(SEND_INQUIRY_MUTATION)
 
@@ -40,6 +41,7 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
     // プレビュー用に作ったURLは、使い終わったら開放する
     if (image) URL.revokeObjectURL(image.url)
     setImage(null)
+    setPreviewOpen(false)
   }
 
   const close = () => {
@@ -128,14 +130,25 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                       borderRadius="md"
                       align="center"
                     >
+                      {/* 押すと大きく見られる。送る前に「これで合っているか」を
+                          確かめられるようにする */}
                       <Image
                         src={image.url}
-                        alt="添付する画像"
+                        alt="添付する画像(押すと拡大)"
                         boxSize="48px"
                         objectFit="cover"
                         borderRadius="sm"
+                        cursor="zoom-in"
+                        _hover={{ opacity: 0.8 }}
+                        onClick={() => setPreviewOpen(true)}
                       />
-                      <Text fontSize="xs" flex="1" truncate>
+                      <Text
+                        fontSize="xs"
+                        flex="1"
+                        truncate
+                        cursor="zoom-in"
+                        onClick={() => setPreviewOpen(true)}
+                      >
                         {image.file.name}
                       </Text>
                       <IconButton
@@ -170,6 +183,48 @@ export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
                 </VStack>
               )}
             </Dialog.Body>
+
+            {/* 添付画像の拡大表示。問い合わせの入力内容は残したまま見られる */}
+            <Dialog.Root
+              open={previewOpen && !!image}
+              onOpenChange={(e) => !e.open && setPreviewOpen(false)}
+              size={{ base: 'full', md: 'xl' }}
+            >
+              <Portal>
+                <Dialog.Backdrop />
+                <Dialog.Positioner>
+                  <Dialog.Content>
+                    <Dialog.Header>
+                      <HStack justify="space-between" w="100%" gap={2}>
+                        <Dialog.Title truncate>
+                          {image?.file.name}
+                        </Dialog.Title>
+                        <IconButton
+                          aria-label="閉じる"
+                          size="sm"
+                          variant="ghost"
+                          flexShrink={0}
+                          onClick={() => setPreviewOpen(false)}
+                        >
+                          <LuX />
+                        </IconButton>
+                      </HStack>
+                    </Dialog.Header>
+                    <Dialog.Body pb={4}>
+                      {image && (
+                        <Image
+                          src={image.url}
+                          alt="添付する画像"
+                          w="100%"
+                          maxH="75vh"
+                          objectFit="contain"
+                        />
+                      )}
+                    </Dialog.Body>
+                  </Dialog.Content>
+                </Dialog.Positioner>
+              </Portal>
+            </Dialog.Root>
 
             <Dialog.Footer>
               <Button variant="outline" onClick={close}>
