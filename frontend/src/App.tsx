@@ -53,7 +53,7 @@ function App() {
   // 認証状態の確認中(リダイレクトから戻った直後など)
   if (auth.isLoading) {
     return (
-      <VStack h="100vh" justify="center">
+      <VStack h="100dvh" justify="center">
         <Spinner size="lg" />
       </VStack>
     )
