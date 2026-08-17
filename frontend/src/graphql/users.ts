@@ -22,17 +22,29 @@ export const USERS_QUERY: TypedDocumentNode<{ users: ManagedUser[] }> = gql`
   }
 `
 
-export const INVITE_USER_MUTATION: TypedDocumentNode<
-  { inviteUser: ManagedUser },
-  { email: string; role: UserRole }
+/** まとめて招待した結果。送れた分と送れなかった分の両方が返る */
+export interface InviteResult {
+  invited: ManagedUser[]
+  failed: { email: string; reason: string }[]
+}
+
+export const INVITE_USERS_MUTATION: TypedDocumentNode<
+  { inviteUsers: InviteResult },
+  { emails: string[]; role: UserRole }
 > = gql`
-  mutation InviteUser($email: String!, $role: UserRole) {
-    inviteUser(email: $email, role: $role) {
-      cognitoSub
-      email
-      role
-      passwordPending
-      createdAt
+  mutation InviteUsers($emails: [String!]!, $role: UserRole) {
+    inviteUsers(emails: $emails, role: $role) {
+      invited {
+        cognitoSub
+        email
+        role
+        passwordPending
+        createdAt
+      }
+      failed {
+        email
+        reason
+      }
     }
   }
 `

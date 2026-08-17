@@ -45,3 +45,26 @@ export class ManagedUser {
   @Field(() => GraphQLISODateTime, { nullable: true })
   createdAt!: Date | null;
 }
+
+/** まとめて招待したときに、送れなかった宛先とその理由 */
+@ObjectType()
+export class InviteFailure {
+  @Field()
+  email!: string;
+
+  @Field()
+  reason!: string;
+}
+
+/**
+ * まとめて招待した結果。
+ * 1件の失敗で全体を止めないので、送れた分と送れなかった分の両方を返す
+ */
+@ObjectType()
+export class InviteResult {
+  @Field(() => [ManagedUser])
+  invited!: ManagedUser[];
+
+  @Field(() => [InviteFailure])
+  failed!: InviteFailure[];
+}

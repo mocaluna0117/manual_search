@@ -62,6 +62,16 @@ type AnalyticsSummary {
   neverCitedManualCount: Int!
 }
 
+type InviteFailure {
+  email: String!
+  reason: String!
+}
+
+type InviteResult {
+  invited: [ManagedUser!]!
+  failed: [InviteFailure!]!
+}
+
 type UserProfile {
   id: ID!
   email: String
@@ -276,7 +286,7 @@ type Query {
 }
 
 type Mutation {
-  inviteUser(email: String!, role: UserRole): ManagedUser!
+  inviteUsers(emails: [String!]!, role: UserRole): InviteResult!
   updateUserRole(cognitoSub: ID!, role: UserRole!): ManagedUser!
   deleteUser(cognitoSub: ID!): Boolean!
   createManualCategory(name: String!, adminOnly: Boolean): ManualCategory!

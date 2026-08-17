@@ -1,31 +1,56 @@
 import { useMutation, useQuery } from '@apollo/client/react'
 import {
   Badge,
+  Box,
   Button,
   Dialog,
   HStack,
   IconButton,
-  Input,
   Portal,
   Spinner,
   Text,
+  Textarea,
   VStack,
 } from '@chakra-ui/react'
 import { useState } from 'react'
-import { LuTrash2 } from 'react-icons/lu'
+import { LuSend, LuTrash2 } from 'react-icons/lu'
 import { ME_QUERY, type UserRole } from '../../graphql/me'
 import {
   DELETE_USER_MUTATION,
-  INVITE_USER_MUTATION,
+  INVITE_USERS_MUTATION,
   UPDATE_USER_ROLE_MUTATION,
   USERS_QUERY,
   type ManagedUser,
 } from '../../graphql/users'
-import { errorMessage, toastError } from '../../lib/toast'
+import { errorMessage, toastError, toastSuccess } from '../../lib/toast'
 
 interface UserManagementDialogProps {
   open: boolean
   onClose: () => void
+}
+
+/** 一度に招待できる件数(サーバー側の上限と合わせる) */
+const MAX_INVITE_AT_ONCE = 30
+
+/**
+ * 入力欄の文字列から宛先を取り出す。
+ *
+ * 貼り付け元がメールの宛先欄・表計算・チャットのどれでも通るように、
+ * 改行・カンマ・全角カンマ・セミコロン・空白のどれでも区切りとして扱う。
+ * 同じ宛先は1件にまとめる(大文字小文字の違いも同じ扱い)
+ */
+function parseEmails(text: string): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const part of text.split(/[\s,、;；]+/)) {
+    const email = part.trim()
+    if (!email) continue
+    const key = email.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(email)
+  }
+  return result
 }
 
 /**
@@ -36,8 +61,14 @@ export function UserManagementDialog({
   open,
   onClose,
 }: UserManagementDialogProps) {
-  const [inviteEmail, setInviteEmail] = useState('')
+  // 複数行・カンマ区切りで受け取る。1件ずつ招待すると届く時刻が
+  // 人によってばらけるので、まとめて送れるようにしている
+  const [inviteText, setInviteText] = useState('')
   const [inviteRole, setInviteRole] = useState<UserRole>('MEMBER')
+  // 送れなかった宛先とその理由(送れた分は一覧に出るので、ここには残さない)
+  const [inviteFailed, setInviteFailed] = useState<
+    { email: string; reason: string }[]
+  >([])
 
   const { data: meData } = useQuery(ME_QUERY)
   const { data, loading, error } = useQuery(USERS_QUERY, {
@@ -45,8 +76,8 @@ export function UserManagementDialog({
     fetchPolicy: 'cache-and-network',
   })
 
-  const [inviteUser, { loading: inviting }] = useMutation(
-    INVITE_USER_MUTATION,
+  const [inviteUsers, { loading: inviting }] = useMutation(
+    INVITE_USERS_MUTATION,
     { refetchQueries: ['Users'] },
   )
   const [updateUserRole] = useMutation(UPDATE_USER_ROLE_MUTATION, {
@@ -56,13 +87,27 @@ export function UserManagementDialog({
     refetchQueries: ['Users'],
   })
 
+  const emails = parseEmails(inviteText)
+
   const handleInvite = async () => {
-    const email = inviteEmail.trim()
-    if (!email) return
+    if (emails.length === 0) return
+    setInviteFailed([])
     try {
-      await inviteUser({ variables: { email, role: inviteRole } })
-      setInviteEmail('')
-      setInviteRole('MEMBER')
+      const { data } = await inviteUsers({
+        variables: { emails, role: inviteRole },
+      })
+      const result = data?.inviteUsers
+      if (!result) return
+      if (result.invited.length > 0) {
+        toastSuccess(
+          `${result.invited.length}件に招待を送りました`,
+          '仮パスワード付きのメールが同時に届きます',
+        )
+      }
+      // 送れた宛先だけを入力欄から消す。残った分は直してもう一度送れる
+      setInviteFailed(result.failed)
+      setInviteText(result.failed.map((f) => f.email).join('\n'))
+      if (result.failed.length === 0) setInviteRole('MEMBER')
     } catch (e) {
       toastError('招待できませんでした', errorMessage(e, ''))
     }
@@ -111,14 +156,17 @@ export function UserManagementDialog({
               <Text fontSize="sm" fontWeight="medium" mb={2}>
                 新しいユーザーを招待
               </Text>
+              <Textarea
+                size="sm"
+                rows={3}
+                mb={2}
+                placeholder={
+                  '例:\ntanaka@example.co.jp\nsuzuki@example.co.jp\n\n改行・カンマ・スペース区切りでまとめて入力できます'
+                }
+                value={inviteText}
+                onChange={(e) => setInviteText(e.target.value)}
+              />
               <HStack gap={2} mb={1}>
-                <Input
-                  size="sm"
-                  type="email"
-                  placeholder="メールアドレス"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                />
                 <Button
                   size="sm"
                   variant={inviteRole === 'MEMBER' ? 'solid' : 'outline'}
@@ -135,19 +183,47 @@ export function UserManagementDialog({
                 >
                   管理者
                 </Button>
+                <Box flex="1" />
                 <Button
                   size="sm"
                   colorPalette="blue"
                   loading={inviting}
-                  disabled={!inviteEmail.trim()}
+                  disabled={emails.length === 0}
                   onClick={() => void handleInvite()}
                 >
-                  招待
+                  <LuSend />
+                  {emails.length > 1 ? `${emails.length}件をまとめて招待` : '招待'}
                 </Button>
               </HStack>
-              <Text fontSize="xs" color="fg.muted" mb={4}>
-                仮パスワード付きの招待メールが本人に届きます
+              <Text fontSize="xs" color="fg.muted" mb={inviteFailed.length ? 2 : 4}>
+                仮パスワード付きの招待メールが本人に届きます。
+                {emails.length > 1 &&
+                  `${emails.length}件へ同時に送るので、届く時刻がばらけません。`}
+                {emails.length > MAX_INVITE_AT_ONCE &&
+                  `一度に招待できるのは${MAX_INVITE_AT_ONCE}件までです。`}
               </Text>
+
+              {/* 送れなかった宛先。入力欄には残してあるので直して送り直せる */}
+              {inviteFailed.length > 0 && (
+                <Box
+                  mb={4}
+                  p={2}
+                  borderWidth="1px"
+                  borderRadius="md"
+                  borderColor="border.error"
+                >
+                  <Text fontSize="xs" color="fg.error" mb={1}>
+                    次の{inviteFailed.length}件は招待できませんでした（他の宛先には送信済みです）
+                  </Text>
+                  <VStack gap={0} align="stretch">
+                    {inviteFailed.map((f) => (
+                      <Text key={f.email} fontSize="xs" color="fg.muted">
+                        {f.email}: {f.reason}
+                      </Text>
+                    ))}
+                  </VStack>
+                </Box>
+              )}
 
               {/* ユーザー一覧 */}
               {loading && !data && <Spinner size="sm" />}

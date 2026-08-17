@@ -2,7 +2,7 @@ import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
 import type { AuthUser } from '../auth/current-user';
 import { CurrentUser } from '../auth/current-user';
 import { Roles, UserRole } from '../auth/roles';
-import { ManagedUser, UserProfile } from './model';
+import { InviteResult, ManagedUser, UserProfile } from './model';
 import { UserService } from './service';
 
 @Resolver(() => UserProfile)
@@ -23,15 +23,20 @@ export class UserResolver {
     return this.userService.listManaged();
   }
 
-  // メールアドレスで招待する。仮パスワードはCognitoが本人へメールで送る
-  @Mutation(() => ManagedUser)
+  /**
+   * メールアドレスで招待する(複数可)。仮パスワードはCognitoが本人へメールで送る。
+   *
+   * まとめて受け取るのは、1件ずつ招待すると届く時刻が人によってばらけるため。
+   * 1件の失敗で全体を止めず、送れなかった宛先は理由と一緒に返す
+   */
+  @Mutation(() => InviteResult)
   @Roles(UserRole.ADMIN)
-  inviteUser(
-    @Args('email') email: string,
+  inviteUsers(
+    @Args('emails', { type: () => [String] }) emails: string[],
     @Args('role', { type: () => UserRole, nullable: true })
     role?: UserRole,
   ) {
-    return this.userService.invite(email.trim(), role ?? UserRole.MEMBER);
+    return this.userService.inviteMany(emails, role ?? UserRole.MEMBER);
   }
 
   @Mutation(() => ManagedUser)

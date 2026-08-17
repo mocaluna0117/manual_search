@@ -5,6 +5,12 @@ import { PrismaService } from '../prisma/service';
 import { CognitoAdminService } from './cognito';
 import { ManagedUser } from './model';
 
+/**
+ * 一度に招待できる件数の上限。
+ * 部署単位の追加を想定した数で、押し間違いで大量に送ってしまう事故も防ぐ
+ */
+const MAX_INVITE_AT_ONCE = 30;
+
 @Injectable()
 export class UserService {
   constructor(
@@ -59,6 +65,66 @@ export class UserService {
       passwordPending: created.passwordPending,
       createdAt: created.createdAt,
     };
+  }
+
+  /**
+   * 複数のメールアドレスをまとめて招待する。
+   *
+   * 1件ずつ招待すると、届く時刻が人によってばらける。同じ説明を別々の
+   * タイミングで受け取ると「自分だけ何か違うのか」と迷わせるので、
+   * まとめて実行して同じ時刻に届くようにする。
+   *
+   * 1件の失敗(既に登録済み・形式不正)で全体を止めない。
+   * 送れたものは送り、送れなかったものは理由を返して画面に出す
+   */
+  async inviteMany(
+    emails: string[],
+    role: UserRole,
+  ): Promise<{
+    invited: ManagedUser[];
+    failed: { email: string; reason: string }[];
+  }> {
+    // 前後の空白を落とし、大文字小文字の違いは同じ宛先として1件にまとめる
+    const seen = new Set<string>();
+    const targets: string[] = [];
+    for (const raw of emails) {
+      const email = raw.trim();
+      if (!email) continue;
+      const key = email.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push(email);
+    }
+    if (targets.length === 0) {
+      throw new BadRequestException('招待するメールアドレスを入力してください');
+    }
+    if (targets.length > MAX_INVITE_AT_ONCE) {
+      throw new BadRequestException(
+        `一度に招待できるのは${MAX_INVITE_AT_ONCE}件までです`,
+      );
+    }
+
+    const invited: ManagedUser[] = [];
+    const failed: { email: string; reason: string }[] = [];
+    // 並行して呼ぶ(順番に待つと最後の人へ届くのが遅れる)
+    await Promise.all(
+      targets.map(async (email) => {
+        try {
+          invited.push(await this.invite(email, role));
+        } catch (e) {
+          failed.push({
+            email,
+            reason: e instanceof Error ? e.message : '不明なエラー',
+          });
+        }
+      }),
+    );
+    // 画面に出す順番を入力順に戻す(並行実行で崩れるため)
+    const order = new Map(targets.map((e, i) => [e.toLowerCase(), i]));
+    const at = (e: string | null) => order.get((e ?? '').toLowerCase()) ?? 999;
+    invited.sort((a, b) => at(a.email) - at(b.email));
+    failed.sort((a, b) => at(a.email) - at(b.email));
+    return { invited, failed };
   }
 
   /** 権限の変更。自分自身は変更不可(管理者が誰もいなくなる事故を防ぐ) */
