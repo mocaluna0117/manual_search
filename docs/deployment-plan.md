@@ -65,6 +65,17 @@
 - CloudFront: オリジン2つ（S3 + ALB）、`/graphql`だけALBへルーティング
 - SPAフォールバック: 403/404 → `/index.html`（nginx.confのtry_filesと同じ役割）
 - Cognitoアプリクライアントのコールバック/ログアウトURLに `https://xxx.cloudfront.net` を追加
+- 招待メールの文面(2026-08-18に日本語化): `infra/cognito/invite-message.json` を
+  `update-user-pool --admin-create-user-config` で適用する。本文には `{username}` と
+  `{####}` が必須。HTMLタグが使える
+  - ⚠️ **`update-user-pool` は渡さなかった設定を既定値に戻す**。パスワードポリシー・
+    MFA・自動検証属性・ティア・削除保護なども毎回一緒に渡すこと。
+    適用後は describe-user-pool の前後を突き合わせて、意図しない差分が無いか確認する
+  - 招待メールが迷惑メールに入る問題は文面では直らない。差出人が
+    Cognito既定の共有アドレス(no-reply@verificationemail.com)であることが原因。
+    直すには **SESの本番アクセス申請**(サンドボックス中は未認証の宛先に送れないので、
+    先に申請が必須) → **自社ドメインをSESに登録してDKIMを設定** →
+    `--email-configuration EmailSendingAccount=DEVELOPER` に切り替える、の順
 - ログイン画面の日本語化(2026-08-16に実施):
   - 旧来のHosted UI(`ManagedLoginVersion: 1`)は英語のみで、Accept-Languageにも
     `ui_locales`にも反応しない(実測で確認)
