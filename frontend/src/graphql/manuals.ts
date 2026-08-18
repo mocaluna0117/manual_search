@@ -311,6 +311,8 @@ interface RestoreCategoriesData {
     restoredCount: number
     // 同名のフォルダが既にあったため、中身だけをそちらへ戻した分
     mergedInto: string[]
+    /** 鍵の有無が違ったため、まとめずに別の名前で戻した分 */
+    restoredSeparately: string[]
   }
 }
 
@@ -322,6 +324,7 @@ export const RESTORE_CATEGORIES_MUTATION: TypedDocumentNode<
     restoreCategories(ids: $ids) {
       restoredCount
       mergedInto
+      restoredSeparately
     }
   }
 `
@@ -446,11 +449,13 @@ export const MOVE_MANUAL_MUTATION: TypedDocumentNode<
 interface ReclassifySelectedData {
   reclassifySelectedManuals: {
     movedCount: number
-    moved: { title: string; categoryName: string }[]
+    moved: { title: string; categoryName: string; adminOnly: boolean }[]
     /** ピン留めされていて動かさなかった分 */
     skippedPinned: string[]
     /** 取り込みが終わっておらず中身を読めなかった分 */
     skippedNotReady: string[]
+    /** 鍵付きフォルダの中にあって動かさなかった分 */
+    skippedLocked: string[]
     /** 合うフォルダが無くて新しく作った分 */
     createdCategories: string[]
   }
@@ -466,9 +471,11 @@ export const RECLASSIFY_SELECTED_MUTATION: TypedDocumentNode<
       moved {
         title
         categoryName
+        adminOnly
       }
       skippedPinned
       skippedNotReady
+      skippedLocked
       createdCategories
     }
   }
@@ -480,6 +487,8 @@ interface AutoOrganizeData {
   autoOrganizeManuals: {
     movedCount: number
     createdCategories: string[]
+    /** 鍵付きフォルダへ入れた分(一般利用者からは見えなくなる) */
+    movedToLocked: string[]
   }
 }
 
@@ -488,6 +497,7 @@ export const AUTO_ORGANIZE_MUTATION: TypedDocumentNode<AutoOrganizeData> = gql`
     autoOrganizeManuals {
       movedCount
       createdCategories
+      movedToLocked
     }
   }
 `
@@ -517,6 +527,10 @@ export interface ReclassifyStatus {
   movedCount: number
   createdCategories: string[]
   emptiedCategories: EmptiedCategory[]
+  /** 鍵付きフォルダへ入れた分(一般利用者からは見えなくなる) */
+  movedToLocked: string[]
+  /** 鍵付きフォルダの中にあって動かさなかった分 */
+  skippedLocked: string[]
   error: string | null
   finishedAt: string | null
 }
@@ -557,6 +571,8 @@ export const RECLASSIFY_STATUS_QUERY: TypedDocumentNode<ReclassifyStatusData> = 
         name
         createdByAi
       }
+      movedToLocked
+      skippedLocked
       error
       finishedAt
     }
@@ -564,7 +580,7 @@ export const RECLASSIFY_STATUS_QUERY: TypedDocumentNode<ReclassifyStatusData> = 
 `
 
 interface ReclassifyCountsData {
-  reclassifyCounts: { target: number; pinned: number }
+  reclassifyCounts: { target: number; pinned: number; locked: number }
 }
 
 export const RECLASSIFY_COUNTS_QUERY: TypedDocumentNode<ReclassifyCountsData> = gql`
@@ -572,6 +588,7 @@ export const RECLASSIFY_COUNTS_QUERY: TypedDocumentNode<ReclassifyCountsData> = 
     reclassifyCounts {
       target
       pinned
+      locked
     }
   }
 `

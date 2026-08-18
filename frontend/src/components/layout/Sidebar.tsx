@@ -238,7 +238,9 @@ export function SidebarContent({
       next &&
       !window.confirm(
         `フォルダ「${category.name}」を管理者だけに表示しますか？\n` +
-          '中のマニュアルは一般の利用者の一覧・検索・AIの回答から出なくなります。',
+          '中のマニュアルは一般の利用者の一覧・検索・ダウンロードから出なくなります。\n' +
+          'AIの回答の根拠には、管理者の質問でも使われなくなります。\n' +
+          '(管理者は一覧・キーワード検索から開いて読めます)',
       )
     ) {
       return
@@ -344,11 +346,24 @@ export function SidebarContent({
         if (status.error) {
           toastError('再分類に失敗しました', status.error)
         } else {
-          toastSuccess(
-            `再分類が完了しました（${status.movedCount}件を割り当て）`,
+          const notes = [
             status.createdCategories.length > 0
               ? `新しく作られたフォルダ: ${status.createdCategories.join('、')}`
-              : undefined,
+              : '',
+            // 鍵付きへ入った分は必ず伝える。黙って入れると
+            // 一般利用者から見えなくなったことに誰も気づけない
+            status.movedToLocked.length > 0
+              ? `🔒 ${status.movedToLocked.join('、')} は鍵付きフォルダへ入れたので、` +
+                '一般の利用者からは見えなくなりました'
+              : '',
+            status.skippedLocked.length > 0
+              ? `🔒 鍵付きフォルダの中の${status.skippedLocked.length}件は動かしていません: ` +
+                status.skippedLocked.join('、')
+              : '',
+          ].filter(Boolean)
+          toastSuccess(
+            `再分類が完了しました（${status.movedCount}件を割り当て）`,
+            notes.length > 0 ? notes.join('\n') : undefined,
           )
         }
       }
@@ -361,6 +376,7 @@ export function SidebarContent({
     const { data: counts } = await fetchCounts()
     const target = counts?.reclassifyCounts.target ?? 0
     const pinned = counts?.reclassifyCounts.pinned ?? 0
+    const locked = counts?.reclassifyCounts.locked ?? 0
     if (target === 0) {
       toastInfo('再分類できるマニュアルがありません')
       return
@@ -369,6 +385,9 @@ export function SidebarContent({
       !window.confirm(
         `全${target}件のマニュアルを、AIが工種・業務分野ごとのフォルダへ再分類します（足りないフォルダは新しく作られます）。\n` +
           (pinned > 0 ? `ピン留めされた${pinned}件は動かしません。\n` : '') +
+          (locked > 0
+            ? `鍵付きフォルダの中の${locked}件も動かしません。\n`
+            : '') +
           '今の分類は上書きされます。実行しますか？',
       )
     )

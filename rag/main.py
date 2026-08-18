@@ -204,10 +204,16 @@ def fuse_by_rrf(routes: list[list[tuple]]) -> list[tuple]:
     return [meta[cid] for cid in ranked]  # (manual_id, title, content, page_number)
 
 
-# 管理者だけに見せるフォルダの中身を、検索から外すための条件。
+# 鍵付き(管理者だけに見せる)フォルダの中身を、検索から外すための条件。
 #
 # 画面の一覧から隠すだけでは足りない。AIは検索で拾った抜粋を根拠に答えるので、
 # 検索に残っていると回答文や引用として中身がそのまま出てしまう。
+#
+# 管理者の質問でも外す。鍵付きに入れるのは「業務の回答に使ってほしくない資料」
+# (個人の資格試験の教材など)であることが多く、根拠の枠(TOP_K)は8件しかない。
+# 業務の質問と語彙が近い資料が混ざると、本来出るべきマニュアルが押し出される。
+# 管理者は画面のキーワード検索・閲覧・ダウンロードで中身に辿れるため、
+# ここで外しても資料に触れなくなるわけではない。
 # 未分類(categoryIdがnull)は誰でも見えるフォルダ外の資料なので対象外
 HIDE_ADMIN_ONLY = """
               AND NOT EXISTS (
@@ -216,7 +222,7 @@ HIDE_ADMIN_ONLY = """
               )"""
 
 
-def hybrid_search(cur, query_vec: str, terms: list[str], is_admin: bool = False):
+def hybrid_search(cur, query_vec: str, terms: list[str]):
     """ベクトル・キーワード・タイトルの3ルートをRRF(Reciprocal Rank Fusion)で融合する。
 
     取り込みが完了していないマニュアル(差し替え直後・失敗)は検索対象から除く。
@@ -236,8 +242,8 @@ def hybrid_search(cur, query_vec: str, terms: list[str], is_admin: bool = False)
     # 「JOINしてからソート」の計画を選びHNSWインデックスが使われなくなる。
     # AS MATERIALIZED でCTEのインライン展開も防ぎ、確実に索引を使わせる。
     # 内側は多めに取り、取り込み未完了ぶんを除いた後にTOPまで絞る
-    # 管理者のときだけ隠しフォルダも含める
-    hidden = "" if is_admin else HIDE_ADMIN_ONLY
+    # 鍵付きフォルダは誰の検索からも外す(理由はHIDE_ADMIN_ONLYの説明)
+    hidden = HIDE_ADMIN_ONLY
     cur.execute(
         """
         WITH nearest AS MATERIALIZED (
@@ -674,8 +680,8 @@ def retrieve(req: SearchRequest):
     terms = [t for t in re.split(r"\s+", retrieval_query) if len(t) >= 2][:10]
     with db_connect() as conn:
         with conn.cursor() as cur:
-            # 管理者以外には、管理者だけに見せるフォルダの中身を検索させない
-            rows = hybrid_search(cur, query_vec, terms, req.is_admin)
+            # 鍵付きフォルダの中身は、管理者の質問でも根拠にしない
+            rows = hybrid_search(cur, query_vec, terms)
 
     return rows, images
 
@@ -809,14 +815,15 @@ def draft_manual(req: DraftManualRequest) -> DraftManualResponse:
     if not question:
         raise HTTPException(status_code=400, detail="質問が空です")
 
-    # 材料集めは通常の検索と同じ。管理者しか使わない機能なので隠しフォルダも見る
+    # 材料集めは通常の検索と同じ(鍵付きフォルダは含まない。下書きは全員が読む
+    # マニュアルになるので、隠している資料の記述が混ざってはいけない)
     query = normalize_text(question)
     try:
         query_vec = to_vector_literal(embedder.embed_texts([query])[0])
         terms = [t for t in re.split(r"\s+", query) if len(t) >= 2][:10]
         with db_connect() as conn:
             with conn.cursor() as cur:
-                rows = hybrid_search(cur, query_vec, terms, True)
+                rows = hybrid_search(cur, query_vec, terms)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"関連資料を探せませんでした: {e}")
 

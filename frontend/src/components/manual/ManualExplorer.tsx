@@ -107,9 +107,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       const finished = manuals.find((m) => m.id === id)
       if (!finished) continue // 一覧から消えた(削除・移動)ときは何も言わない
       if (finished.ingestStatus === 'COMPLETED') {
+        // 鍵付きフォルダの中身はAIの回答の根拠に使わない。
+        // ここで「AI検索で使えます」と出すと事実と逆の説明になる
+        // categoriesは下で並べ替えたもの。ここでは取得直後の一覧を見る
+        const locked = (categoriesData?.manualCategories ?? []).some(
+          (c) => c.id === finished.categoryId && c.adminOnly,
+        )
         toastSuccess(
           `「${finished.title}」の取り込みが完了しました`,
-          `${finished.chunkCount ?? 0}件のチャンク。AI検索で使えます`,
+          locked
+            ? `${finished.chunkCount ?? 0}件のチャンク。鍵付きフォルダの中なので、AIの回答には使われません`
+            : `${finished.chunkCount ?? 0}件のチャンク。AI検索で使えます`,
         )
       } else {
         toastError(
@@ -119,7 +127,9 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       }
     }
     watchedRef.current = nowInFlight
-  }, [data])
+    // フォルダ一覧も見る(鍵付きかどうかで文言を変えるため)。
+    // 再実行されてもwatchedRefで弾かれるので、通知が重複することはない
+  }, [data, categoriesData?.manualCategories])
   useEffect(() => {
     if (hasInFlight) {
       startPolling(3000)
@@ -404,7 +414,7 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       !window.confirm(
         `選択した${ids.length}件を、AIが内容から分類し直します。\n` +
           '合うフォルダが無ければ新しく作ります。\n' +
-          'ピン留めしたファイルは動かしません。よろしいですか？',
+          'ピン留めしたファイルと、鍵付きフォルダの中のファイルは動かしません。よろしいですか？',
       )
     )
       return
@@ -417,7 +427,13 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
       toastReport(
         r.movedCount > 0 ? `${r.movedCount}件を分類し直しました` : '移動はありませんでした',
         (r.movedCount > 0
-          ? r.moved.map((m) => `・${m.title} → 📁 ${m.categoryName}`).join('\n')
+          ? r.moved
+              // 鍵付きフォルダへ入れた分は🔒で区別する(一般利用者から見えなくなる)
+              .map(
+                (m) =>
+                  `・${m.title} → ${m.adminOnly ? '🔒' : '📁'} ${m.categoryName}`,
+              )
+              .join('\n')
           : '今の分類のままです。') +
           // 増えたフォルダは必ず伝える(サイドバーに見慣れない箱が増えるため)
           (r.createdCategories.length > 0
@@ -430,6 +446,13 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
             : '') +
           (r.skippedNotReady.length > 0
             ? `\n\n取り込みが終わっていないため分類できませんでした: ${r.skippedNotReady.join('、')}`
+            : '') +
+          // 鍵付きの中身を動かさない理由を伝える。黙って何も起きないと
+          // 「分類が効かなかった」ようにしか見えない
+          (r.skippedLocked.length > 0
+            ? `\n\n鍵付きフォルダの中にあるため動かしませんでした: ${r.skippedLocked.join('、')}` +
+              '\n(AIの分類で鍵の外へ出ると全員に見えてしまうためです。' +
+              '移したいときは一覧でドラッグするか、チャットで移動を指示してください)'
             : ''),
       )
     } catch (e) {
@@ -449,12 +472,21 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     try {
       const { data: result } = await autoOrganize()
       if (result) {
-        const { movedCount, createdCategories } = result.autoOrganizeManuals
-        toastSuccess(
-          `${movedCount}件を分類しました`,
+        const { movedCount, createdCategories, movedToLocked } =
+          result.autoOrganizeManuals
+        const notes = [
           createdCategories.length > 0
             ? `新しく作られたフォルダ: ${createdCategories.join('、')}`
-            : undefined,
+            : '',
+          // 鍵付きへ入った分は必ず伝える(一般利用者からは見えなくなる)
+          movedToLocked.length > 0
+            ? `🔒 ${movedToLocked.join('、')} は鍵付きフォルダへ入れたので、` +
+              '一般の利用者からは見えなくなりました'
+            : '',
+        ].filter(Boolean)
+        toastSuccess(
+          `${movedCount}件を分類しました`,
+          notes.length > 0 ? notes.join('\n') : undefined,
         )
       }
     } catch (e) {

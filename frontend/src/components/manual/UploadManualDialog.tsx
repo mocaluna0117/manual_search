@@ -137,8 +137,10 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const manualById = new Map(
     (existingData?.manuals ?? []).map((m) => [m.id, m]),
   )
-  const categoryNameById = new Map(
-    (categoriesData?.manualCategories ?? []).map((c) => [c.id, c.name]),
+  // 鍵付きかどうかも持つ。AIにおまかせで鍵付きフォルダへ入った場合に
+  // 🔒 を出して、一般の利用者からは見えないことをその場で伝える
+  const categoryById = new Map(
+    (categoriesData?.manualCategories ?? []).map((c) => [c.id, c]),
   )
 
   /** 1件の格納先を、今分かっている範囲で文章にする */
@@ -164,9 +166,15 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
     if (!manual.categoryId) {
       return { text: '📁 未分類に入りました', tone: 'fg.muted' }
     }
-    const name = categoryNameById.get(manual.categoryId)
+    const category = categoryById.get(manual.categoryId)
+    if (category?.adminOnly) {
+      return {
+        text: `🔒 ${category.name} に入りました(一般の利用者には表示されません)`,
+        tone: 'orange.fg',
+      }
+    }
     return {
-      text: `📁 ${name ?? 'フォルダ'} に入りました`,
+      text: `📁 ${category?.name ?? 'フォルダ'} に入りました`,
       tone: 'green.fg',
     }
   }

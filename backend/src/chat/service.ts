@@ -6,7 +6,6 @@ import {
 import { randomUUID } from 'node:crypto';
 import { Prisma, type Message } from '../../generated/prisma/client';
 import { CategoryService } from '../category/service';
-import { IngestStatus } from '../manual/model';
 import { ManualService } from '../manual/service';
 import { PrismaService } from '../prisma/service';
 import { RagCitation } from '../rag/model';
@@ -252,36 +251,36 @@ export class ChatService {
           take: 8, // 直近4往復まで(古いやりとりまで送るとノイズになる)
         })
       : [];
-    const history = recentMessages.reverse().map((m) => {
-      // 過去に提示した選択肢も文脈に含める(「2です」の意味をClaudeが分かるように)
-      const options = (m.options as string[] | null) ?? [];
-      const optionsText =
-        options.length > 0
-          ? `\n選択肢: ${options.map((o, i) => `${i + 1}. ${o}`).join(' / ')}`
-          : '';
-      let content = m.content;
-      if (m.role === MessageRole.ASSISTANT) {
-        // 管理操作の「成功」行(システムが書いた📏/📁等)は履歴に入れない。
-        // 成功メッセージが並ぶと、モデルがツールを呼ばずに
-        // 「実行したフリ」の文章を真似して書く事故が起きるため。
-        // ただし⚠️の訂正行は必ず残す。訂正だけ消すと、モデルは自分の
-        // 誤った成功宣言だけを見続けて同じ誤りを繰り返す
-        content =
-          content
-            .split('\n')
-            .filter((line) => !/^(📏|📁|🔒|🗑|⏳|✅)/.test(line))
-            .join('\n')
-            .trim() || '(管理操作を実行しました)';
-      }
-      return {
-        // 'user' | 'assistant' に絞る(そのままだとstring扱いになり、
-        // RAGへ渡すときに型が合わない)
-        role: (m.role === MessageRole.USER ? 'user' : 'assistant') as
-          | 'user'
-          | 'assistant',
-        content: content.slice(0, 500) + optionsText,
-      };
-    });
+    // 型を明示する。ここを書かないと roleの三項演算子が string に広がって
+    // RAGへ渡す型と合わなくなる(型注釈の代わりに as で書くと、
+    // eslint --fix が「不要な assertion」として消してしまいビルドが壊れる)
+    const history: { role: 'user' | 'assistant'; content: string }[] =
+      recentMessages.reverse().map((m) => {
+        // 過去に提示した選択肢も文脈に含める(「2です」の意味をClaudeが分かるように)
+        const options = (m.options as string[] | null) ?? [];
+        const optionsText =
+          options.length > 0
+            ? `\n選択肢: ${options.map((o, i) => `${i + 1}. ${o}`).join(' / ')}`
+            : '';
+        let content = m.content;
+        if (m.role === MessageRole.ASSISTANT) {
+          // 管理操作の「成功」行(システムが書いた📏/📁等)は履歴に入れない。
+          // 成功メッセージが並ぶと、モデルがツールを呼ばずに
+          // 「実行したフリ」の文章を真似して書く事故が起きるため。
+          // ただし⚠️の訂正行は必ず残す。訂正だけ消すと、モデルは自分の
+          // 誤った成功宣言だけを見続けて同じ誤りを繰り返す
+          content =
+            content
+              .split('\n')
+              .filter((line) => !/^(📏|📁|🔒|🗑|⏳|✅)/.test(line))
+              .join('\n')
+              .trim() || '(管理操作を実行しました)';
+        }
+        return {
+          role: m.role === MessageRole.USER ? 'user' : 'assistant',
+          content: content.slice(0, 500) + optionsText,
+        };
+      });
 
     // 3) 質問を保存(画像そのものは保存しない。添付があったことだけ履歴に残す)
     // 画像はS3へ置いてから、その場所を質問と一緒に残す。
@@ -401,7 +400,8 @@ export class ChatService {
             );
             continue;
           }
-          const found = await this.categoryService.findByPartialName(folderText);
+          const found =
+            await this.categoryService.findByPartialName(folderText);
           if (found.status === 'not_found') {
             lines.push(
               `⚠️ 「${folderText}」というフォルダはありません。現在のフォルダ:\n\n` +
@@ -464,7 +464,8 @@ export class ChatService {
             lines.push('⚠️ どのフォルダを削除するか指定してください。');
             continue;
           }
-          const found = await this.categoryService.findByPartialName(folderText);
+          const found =
+            await this.categoryService.findByPartialName(folderText);
           if (found.status === 'not_found') {
             lines.push(
               `⚠️ 「${folderText}」というフォルダはありません。現在のフォルダ:\n\n` +
@@ -509,8 +510,12 @@ export class ChatService {
             folderText,
           );
           if (result.status === 'moved') {
+            // 鍵付きフォルダへ入れたときは必ず言う。黙って入れると
+            // 「一般利用者から見えなくなった」ことに気づけない
             lines.push(
-              `📁 「${result.manual.title}」を「${result.folderName}」に移動しました。`,
+              result.folderAdminOnly
+                ? `🔒 「${result.manual.title}」を「${result.folderName}」に移動しました(このフォルダは管理者だけに表示されます)。`
+                : `📁 「${result.manual.title}」を「${result.folderName}」に移動しました。`,
             );
           } else if (result.status === 'manual_ambiguous') {
             const candidates = result.manuals.slice(0, 10);
@@ -592,8 +597,11 @@ export class ChatService {
         // 管理者が依頼文で分類方針を指定していたら、確認を経て実行まで引き継ぐ
         const instruction =
           String(reclassify.input.instruction ?? '').trim() || undefined;
-        const { target: manualCount, pinned: pinnedCount } =
-          await this.manualService.reclassifyCounts();
+        const {
+          target: manualCount,
+          pinned: pinnedCount,
+          locked: lockedCount,
+        } = await this.manualService.reclassifyCounts();
         await this.prisma.conversation.update({
           where: { id: conversation.id },
           data: {
@@ -608,6 +616,9 @@ export class ChatService {
             '(足りないフォルダは新しく作られます)。' +
             (pinnedCount > 0
               ? `📌 ピン留めされた${pinnedCount}件は動かしません。`
+              : '') +
+            (lockedCount > 0
+              ? `🔒 鍵付きフォルダの中の${lockedCount}件も動かしません。`
               : '') +
             (instruction ? `分類方針:「${instruction}」。` : '') +
             '今の分類は上書きされます。実行してよいですか？',
@@ -775,6 +786,21 @@ export class ChatService {
           ? `📁 全マニュアルの再分類が完了しました(${result.movedCount}件を割り当て)。` +
             (result.createdCategories.length > 0
               ? `\n新しく作られたフォルダ: ${result.createdCategories.join('、')}`
+              : '') +
+            // 鍵付きフォルダへ入れた分は名前を挙げる。黙って入れると
+            // 一般利用者から見えなくなったことに誰も気づけない
+            // 鍵付きゆえに動かさなかった分も伝える。黙って外すと
+            // 「再分類したのに直っていない」ようにしか見えない
+            (result.skippedLocked.length > 0
+              ? `\n🔒 鍵付きフォルダの中の${result.skippedLocked.length}件は動かしていません` +
+                '(AIの分類で鍵の外へ出ると全員に見えてしまうためです): ' +
+                `${result.skippedLocked.join('、')}`
+              : '') +
+            (result.movedToLocked.length > 0
+              ? `\n🔒 このうち${result.movedToLocked.length}件は鍵付きフォルダへ入れたので、` +
+                '一般の利用者からは見えなくなりました: ' +
+                `${result.movedToLocked.join('、')}` +
+                '\n意図と違う場合は「〇〇を△△フォルダに移動して」と指示すれば戻せます。'
               : '') +
             // 空になったフォルダは画面側でまとめて片付けられる。
             // ここで件数だけ伝えて、削除の可否はモーダルで選んでもらう

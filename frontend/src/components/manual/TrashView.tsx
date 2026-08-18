@@ -86,6 +86,7 @@ export function TrashView() {
     // 同名のフォルダが既にある場合は中身だけがそちらへ入る。
     // 黙って別の場所に入ると探せなくなるので、戻した後に伝える
     let merged: string[] = []
+    let separated: string[] = []
     return run(async () => {
       if (checkedIds.size > 0)
         await restoreManuals({ variables: { ids: [...checkedIds] } })
@@ -95,12 +96,21 @@ export function TrashView() {
           variables: { ids: [...checkedFolderIds] },
         })
         merged = data?.restoreCategories.mergedInto ?? []
+        separated = data?.restoreCategories.restoredSeparately ?? []
       }
     }, `${checkedCount}件を元に戻しました。`).then(() => {
       if (merged.length > 0) {
         toastInfo(
           '同じ名前のフォルダが既にありました',
           `中身をそちらへ戻しました: ${merged.join('、')}`,
+        )
+      }
+      // 鍵の有無が違うものをまとめると、隠していた資料が全員に見えてしまう。
+      // 名前を変えて別に戻したことを伝える
+      if (separated.length > 0) {
+        toastInfo(
+          '同じ名前でも見せる範囲が違ったため、別のフォルダとして戻しました',
+          `${separated.join('、')}（鍵の状態はそのままです）`,
         )
       }
     })

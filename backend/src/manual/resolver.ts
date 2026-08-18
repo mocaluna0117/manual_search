@@ -84,10 +84,7 @@ export class ManualResolver {
     @Args('id', { type: () => ID }) id: string,
     @CurrentUser() authUser: AuthUser,
   ) {
-    return this.manualService.getDownloadUrl(
-      id,
-      await this.isAdmin(authUser),
-    );
+    return this.manualService.getDownloadUrl(id, await this.isAdmin(authUser));
   }
 
   // 一括ダウンロード用。複数の署名付きURLをまとめて発行する

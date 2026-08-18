@@ -112,6 +112,10 @@ export class AutoOrganizeResult {
 
   @Field(() => [String])
   createdCategories!: string[];
+
+  // 鍵付きフォルダへ入れたマニュアルの名前(一般利用者からは見えなくなる)
+  @Field(() => [String])
+  movedToLocked!: string[];
 }
 
 // 再分類で中身が他へ移り、空になったフォルダ。
@@ -138,6 +142,11 @@ export class ReclassifiedManual {
 
   @Field()
   categoryName!: string;
+
+  // 入れた先が鍵付きフォルダか。画面で🔒を出して、
+  // 一般利用者から見えなくなったことを管理者に伝える
+  @Field()
+  adminOnly!: boolean;
 }
 
 @ObjectType()
@@ -156,6 +165,11 @@ export class ReclassifySelectedResult {
   // 取り込みが終わっておらず、中身を読めなかったマニュアルの名前
   @Field(() => [String])
   skippedNotReady!: string[];
+
+  // 鍵付きフォルダの中にあって動かさなかったマニュアルの名前。
+  // AIの分類で鍵の外へ出すと、隠していた資料が全員に見えてしまうため
+  @Field(() => [String])
+  skippedLocked!: string[];
 
   // 合うフォルダが無くて新しく作った分の名前
   @Field(() => [String])
@@ -193,6 +207,14 @@ export class ReclassifyStatus {
   @Field(() => [EmptiedCategory])
   emptiedCategories!: EmptiedCategory[];
 
+  // 鍵付きフォルダへ入れたマニュアルの名前(一般利用者からは見えなくなる)
+  @Field(() => [String])
+  movedToLocked!: string[];
+
+  // 鍵付きフォルダの中にあって動かさなかったマニュアルの名前
+  @Field(() => [String])
+  skippedLocked!: string[];
+
   @Field(() => String, { nullable: true })
   error!: string | null;
 
@@ -209,6 +231,11 @@ export class RestoreCategoriesResult {
 
   @Field(() => [String])
   mergedInto!: string[];
+
+  // 同名のフォルダと見せる範囲(鍵)が違ったため、まとめずに別の名前で戻した分。
+  // まとめると鍵付きだった中身が全員に見えてしまう(またはその逆になる)
+  @Field(() => [String])
+  restoredSeparately!: string[];
 }
 
 // マニュアルを開くための情報。ブラウザで表示できない形式(Word/Excel等)は
@@ -250,6 +277,9 @@ export class ReclassifyCounts {
 
   @Field(() => Int)
   pinned!: number; // ピン留めされていて動かさない件数
+
+  @Field(() => Int)
+  locked!: number; // 鍵付きフォルダの中にあって動かさない件数
 }
 
 // キーワード検索の1件分。マニュアル本体と、本文がヒットした場合はその抜粋を返す

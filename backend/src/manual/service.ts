@@ -92,15 +92,20 @@ export class ManualService implements OnApplicationBootstrap {
   }
 
   /**
-   * 管理者だけに見せるフォルダの中身を隠すための条件。
+   * 鍵付き(管理者だけに見せる)フォルダの中身を隠すための条件。
    *
    * 未分類(categoryIdがnull)は誰でも見えるので、そのままにする。
-   * 呼び出し側が権限を渡し忘れても隠れる側に倒すため、既定はfalse
+   * 呼び出し側が権限を渡し忘れても隠れる側に倒すため、既定はfalse。
+   *
+   * 配列で返してAND句へ入れる。オブジェクトのまま where に展開する形だと、
+   * 同じwhereでOR句を使う検索(キーワード検索)で後から書いたORに
+   * 上書きされ、除外が黙って消える。実際にそれでMEMBERにも
+   * 鍵付きの題名と本文抜粋が出ていたので、構造的に起きない形にする
    */
-  private visibleTo(includeAdminOnly: boolean) {
+  private visibleTo(includeAdminOnly: boolean): Prisma.ManualWhereInput[] {
     return includeAdminOnly
-      ? {}
-      : { OR: [{ categoryId: null }, { category: { adminOnly: false } }] };
+      ? []
+      : [{ OR: [{ categoryId: null }, { category: { adminOnly: false } }] }];
   }
 
   findAll(
@@ -113,8 +118,8 @@ export class ManualService implements OnApplicationBootstrap {
       where: uncategorized
         ? { ...ALIVE, categoryId: null }
         : categoryId
-          ? { ...ALIVE, categoryId, ...this.visibleTo(includeAdminOnly) }
-          : { ...ALIVE, ...this.visibleTo(includeAdminOnly) },
+          ? { ...ALIVE, categoryId, AND: this.visibleTo(includeAdminOnly) }
+          : { ...ALIVE, AND: this.visibleTo(includeAdminOnly) },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -129,11 +134,17 @@ export class ManualService implements OnApplicationBootstrap {
     const manuals = await this.prisma.manual.findMany({
       where: {
         ...ALIVE,
-        ...this.visibleTo(includeAdminOnly),
-        OR: [
-          { title: contains },
-          { fileName: contains },
-          { chunks: { some: { content: contains } } },
+        // 見える範囲の条件と、キーワードの条件はどちらもORを使う。
+        // 同じ階層に並べると後に書いた方が前を上書きするため、ANDで束ねる
+        AND: [
+          ...this.visibleTo(includeAdminOnly),
+          {
+            OR: [
+              { title: contains },
+              { fileName: contains },
+              { chunks: { some: { content: contains } } },
+            ],
+          },
         ],
       },
       include: {
@@ -377,6 +388,8 @@ export class ManualService implements OnApplicationBootstrap {
     movedCount: 0,
     createdCategories: [],
     emptiedCategories: [],
+    movedToLocked: [],
+    skippedLocked: [],
     error: null,
     finishedAt: null,
   };
@@ -396,6 +409,8 @@ export class ManualService implements OnApplicationBootstrap {
       movedCount: number;
       createdCategories: string[];
       emptiedCategories: EmptiedCategory[];
+      movedToLocked: string[];
+      skippedLocked: string[];
       error?: string;
     }) => void,
   ): boolean {
@@ -405,26 +420,40 @@ export class ManualService implements OnApplicationBootstrap {
       movedCount: 0,
       createdCategories: [],
       emptiedCategories: [],
+      movedToLocked: [],
+      skippedLocked: [],
       error: null,
       finishedAt: null,
     };
     void this.reclassifyAll(instruction)
-      .then(({ movedCount, createdCategories, emptiedCategories }) => {
-        this.reclassifyJob = {
-          running: false,
+      .then(
+        ({
           movedCount,
           createdCategories,
           emptiedCategories,
-          error: null,
-          finishedAt: new Date(),
-        };
-        onFinish?.({
-          ok: true,
-          movedCount,
-          createdCategories,
-          emptiedCategories,
-        });
-      })
+          movedToLocked,
+          skippedLocked,
+        }) => {
+          this.reclassifyJob = {
+            running: false,
+            movedCount,
+            createdCategories,
+            emptiedCategories,
+            movedToLocked,
+            skippedLocked,
+            error: null,
+            finishedAt: new Date(),
+          };
+          onFinish?.({
+            ok: true,
+            movedCount,
+            createdCategories,
+            emptiedCategories,
+            movedToLocked,
+            skippedLocked,
+          });
+        },
+      )
       .catch((e: unknown) => {
         const error = e instanceof Error ? e.message : '不明なエラー';
         this.reclassifyJob = {
@@ -432,6 +461,8 @@ export class ManualService implements OnApplicationBootstrap {
           movedCount: 0,
           createdCategories: [],
           emptiedCategories: [],
+          movedToLocked: [],
+          skippedLocked: [],
           error,
           finishedAt: new Date(),
         };
@@ -440,6 +471,8 @@ export class ManualService implements OnApplicationBootstrap {
           movedCount: 0,
           createdCategories: [],
           emptiedCategories: [],
+          movedToLocked: [],
+          skippedLocked: [],
           error,
         });
       });
@@ -455,12 +488,17 @@ export class ManualService implements OnApplicationBootstrap {
 
   /** 再分類の対象件数(ピン留めを除く)とピン留め件数 */
   async reclassifyCounts() {
-    const [target, pinned] = await Promise.all([
+    const [target, pinned, locked] = await Promise.all([
       this.prisma.manual.count({
         where: {
           ...ALIVE,
           ingestStatus: IngestStatus.COMPLETED,
           categoryPinned: false,
+          // 実際に動かす件数を返す。鍵付きの中身は対象外なので、
+          // ここで数えると確認画面の件数が実際より多くなる
+          AND: [
+            { OR: [{ categoryId: null }, { category: { adminOnly: false } }] },
+          ],
         },
       }),
       this.prisma.manual.count({
@@ -470,8 +508,16 @@ export class ManualService implements OnApplicationBootstrap {
           categoryPinned: true,
         },
       }),
+      this.prisma.manual.count({
+        where: {
+          ...ALIVE,
+          ingestStatus: IngestStatus.COMPLETED,
+          categoryPinned: false,
+          category: { adminOnly: true },
+        },
+      }),
     ]);
-    return { target, pinned };
+    return { target, pinned, locked };
   }
 
   /**
@@ -486,23 +532,53 @@ export class ManualService implements OnApplicationBootstrap {
   ) {
     const manuals = await this.prisma.manual.findMany({
       // ピン留め(手動分類)されたものはAIの分類で動かさない。
-      // 管理者だけに見せるフォルダの中身も動かさない。AIが別の箱へ移すと
-      // 全員に見える場所へ出てしまい、隠している意味が無くなる
+      //
+      // 鍵付きフォルダの中身も、どの経路でも動かさない。AIが別の箱へ移すと
+      // 隠していた資料が全員に見える場所へ出てしまう。しかもAIが新しく作る
+      // フォルダは必ず鍵なしなので、行き先が公開になる確率は低くない。
+      // 鍵付きから出したいときは、一覧でドラッグするか、チャットで
+      // 「〇〇を△△フォルダに移動して」と1件ずつ指示する(意図が明確な操作に限る)
       where: {
-        ...where,
         ...ALIVE,
         ingestStatus: IngestStatus.COMPLETED,
         categoryPinned: false,
-        OR: [{ categoryId: null }, { category: { adminOnly: false } }],
+        // 呼び出し側の条件もANDの中に入れる。同じ階層に展開すると、
+        // キーが衝突したときに黙って片方が消える(それで実際に漏れた)
+        AND: [
+          where,
+          { OR: [{ categoryId: null }, { category: { adminOnly: false } }] },
+        ],
       },
       include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
     });
+
+    // 鍵付きフォルダの中にあって、対象から外した分の名前。
+    // 「1件も動かさなかった」ときこそ理由が要るので、早期returnより前で数える
+    const lockedOut = await this.prisma.manual.findMany({
+      where: {
+        ...ALIVE,
+        ingestStatus: IngestStatus.COMPLETED,
+        categoryPinned: false,
+        AND: [where, { category: { adminOnly: true } }],
+      },
+      select: { title: true },
+      orderBy: { title: 'asc' },
+    });
+    const skippedLocked = lockedOut.map((m) => m.title);
+
     if (manuals.length === 0) {
       return {
         movedCount: 0,
         createdCategories: [],
         emptiedCategories: [],
-        moved: [],
+        moved: [] as {
+          manualId: string;
+          categoryName: string;
+          adminOnly: boolean;
+          title: string;
+        }[],
+        movedToLocked: [] as string[],
+        skippedLocked,
       };
     }
 
@@ -518,15 +594,20 @@ export class ManualService implements OnApplicationBootstrap {
     const BATCH_SIZE = 50;
     let movedCount = 0;
     const createdCategories: string[] = [];
-    const moved: { manualId: string; categoryName: string }[] = [];
+    const moved: {
+      manualId: string;
+      categoryName: string;
+      adminOnly: boolean;
+    }[] = [];
     for (let i = 0; i < manuals.length; i += BATCH_SIZE) {
       const batch = manuals.slice(i, i + BATCH_SIZE);
       // カテゴリはバッチごとに取り直す(前のバッチが作った新カテゴリを次も使えるように)。
       // ゴミ箱の中のフォルダは候補に出さない(選ばれても入れられないため)。
-      // 管理者だけに見せるフォルダも候補にしない。AIの判断で普通の資料が
-      // そこへ入ると、置いた覚えのないものが誰にも見えなくなる
+      // 鍵付きフォルダは候補に含める。分類を実行できるのは管理者だけで、
+      // 鍵付きの中身も管理者には見えているため、行き先から外すと
+      // 「あのフォルダに入れて」という指示が黙って無視される
       const categories = await this.prisma.manualCategory.findMany({
-        where: { ...ALIVE, adminOnly: false },
+        where: ALIVE,
       });
       const assignments = await this.rag.organize(
         batch.map((m) => ({
@@ -545,7 +626,26 @@ export class ManualService implements OnApplicationBootstrap {
       moved.push(...result.moved);
     }
     const emptiedCategories = await this.findEmptiedCategories(countsBefore);
-    return { movedCount, createdCategories, emptiedCategories, moved };
+    // 題名を添えて返す(呼び出し側はどのファイルがどこへ入ったかを画面に出す)
+    const titleById = new Map(manuals.map((m) => [m.id, m.title]));
+    const movedWithTitles = moved.map((m) => ({
+      ...m,
+      title: titleById.get(m.manualId) ?? '',
+    }));
+    return {
+      movedCount,
+      createdCategories,
+      emptiedCategories,
+      moved: movedWithTitles,
+      // 鍵付きフォルダへ入れた分。呼び出し側は必ず利用者に伝える。
+      // 黙って入れると、一般利用者から見えなくなったことに誰も気づけない
+      movedToLocked: movedWithTitles
+        .filter((m) => m.adminOnly)
+        .map((m) => m.title),
+      // 鍵付きの中にあって動かさなかった分。黙って外すと
+      // 「再分類したのに直っていない」ようにしか見えない
+      skippedLocked,
+    };
   }
 
   /** 生きているフォルダごとの、生きているマニュアル件数 */
@@ -596,7 +696,12 @@ export class ManualService implements OnApplicationBootstrap {
         movedCount: 0,
         skippedPinned: [],
         skippedNotReady: [],
-        moved: [],
+        skippedLocked: [],
+        moved: [] as {
+          title: string;
+          categoryName: string;
+          adminOnly: boolean;
+        }[],
         createdCategories: [],
       };
     }
@@ -608,6 +713,7 @@ export class ManualService implements OnApplicationBootstrap {
         title: true,
         categoryPinned: true,
         ingestStatus: true,
+        category: { select: { adminOnly: true } },
       },
     });
     const skippedPinned = targets
@@ -619,17 +725,28 @@ export class ManualService implements OnApplicationBootstrap {
         (m) => !m.categoryPinned && m.ingestStatus !== IngestStatus.COMPLETED,
       )
       .map((m) => m.title);
+    // 鍵付きフォルダの中身は動かさない。選んだのに黙って何も起きないと
+    // 「効かなかった」ようにしか見えないので、名前を返して画面で伝える
+    const skippedLocked = targets
+      .filter(
+        (m) =>
+          !m.categoryPinned &&
+          m.ingestStatus === IngestStatus.COMPLETED &&
+          m.category?.adminOnly === true,
+      )
+      .map((m) => m.title);
 
     const result = await this.organizeManuals({ id: { in: ids } }, true);
 
-    const titleById = new Map(targets.map((m) => [m.id, m.title]));
     return {
       movedCount: result.movedCount,
       skippedPinned,
       skippedNotReady,
+      skippedLocked,
       moved: result.moved.map((m) => ({
-        title: titleById.get(m.manualId) ?? '',
+        title: m.title,
         categoryName: m.categoryName,
+        adminOnly: m.adminOnly,
       })),
       createdCategories: result.createdCategories,
     };
@@ -643,7 +760,13 @@ export class ManualService implements OnApplicationBootstrap {
         include: { chunks: { orderBy: { chunkIndex: 'asc' }, take: 1 } },
       });
       if (!manual || manual.categoryId) return;
-      // 取り込み直後の自動分類でも、隠しフォルダは行き先にしない
+      // アップロード直後の自動分類では、鍵付きフォルダを行き先にしない。
+      //
+      // 分類が終わるのは(書き起こしを挟むと)取り込みの数分後で、そのとき
+      // アップロード画面を閉じていると「鍵付きへ入って一般利用者から
+      // 見えなくなった」ことを伝える手段が無い。黙って隠すことになるので、
+      // ここでは候補から外す。鍵付きへ入れたいときは、あとから
+      // 一覧でドラッグするか、チャットで移動を指示する
       const categories = await this.prisma.manualCategory.findMany({
         where: { ...ALIVE, adminOnly: false },
       });
@@ -660,7 +783,8 @@ export class ManualService implements OnApplicationBootstrap {
         undefined,
         await this.classificationRules(),
       );
-      await this.applyAssignments(assignments);
+      // 候補から外していても、AIが名前を言い当てた場合に備えてここでも止める
+      await this.applyAssignments(assignments, true, false);
     } catch (e) {
       // 分類の失敗は致命的ではない(未分類のまま残るだけ)
       const message = e instanceof Error ? e.message : '不明なエラー';
@@ -680,21 +804,29 @@ export class ManualService implements OnApplicationBootstrap {
   private async applyAssignments(
     assignments: { manualId: string; category: string }[],
     allowNew = true,
+    allowLockedDestination = true,
   ) {
     const createdCategories: string[] = [];
     // どのマニュアルをどのフォルダへ入れたか。選んだファイルだけを
-    // 分類したときに、1件ずつ結果を見せられるようにする
-    const moved: { manualId: string; categoryName: string }[] = [];
+    // 分類したときに、1件ずつ結果を見せられるようにする。
+    // 行き先が鍵付きかどうかも返す(黙って隠すことにならないよう画面で伝える)
+    const moved: {
+      manualId: string;
+      categoryName: string;
+      adminOnly: boolean;
+    }[] = [];
     for (const assignment of assignments) {
       const name = assignment.category.trim();
       if (!name) continue;
       let category = await this.prisma.manualCategory.findFirst({
         // ゴミ箱の中のフォルダには絶対に入れない。入れてしまうと画面のどこにも
         // 出てこない(サイドバーはゴミ箱のフォルダを出さず、未分類でもなく、
-        // マニュアル自体は生きているのでゴミ箱にも出ない)迷子になる。
-        // 管理者だけに見せるフォルダも同じく行き先にしない(候補にも出していないが、
-        // AIが名前を言い当てた場合に備えてここでも止める)
-        where: { name, ...ALIVE, adminOnly: false },
+        // マニュアル自体は生きているのでゴミ箱にも出ない)迷子になる
+        where: {
+          name,
+          ...ALIVE,
+          ...(allowLockedDestination ? {} : { adminOnly: false }),
+        },
       });
       if (!category) {
         // 既存カテゴリ限定モードでは、AIが指示を破って作った未知の名前は無視する
@@ -712,6 +844,7 @@ export class ManualService implements OnApplicationBootstrap {
       moved.push({
         manualId: assignment.manualId,
         categoryName: category.name,
+        adminOnly: category.adminOnly,
       });
     }
     return { movedCount: moved.length, createdCategories, moved };
@@ -810,7 +943,10 @@ export class ManualService implements OnApplicationBootstrap {
     }
 
     const manuals = await this.prisma.manual.findMany({
-      where: { title: { contains: manualNeedle, mode: 'insensitive' } },
+      where: {
+        title: { contains: manualNeedle, mode: 'insensitive' },
+        ...ALIVE,
+      },
       orderBy: { title: 'asc' },
     });
     if (manuals.length === 0) return { status: 'manual_not_found' as const };
@@ -833,15 +969,26 @@ export class ManualService implements OnApplicationBootstrap {
     // 「未分類」への指定は分類を外す操作として扱う
     if (/^(未分類|分類なし|なし)$/.test(folderNeedle)) {
       const moved = await this.move(manual.id, null);
-      return { status: 'moved' as const, manual: moved, folderName: '未分類' };
+      return {
+        status: 'moved' as const,
+        manual: moved,
+        folderName: '未分類',
+        folderAdminOnly: false,
+      };
     }
 
+    // 鍵付きフォルダも行き先にできる(移動を頼めるのは管理者だけで、
+    // 鍵の中身も見えているため)。ゴミ箱の中のフォルダは除く
     const categories = await this.prisma.manualCategory.findMany({
-      where: { name: { contains: folderNeedle, mode: 'insensitive' } },
+      where: {
+        name: { contains: folderNeedle, mode: 'insensitive' },
+        ...ALIVE,
+      },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     if (categories.length === 0) {
       const all = await this.prisma.manualCategory.findMany({
+        where: ALIVE,
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       });
       return { status: 'folder_not_found' as const, folders: all };
@@ -855,6 +1002,7 @@ export class ManualService implements OnApplicationBootstrap {
       status: 'moved' as const,
       manual: moved,
       folderName: categories[0].name,
+      folderAdminOnly: categories[0].adminOnly,
     };
   }
 
@@ -874,7 +1022,7 @@ export class ManualService implements OnApplicationBootstrap {
     const manual = await this.prisma.manual.findFirst({
       // 隠しフォルダの中身は、IDを知っていても開けないようにする。
       // 一覧に出さないだけでは、リンクを共有された時点で読めてしまう
-      where: { id, ...this.visibleTo(includeAdminOnly) },
+      where: { id, AND: this.visibleTo(includeAdminOnly) },
     });
     if (!manual) {
       throw new NotFoundException('マニュアルが見つかりません');
@@ -902,7 +1050,7 @@ export class ManualService implements OnApplicationBootstrap {
       where: {
         ...ALIVE,
         id: { in: ids },
-        ...this.visibleTo(includeAdminOnly),
+        AND: this.visibleTo(includeAdminOnly),
       },
       orderBy: { title: 'asc' },
     });
@@ -1061,12 +1209,33 @@ export class ManualService implements OnApplicationBootstrap {
   }
 
   /** ゴミ箱のフォルダを中身ごと元に戻す */
+  /**
+   * 復元するフォルダに付ける、生きている中で重複しない名前を作る。
+   *
+   * 同名のフォルダがあっても「見せる範囲(鍵)」が違うときは、まとめてしまうと
+   * 鍵付きだった中身が全員に見える場所へ出てしまう。名前を変えて別に戻す
+   */
+  private async uniqueCategoryName(base: string) {
+    for (let i = 1; i < 100; i++) {
+      const name = i === 1 ? `${base} (復元)` : `${base} (復元${i})`;
+      const taken = await this.prisma.manualCategory.findFirst({
+        where: { name, ...ALIVE },
+        select: { id: true },
+      });
+      if (!taken) return name;
+    }
+    // ここまで来ることは実際には無いが、名前を返せないと復元できないため
+    return `${base} (復元x)`;
+  }
+
   async restoreCategories(ids: string[]) {
     const categories = await this.prisma.manualCategory.findMany({
       where: { id: { in: ids }, deletedAt: { not: null } },
     });
     // 同名の生きているフォルダがあったため、中身だけをそちらへ戻した分
     const mergedInto: string[] = [];
+    // 見せる範囲が違うので、まとめずに別の名前で戻した分
+    const restoredSeparately: string[] = [];
     for (const category of categories) {
       // 捨てている間に同じ名前のフォルダが作られていることがある
       // (再分類が作り直すなど)。フォルダ名は生きている中で一意なので
@@ -1075,6 +1244,25 @@ export class ManualService implements OnApplicationBootstrap {
       const live = await this.prisma.manualCategory.findFirst({
         where: { name: category.name, ...ALIVE },
       });
+      // 名前が同じでも鍵の有無が違うなら、まとめてはいけない。
+      // 鍵付きだった中身を鍵なしのフォルダへ入れると、戻した瞬間に
+      // 一般利用者の一覧・検索・ダウンロード・AIの回答に出てしまう
+      if (live && live.adminOnly !== category.adminOnly) {
+        const name = await this.uniqueCategoryName(category.name);
+        await this.prisma.$transaction([
+          this.prisma.manual.updateMany({
+            where: { categoryId: category.id, deletedAt: category.deletedAt },
+            data: { deletedAt: null },
+          }),
+          this.prisma.manualCategory.update({
+            where: { id: category.id },
+            // adminOnlyは元のまま。鍵の状態を変えずに戻すのがこの分岐の目的
+            data: { deletedAt: null, name },
+          }),
+        ]);
+        restoredSeparately.push(name);
+        continue;
+      }
       if (live) {
         await this.prisma.$transaction([
           this.prisma.manual.updateMany({
@@ -1110,7 +1298,7 @@ export class ManualService implements OnApplicationBootstrap {
         }),
       ]);
     }
-    return { restoredCount: categories.length, mergedInto };
+    return { restoredCount: categories.length, mergedInto, restoredSeparately };
   }
 
   /** ゴミ箱のフォルダを中身ごと完全に削除する */
@@ -1152,11 +1340,37 @@ export class ManualService implements OnApplicationBootstrap {
       include: { category: true },
     });
     for (const manual of manuals) {
+      const category = manual.category;
+      // 入っていたフォルダもゴミ箱にある場合は、通常は未分類へ戻す。
+      // ただし鍵付きフォルダだったものを未分類へ出すと、そこは誰にでも
+      // 見える場所なので、隠していた資料がそのまま全員に見えてしまう。
+      // その場合はフォルダごと復活させ、元の鍵付きの場所へ戻す
+      if (category?.deletedAt && category.adminOnly) {
+        const conflict = await this.prisma.manualCategory.findFirst({
+          where: { name: category.name, ...ALIVE },
+          select: { id: true },
+        });
+        await this.prisma.manualCategory.update({
+          where: { id: category.id },
+          data: {
+            deletedAt: null,
+            // 捨てている間に同じ名前のフォルダが作られていたら名前を変える
+            ...(conflict
+              ? { name: await this.uniqueCategoryName(category.name) }
+              : {}),
+          },
+        });
+        await this.prisma.manual.update({
+          where: { id: manual.id },
+          data: { deletedAt: null, categoryId: category.id },
+        });
+        continue;
+      }
       await this.prisma.manual.update({
         where: { id: manual.id },
         data: {
           deletedAt: null,
-          categoryId: manual.category?.deletedAt ? null : manual.categoryId,
+          categoryId: category?.deletedAt ? null : manual.categoryId,
         },
       });
     }

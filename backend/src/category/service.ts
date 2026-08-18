@@ -14,7 +14,10 @@ export class CategoryService {
   async findAll(includeAdminOnly = false) {
     // 管理者が決めた並び順が優先。同値(未設定)なら名前順で安定させる
     const categories = await this.prisma.manualCategory.findMany({
-      where: { deletedAt: null, ...(includeAdminOnly ? {} : { adminOnly: false }) },
+      where: {
+        deletedAt: null,
+        ...(includeAdminOnly ? {} : { adminOnly: false }),
+      },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     // 一覧の「サイズ」列に出す、フォルダ内のファイル合計。
@@ -136,7 +139,10 @@ export class CategoryService {
     }
     return this.prisma.manualCategory.update({
       where: { id },
-      data: { name: trimmed, ...(adminOnly === undefined ? {} : { adminOnly }) },
+      data: {
+        name: trimmed,
+        ...(adminOnly === undefined ? {} : { adminOnly }),
+      },
     });
   }
 

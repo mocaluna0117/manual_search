@@ -13,28 +13,29 @@ describe('UserService.inviteMany', () => {
   const build = (
     behavior: (email: string) => void = () => undefined,
   ): { service: UserService; calls: string[] } => {
-    const calls: string[] = []
+    const calls: string[] = [];
     const service = Object.create(UserService.prototype) as UserService;
     // 本物のinviteはCognito作成+DB登録。ここでは呼ばれた宛先だけを記録する
-    (service as unknown as { invite: (e: string, r: unknown) => unknown }).invite =
-      (email: string) => {
-        calls.push(email);
-        behavior(email); // 特定の宛先だけ失敗させたいときに使う
-        return Promise.resolve({
-          cognitoSub: `sub-${email}`,
-          email,
-          role: 'MEMBER',
-          passwordPending: true,
-          createdAt: null,
-        });
-      };
+    (
+      service as unknown as { invite: (e: string, r: unknown) => unknown }
+    ).invite = (email: string) => {
+      calls.push(email);
+      behavior(email); // 特定の宛先だけ失敗させたいときに使う
+      return Promise.resolve({
+        cognitoSub: `sub-${email}`,
+        email,
+        role: 'MEMBER',
+        passwordPending: true,
+        createdAt: null,
+      });
+    };
     return { service, calls };
   };
 
   const run = (emails: string[], behavior?: (email: string) => void) => {
     const { service, calls } = build(behavior);
     return service
-      .inviteMany(emails, 'MEMBER' as never)
+      .inviteMany(emails, 'MEMBER')
       .then((result) => ({ ...result, calls }));
   };
 

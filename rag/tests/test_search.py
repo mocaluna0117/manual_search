@@ -8,6 +8,7 @@
 
 import os
 import sys
+from pathlib import Path
 
 # rag/ をimportパスに入れる(テストはrag/tests配下に置く)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -169,9 +170,11 @@ class TestDecideOutcome:
 
 
 class TestHideAdminOnly:
-    """管理者だけに見せるフォルダを、検索の3ルートすべてから外せているか。
+    """鍵付き(管理者だけに見せる)フォルダを、検索の3ルートすべてから外せているか。
 
     ここが抜けると、一覧に出していないマニュアルの中身がAIの回答として出る。
+    管理者の質問でも外す(鍵付きは業務の回答に使わない資料を入れる場所で、
+    根拠の枠を奪うと本来出るべきマニュアルが押し出されるため)。
     実際にSQLを組み立てて、条件が入っているかを見る。
     """
 
@@ -187,30 +190,49 @@ class TestHideAdminOnly:
         def fetchall(self):
             return []
 
-    def run(self, is_admin: bool) -> list[str]:
+    def run(self) -> list[str]:
         from main import hybrid_search
 
         cur = self.FakeCursor()
-        hybrid_search(cur, "[0,0]", ["水栓", "漏水"], is_admin)
+        hybrid_search(cur, "[0,0]", ["水栓", "漏水"])
         return cur.queries
 
-    def test_一般利用者には3ルートすべてに除外条件が入る(self):
-        queries = self.run(is_admin=False)
+    def test_3ルートすべてに除外条件が入る(self):
+        queries = self.run()
         assert len(queries) == 3, "ベクトル・キーワード・タイトルの3本が動くこと"
         for sql in queries:
             assert "admin_only" in sql
 
-    def test_管理者には除外条件が入らない(self):
-        for sql in self.run(is_admin=True):
-            assert "admin_only" not in sql
+    def test_権限で除外条件を切り替える引数は残っていない(self):
+        # 引数で切り替えられると「管理者だから含める」呼び出しが将来復活し、
+        # 鍵付きの資料が回答の根拠に混ざる。引数を持たないことで塞ぐ
+        import inspect
+
+        from main import hybrid_search
+
+        params = list(inspect.signature(hybrid_search).parameters)
+        assert params == ["cur", "query_vec", "terms"]
+
+    def test_検索を呼ぶ側も権限を渡していない(self):
+        # retrieve()と下書き生成の両方が、引数なしで呼んでいること
+        import re
+
+        source = (Path(__file__).resolve().parents[1] / "main.py").read_text(
+            encoding="utf-8"
+        )
+        # 定義そのもの(def hybrid_search(...))は除いて、呼び出しだけを見る
+        calls = re.findall(r"(?<!def )hybrid_search\(cur[^)]*\)", source)
+        assert calls, "呼び出しが見つからない(名前を変えたらこのテストも直す)"
+        for call in calls:
+            assert call == "hybrid_search(cur, query_vec, terms)", call
 
     def test_除外条件は未分類を巻き込まない(self):
         # NOT EXISTS(...)なので、categoryIdがnullの行は残る
-        sql = self.run(is_admin=False)[0]
+        sql = self.run()[0]
         assert "NOT EXISTS" in sql and '"ManualCategory"' in sql
 
     def test_取り込み済み・ゴミ箱以外という条件は残っている(self):
-        for sql in self.run(is_admin=False):
+        for sql in self.run():
             assert "ingest_status = 'COMPLETED'" in sql
             assert "deleted_at IS NULL" in sql
 
