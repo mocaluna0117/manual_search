@@ -34,6 +34,15 @@ const PERIODS = [
   { label: '全件', days: 0 },
 ]
 
+/**
+ * 添付画像を保存し始めた時刻。
+ *
+ * これより前の問い合わせは、画像をメールに添付するだけでDBに残していなかった。
+ * 一覧に画像が出ないのは「添付が無かった」のか「保存していなかった」のか
+ * 区別できないため、対象が含まれるときだけ画面で断っておく
+ */
+const IMAGE_SAVING_SINCE = Date.parse('2026-08-21T00:30:00+09:00')
+
 /** 日時を「8/15 14:03」の形にする */
 function formatWhen(iso: string): string {
   const d = new Date(iso)
@@ -69,6 +78,11 @@ export function InquiryListDialog({ open, onClose }: InquiryListDialogProps) {
   const all = data?.inquiries ?? []
   const items = onlyUnhandled ? all.filter((i) => !i.handledAt) : all
   const unhandledCount = all.filter((i) => !i.handledAt).length
+  // 画像を保存する前の問い合わせが混ざっているかどうか。
+  // 混ざっている間だけ断りを出す(古いものが期間から外れれば自然に消える)
+  const hasPreImageEra = items.some(
+    (i) => Date.parse(i.createdAt) < IMAGE_SAVING_SINCE,
+  )
 
   const toggle = async (item: InquiryItem) => {
     try {
@@ -127,6 +141,23 @@ export function InquiryListDialog({ open, onClose }: InquiryListDialogProps) {
                   未対応のみ
                 </Button>
               </HStack>
+
+              {hasPreImageEra && (
+                <Box
+                  borderWidth="1px"
+                  borderRadius="md"
+                  bg="bg.subtle"
+                  px={3}
+                  py={2}
+                  mb={3}
+                >
+                  <Text fontSize="xs" color="fg.muted">
+                    2026年8月21日より前の問い合わせは、添付画像を保存していません
+                    （当時はメールに添付するだけでした）。
+                    そのころの画像はメールをご確認ください。
+                  </Text>
+                </Box>
+              )}
 
               {loading && all.length === 0 && <Spinner size="sm" />}
               {error && (
