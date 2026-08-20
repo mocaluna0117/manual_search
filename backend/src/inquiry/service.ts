@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/service';
+import { StorageService } from '../storage/service';
 import { buildRawEmail, canReplyTo } from './mail';
 
 /** 問い合わせの宛先(カンマ区切りで複数可)。運用で変える場合は環境変数で上書きする */
@@ -49,7 +51,10 @@ export class InquiryService {
     region: process.env.AWS_REGION ?? 'ap-northeast-1',
   });
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   /**
    * 問い合わせを受け付ける。
@@ -69,9 +74,9 @@ export class InquiryService {
       throw new BadRequestException(`内容が長すぎます(${MAX_LENGTH}文字まで)`);
     }
 
-    // 画像は添付として送るだけで、DBには保存しない。
-    // 「うまくいかない画面」を見せてもらうのが目的なので、
-    // 本文と一緒に届けば足りる(DBを重くしない)
+    // 画像はメールに添付し、あわせてS3にも置く。
+    // メールだけに載せていたころは、迷惑メールに入ったり見落としたりすると
+    // 「うまくいかない画面」の写真ごと辿れなくなっていた
     if (images.length > MAX_IMAGE_COUNT) {
       throw new BadRequestException(
         `画像は${MAX_IMAGE_COUNT}枚までにしてください`,
@@ -98,8 +103,13 @@ export class InquiryService {
       throw new BadRequestException('画像の合計が大きすぎます(全部で10MBまで)');
     }
 
+    const imageKeys = await this.storeImages(attachments);
     const inquiry = await this.prisma.inquiry.create({
-      data: { message: trimmed, userEmail },
+      data: {
+        message: trimmed,
+        userEmail,
+        imageKeys: imageKeys.length > 0 ? imageKeys : undefined,
+      },
     });
 
     const subject = `【Manualy】お問い合わせ (${userEmail ?? '不明'})`;
@@ -156,6 +166,95 @@ export class InquiryService {
       }
     }
     return true;
+  }
+
+  /**
+   * 添付画像をS3へ置き、キーを返す。
+   * 1枚失敗しても問い合わせ自体は受け付ける(本文の方が大事)
+   */
+  private async storeImages(
+    attachments: { bytes: Buffer; mimeType: string; filename: string }[],
+  ): Promise<string[]> {
+    const keys: string[] = [];
+    for (const a of attachments) {
+      try {
+        const ext = a.filename.split('.').pop() ?? 'png';
+        const key = `inquiry/${randomUUID()}.${ext}`;
+        await this.storage.putBytes(key, a.bytes, a.mimeType);
+        keys.push(key);
+      } catch (e) {
+        this.logger.warn(
+          `問い合わせの添付画像を保存できませんでした: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
+    return keys;
+  }
+
+  /**
+   * 問い合わせの一覧(新しい順)。画像は期限付きのURLにして返す。
+   * daysを渡すとその日数分だけに絞る(省略・0なら全件)
+   */
+  async list(days?: number | null) {
+    const since =
+      days && days > 0
+        ? new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+        : undefined;
+    const rows = await this.prisma.inquiry.findMany({
+      where: since ? { createdAt: { gte: since } } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    return Promise.all(
+      rows.map(async (r) => ({
+        id: r.id,
+        userEmail: r.userEmail,
+        message: r.message,
+        handledAt: r.handledAt,
+        createdAt: r.createdAt,
+        imageUrls: await this.imageUrls(r.imageKeys),
+      })),
+    );
+  }
+
+  /** S3のキーから閲覧用URLを作る。作れなかった分は落とす */
+  private async imageUrls(imageKeys: unknown): Promise<string[]> {
+    const keys = Array.isArray(imageKeys) ? (imageKeys as string[]) : [];
+    if (keys.length === 0) return [];
+    const urls = await Promise.all(
+      keys.map((key) =>
+        this.storage
+          // 拡張子から形式を復元する(保存時に付けてある)
+          .createImageUrl(key, `image/${key.split('.').pop() ?? 'png'}`)
+          .catch(() => null),
+      ),
+    );
+    return urls.filter((u): u is string => u !== null);
+  }
+
+  /** 未対応の件数(サイドバーのバッジ用) */
+  async counts() {
+    const [unhandled, total] = await Promise.all([
+      this.prisma.inquiry.count({ where: { handledAt: null } }),
+      this.prisma.inquiry.count(),
+    ]);
+    return { unhandled, total };
+  }
+
+  /** 対応済み・未対応を切り替える */
+  async setHandled(id: string, handled: boolean) {
+    const updated = await this.prisma.inquiry.update({
+      where: { id },
+      data: { handledAt: handled ? new Date() : null },
+    });
+    return {
+      id: updated.id,
+      userEmail: updated.userEmail,
+      message: updated.message,
+      handledAt: updated.handledAt,
+      createdAt: updated.createdAt,
+      imageUrls: await this.imageUrls(updated.imageKeys),
+    };
   }
 }
 

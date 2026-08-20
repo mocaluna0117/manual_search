@@ -42,6 +42,7 @@ import {
   LuUser,
   LuChartNoAxesColumn,
   LuUsers,
+  LuInbox,
   LuX,
 } from 'react-icons/lu'
 import { useAuth } from 'react-oidc-context'
@@ -79,6 +80,8 @@ import { UserManagementDialog } from './UserManagementDialog'
 import { Tooltip } from '../ui/Tooltip'
 // 移行が終わったら消す(無料クレジットの残りを管理者に見せるだけ)
 import { CreditBadge } from './CreditBadge'
+import { InquiryListDialog } from './InquiryListDialog'
+import { INQUIRY_COUNTS_QUERY } from '../../graphql/inquiryAdmin'
 import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
 import { useCollapsedSections } from '../../lib/useCollapsedSections'
 import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
@@ -166,6 +169,12 @@ export function SidebarContent({
   const { data: chatData, loading: loadingChats } = useQuery(CONVERSATIONS_QUERY)
   const { data: meData } = useQuery(ME_QUERY)
   const isAdmin = meData?.me.role === 'ADMIN'
+  // 未対応の問い合わせ件数。バッジに出して気づけるようにする
+  const { data: inquiryCountsData } = useQuery(INQUIRY_COUNTS_QUERY, {
+    skip: !isAdmin,
+    pollInterval: 5 * 60 * 1000,
+  })
+  const unhandledInquiries = inquiryCountsData?.inquiryCounts.unhandled ?? 0
   const [uploadOpen, setUploadOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [inquiryOpen, setInquiryOpen] = useState(false)
@@ -173,6 +182,8 @@ export function SidebarContent({
   const [helpOpen, setHelpOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [analyticsOpen, setAnalyticsOpen] = useState(false)
+  // 届いた問い合わせの一覧(メールを見落としても画面から追えるように)
+  const [inquiriesOpen, setInquiriesOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
 
   const handleLogout = async () => {
@@ -1123,6 +1134,10 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
               open={usersOpen}
               onClose={() => setUsersOpen(false)}
             />
+            <InquiryListDialog
+              open={inquiriesOpen}
+              onClose={() => setInquiriesOpen(false)}
+            />
           </>
         )}
         <CreditBadge isAdmin={isAdmin} />
@@ -1175,6 +1190,46 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
                 >
                   <LuUsers />
                 </IconButton>
+              </Tooltip>
+              <Tooltip
+                label={
+                  unhandledInquiries > 0
+                    ? `お問い合わせ(未対応 ${unhandledInquiries}件)`
+                    : 'お問い合わせ'
+                }
+              >
+                <Box position="relative" display="inline-flex">
+                  <IconButton
+                    aria-label="お問い合わせ"
+                    size="xs"
+                    variant="ghost"
+                    color={unhandledInquiries > 0 ? 'orange.fg' : 'fg.muted'}
+                    _hover={{ bg: 'bg.emphasized' }}
+                    onClick={() => setInquiriesOpen(true)}
+                  >
+                    <LuInbox />
+                  </IconButton>
+                  {/* 未対応があることは、開かなくても分かるようにする */}
+                  {unhandledInquiries > 0 && (
+                    <Box
+                      position="absolute"
+                      top="-1px"
+                      right="-1px"
+                      minW="14px"
+                      h="14px"
+                      px="3px"
+                      borderRadius="full"
+                      bg="orange.solid"
+                      color="orange.contrast"
+                      fontSize="9px"
+                      lineHeight="14px"
+                      textAlign="center"
+                      pointerEvents="none"
+                    >
+                      {unhandledInquiries > 9 ? '9+' : unhandledInquiries}
+                    </Box>
+                  )}
+                </Box>
               </Tooltip>
             </>
           )}

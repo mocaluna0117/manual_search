@@ -1,4 +1,10 @@
-import { Field, Float, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import {
+  Field,
+  Float,
+  Int,
+  ObjectType,
+  registerEnumType,
+} from '@nestjs/graphql';
 
 /** 移行の急ぎ具合。画面の色分けに使う */
 export enum CreditLevel {

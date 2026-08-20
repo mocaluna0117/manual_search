@@ -51,9 +51,8 @@ export class CreditService {
   private async fetchRemaining(): Promise<number | null> {
     try {
       // この機能を消すときに依存も消せるよう、使う瞬間まで読み込まない
-      const { FreeTierClient, GetAccountPlanStateCommand } = await import(
-        '@aws-sdk/client-freetier'
-      );
+      const { FreeTierClient, GetAccountPlanStateCommand } =
+        await import('@aws-sdk/client-freetier');
       // 無料プランの状態を扱うAPIはus-east-1にしかない
       const client = new FreeTierClient({ region: 'us-east-1' });
       const res = await client.send(new GetAccountPlanStateCommand({}));

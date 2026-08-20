@@ -196,10 +196,14 @@ model ManualChunk {
 
 // アプリからの問い合わせ。メール送信に失敗しても内容が残るようDBにも保存する
 model Inquiry {
-  id        String   @id @default(uuid())
-  userEmail String?  @map("user_email") // 送信者(ログイン中のユーザー)
+  id        String    @id @default(uuid())
+  userEmail String?   @map("user_email") // 送信者(ログイン中のユーザー)
   message   String
-  createdAt DateTime @default(now())
+  // 添付画像の置き場所(S3のキー)。メールを見落としても画面から辿れるように残す
+  imageKeys Json?     @map("image_keys")
+  // 対応済みにした時刻。nullなら未対応(サイドバーに件数を出す)
+  handledAt DateTime? @map("handled_at")
+  createdAt DateTime  @default(now())
 
   @@index([createdAt])
 }
