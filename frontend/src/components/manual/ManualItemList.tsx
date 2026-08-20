@@ -11,7 +11,10 @@ import { FcFolder } from 'react-icons/fc'
 import { extensionOf } from '../../lib/fileTypes'
 import { updatedDateOf } from '../../lib/manualDate'
 import {
+  NAME_WIDTH_MAX,
+  NAME_WIDTH_MIN,
   formatDateTime,
+  useNameColumnWidth,
   type SortKey,
   type ViewMode,
 } from '../../lib/manualListView'
@@ -333,28 +336,135 @@ export function ManualItemList({
   // 狭い画面では補助的な列を隠し、アイコンと名前に幅を回す。
   // 隠した情報は名前の下に小さく添えるので、失われはしない
   const SUB_COLUMN = { base: 'none', md: 'block' } as const
+
+  // 「名前」列の幅。nullなら余った幅いっぱい(既定)。
+  // 幅を決めたときは、名前欄を縮めずに横スクロールで見せる。
+  //
+  // 補助列を隠す狭い画面(md未満)では、決めた幅を使わない。つまみも出せないので、
+  // 使い続けると横スクロールだけが残って戻す手段が無くなる
+  const [nameWidth, setNameWidth] = useNameColumnWidth()
+  const nameCellProps = nameWidth
+    ? {
+        w: { base: 'auto', md: `${nameWidth}px` },
+        flex: { base: '1', md: '0 0 auto' },
+      }
+    : { flex: '1' }
+
+  // 名前以外の列と余白の合計(px)。一覧全体の幅をここから計算する。
+  // 中身から測る(max-content)と、検索結果の抜粋のような
+  // 幅の指定が無い長い文章がそのまま横幅を決めてしまい、
+  // 折り返されずに一覧が数千pxまで広がる
+  const rowExtraPx =
+    16 + // px={2} の左右
+    70 + // 種類
+    140 + // 更新日
+    80 + // サイズ
+    8 * (selectable ? 4 : 3) + // gap={2} の合計
+    (selectable ? 15 : 0) // チェックボックス
+  const listWidth = nameWidth
+    ? { base: '100%', md: `${nameWidth + rowExtraPx}px` }
+    : '100%'
+
+  /**
+   * 見出しの境目をドラッグして「名前」列の幅を変える。
+   * サイドバーの幅調整と同じ作り(pointerイベントをwindowで拾う)
+   */
+  const startNameResize = (e: React.PointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation() // 並べ替え(見出しのクリック)を巻き込まない
+    // つまみにポインタを固定する。これをしないと、幅が上限・下限で止まった
+    // あとにポインタだけ先へ進み、離した場所が見出しセルになる。
+    // clickは「押した要素と離した要素の共通の祖先」に飛ぶので、
+    // その場合は見出しのonClickが動いて並び順が勝手に変わってしまう
+    const grip = e.currentTarget
+    grip.setPointerCapture?.(e.pointerId)
+    const startX = e.clientX
+    const base = nameWidth ?? e.currentTarget.parentElement?.offsetWidth ?? 320
+    let last = base
+    // 実際に動かしたときだけ幅を確定する。つまみを軽く押しただけで
+    // 「自動」から「固定」に変わってしまうと、窓の大きさに追従しなくなる
+    let moved = false
+    const move = (ev: PointerEvent) => {
+      const next = Math.min(
+        NAME_WIDTH_MAX,
+        Math.max(NAME_WIDTH_MIN, base + (ev.clientX - startX)),
+      )
+      if (!moved && Math.abs(ev.clientX - startX) < 3) return
+      moved = true
+      last = next
+      setNameWidth(last, false) // 見た目だけ追従させる(保存は離したとき)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      if (!moved) return
+      setNameWidth(last) // 離した時点の幅を保存する
+      // ポインタの固定に対応していない環境向けの保険。
+      // ドラッグ直後の1回だけクリックを捨てて、並べ替えを防ぐ
+      const swallow = (ev: Event) => {
+        ev.stopPropagation()
+        ev.preventDefault()
+      }
+      window.addEventListener('click', swallow, { capture: true, once: true })
+      // クリックが来なかったときに居残らないよう、少し経ったら外す
+      window.setTimeout(
+        () => window.removeEventListener('click', swallow, { capture: true }),
+        300,
+      )
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    // 端末側でドラッグが打ち切られたときも後片付けする
+    window.addEventListener('pointercancel', up)
+  }
   const SUB_COLUMN_FLEX = { base: 'none', md: 'flex' } as const
 
   const sortHeader = (label: string, key: SortKey, w?: string) => (
     <HStack
-      w={w}
-      display={w ? SUB_COLUMN_FLEX : undefined}
-      flex={w ? undefined : '1'}
+      // 名前列だけは利用者が決めた幅を使う(残りは今まで通り固定幅)
+      {...(w
+        ? { w, display: SUB_COLUMN_FLEX }
+        : { ...nameCellProps, position: 'relative' as const })}
       gap={1}
       cursor={onSort ? 'pointer' : 'default'}
       _hover={onSort ? { color: 'fg' } : undefined}
       onClick={() => onSort?.(key)}
     >
-      <Text>{label}</Text>
+      <Text truncate>{label}</Text>
       {sortKey === key &&
         (sortAsc ? <LuChevronUp size={12} /> : <LuChevronDown size={12} />)}
+      {/* 名前と種類の境目。ドラッグで幅を変え、ダブルクリックで既定に戻す。
+          スマホでは補助列を隠していて広げる意味がないので出さない */}
+      {!w && (
+        <Tooltip label="ドラッグで幅を変える(ダブルクリックで元に戻す)">
+          <Box
+            position="absolute"
+            top={-2}
+            bottom={-2}
+            right={-2}
+            w="7px"
+            display={SUB_COLUMN}
+            cursor="col-resize"
+            _hover={{ bg: 'blue.muted' }}
+            onPointerDown={startNameResize}
+            onClick={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => {
+              e.stopPropagation()
+              setNameWidth(null)
+            }}
+          />
+        </Tooltip>
+      )}
     </HStack>
   )
 
   return (
     <>
       {viewMode === 'details' && (
-        <Box>
+        // 幅を決めたときは中身の幅に合わせる(親を横スクロールさせるため)。
+        // 見出しと行を同じ箱に入れることで、横に送っても列がずれない
+        <Box w={listWidth} minW="100%">
           {/* 列見出しもスクロール中は上端に残す(何の列か見失わないように) */}
           <HStack
             px={2}
@@ -402,7 +512,7 @@ export function ManualItemList({
                   // 列の位置を合わせるための余白
                   <Box w="15px" flexShrink={0} />
                 ))}
-              <HStack flex="1" gap={2} minW={0}>
+              <HStack {...nameCellProps} gap={2} minW={0}>
                 <Box flexShrink={0}>
                   <FcFolder size={18} />
                 </Box>
@@ -460,7 +570,7 @@ export function ManualItemList({
                     label={`${manual.title} を選択`}
                   />
                 )}
-                <HStack flex="1" gap={2} minW={0}>
+                <HStack {...nameCellProps} gap={2} minW={0}>
                   <Box flexShrink={0}>
                     <FileIcon fileName={manual.fileName} size={18} />
                   </Box>

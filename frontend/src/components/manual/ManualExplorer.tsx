@@ -620,6 +620,10 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         flex="1"
         minH={0}
         overflowY="auto"
+        // 名前の列を広げたときに横へ送れるようにする。
+        // 縦と同じ箱でスクロールさせることで、列見出しの固定表示が効いたまま
+        // 見出しと行が一緒に動く
+        overflowX="auto"
         px={{ base: 4, md: 6 }}
         pb={{ base: 4, md: 6 }}
         onClick={(e) => {

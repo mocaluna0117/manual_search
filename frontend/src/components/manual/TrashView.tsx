@@ -211,6 +211,8 @@ export function TrashView() {
         flex="1"
         minH={0}
         overflowY="auto"
+        // 名前の列を広げたときに横へ送れるようにする(一覧の実装は共通)
+        overflowX="auto"
         px={{ base: 4, md: 6 }}
         pb={{ base: 4, md: 6 }}
         onClick={(e) => {
