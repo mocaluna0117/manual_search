@@ -11,6 +11,11 @@ import {
   VStack,
 } from '@chakra-ui/react'
 import { useEffect, useRef, useState } from 'react'
+import {
+  getInquiryDraft,
+  saveInquiryDraft,
+  type DraftImage,
+} from '../../lib/inquiryDraft'
 import { LuCircleCheck, LuImage, LuSend, LuX } from 'react-icons/lu'
 import { SEND_INQUIRY_MUTATION } from '../../graphql/inquiry'
 import { ALLOWED_IMAGE_TYPES, checkImage, fileToBase64 } from '../../lib/image'
@@ -30,13 +35,23 @@ const MAX_IMAGES = 5
 
 /** 管理者への問い合わせフォーム。送信するとメールで届く */
 export function InquiryDialog({ open, onClose }: InquiryDialogProps) {
-  const [message, setMessage] = useState('')
+  // 書きかけはコンポーネントの外(lib/inquiryDraft)に置く。
+  // サイドバーを閉じるとこのダイアログはアンマウントされるため、
+  // stateだけで持つと本文と添付が消えてしまう
+  const [message, setMessage] = useState(() => getInquiryDraft().message)
   const [sent, setSent] = useState(false)
   // 添付する画面写真(任意・複数可)。プレビュー用のURLも一緒に持つ
-  const [images, setImages] = useState<{ file: File; url: string }[]>([])
+  const [images, setImages] = useState<DraftImage[]>(
+    () => getInquiryDraft().images,
+  )
   // 拡大表示している画像。nullなら閉じている
   const [previewIndex, setPreviewIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 中身が変わるたびに置き場へ写す。これでアンマウントされても残る
+  useEffect(() => {
+    saveInquiryDraft({ message, images })
+  }, [message, images])
   const [sendInquiry, { loading }] = useMutation(SEND_INQUIRY_MUTATION)
   const isTouch = useIsTouchDevice()
 
