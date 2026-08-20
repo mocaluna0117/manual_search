@@ -36,7 +36,7 @@ Cloudflare Workers AI ／ 認証は要検討（→ 5.4）／ Cloudflare Pages。
 | 埋め込み | Bedrock Titan V2 (1024次元) | Workers AI bge-m3 (1024次元) | 中（＋全件再埋め込み） |
 | 回答生成 | Bedrock Claude Haiku 4.5 | Workers AI glm-4.7-flash | 中（**tool use は使える**） |
 | 画像理解 | Bedrock Claude | Workers AI qwen3.8-27b | 中 |
-| 認証 | Cognito | Entra ID か Supabase Auth | **重（→ 5.4。IDの移行に落とし穴）** |
+| 認証 | Cognito | **Supabase Auth**（Entra IDは会社の承認が得られず不採用） | **重（→ 5.4。IDの移行に落とし穴）** |
 | メール | SES | Graph か 代替（→ 5.5） | 中 |
 
 ### 調査で分かった重要な3点
@@ -291,9 +291,10 @@ upsert している（`backend/src/user/service.ts:26`）。新しい認証方�
 検証: 切り替え後にまず管理者でログインし、`利用状況` 画面と過去のチャットが
 見えることを確認する。見えなければ切り戻して移行スクリプトを見直す。
 
-#### 案1: Entra ID（会社のM365）
+#### 案1: Entra ID（会社のM365）— ❌ 不採用
 
-会社の承認が得られる場合。追加費用ゼロ、パスワードが増えない、退職者の停止が人事手続きだけで済む。
+**2026-08-20に会社の承認が得られないことが確定した**（社員のMicrosoftアカウントで
+ログインする方式は不可）。以下は将来方針が変わった場合の参考として残す。
 
 ✅ **確認済み: 不変な識別子は `oid`。`sub` はアプリごとに変わる**ので使ってはいけない。
 出典: Entra ID の ID token claims reference。
@@ -316,10 +317,7 @@ model User {
 （動けば改修が最小。動かなければ `@azure/msal-browser` へ）。
 `extraQueryParams: { lang: 'ja' }` は Cognito 専用なので Entra 用の指定に変える。
 
-#### 案2: Supabase Auth（会社の承認が不要）
-
-**2026-08-20時点では、会社のメールアドレス利用の承認が得られない見込みのため、
-こちらが本線になる可能性が高い。**
+#### 案2: Supabase Auth ← ✅ **これで確定**（2026-08-20）
 
 - **いまと全く同じ方式**（メールアドレスで招待 → パスワードを設定してログイン）
 - 無料・50,000人まで。DBに使う Supabase に含まれるので、増えるサービスはない

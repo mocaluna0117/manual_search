@@ -77,6 +77,8 @@ import { SettingsDialog } from './SettingsDialog'
 import { AnalyticsDialog } from './AnalyticsDialog'
 import { UserManagementDialog } from './UserManagementDialog'
 import { Tooltip } from '../ui/Tooltip'
+// 移行が終わったら消す(無料クレジットの残りを管理者に見せるだけ)
+import { CreditBadge } from './CreditBadge'
 import { errorMessage, toastError, toastInfo, toastSuccess } from '../../lib/toast'
 import { useCollapsedSections } from '../../lib/useCollapsedSections'
 import { useIsTouchDevice } from '../../lib/useIsTouchDevice'
@@ -1123,6 +1125,7 @@ const USAGE_GUIDE_FILE_NAME = '社内マニュアル検索_使い方ガイド.pd
             />
           </>
         )}
+        <CreditBadge isAdmin={isAdmin} />
         <HStack gap={1} mb={1} color="fg.muted">
           <LuUser size={12} />
           <Text fontSize="xs" truncate>

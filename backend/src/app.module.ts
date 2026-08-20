@@ -8,6 +8,7 @@ import { AnalyticsModule } from './analytics/module';
 import { AuthModule } from './auth/module';
 import { CategoryModule } from './category/module';
 import { ChatModule } from './chat/module';
+import { CreditModule } from './credit/module';
 import { HealthController } from './health/controller';
 import { InquiryModule } from './inquiry/module';
 import { ManualModule } from './manual/module';
@@ -35,6 +36,8 @@ import { TemplateModule } from './template/module';
     PrismaModule,
     CategoryModule,
     ChatModule,
+    // 移行が終わったら消す(無料クレジットの残りを管理者に見せるだけ)
+    CreditModule,
     ManualModule,
     InquiryModule,
     RagModule,
