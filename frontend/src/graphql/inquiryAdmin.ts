@@ -9,6 +9,8 @@ export interface InquiryItem {
   message: string
   /** 添付画像の閲覧用URL(期限付き) */
   imageUrls: string[]
+  /** 添付画像が保存期間を過ぎて削除されたか */
+  imagesPurged: boolean
   /** 対応済みにした時刻。nullなら未対応 */
   handledAt: string | null
   createdAt: string
@@ -30,6 +32,7 @@ export const INQUIRIES_QUERY: TypedDocumentNode<InquiriesData, DaysVars> = gql`
       userEmail
       message
       imageUrls
+      imagesPurged
       handledAt
       createdAt
     }

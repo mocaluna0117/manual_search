@@ -142,6 +142,11 @@ export function InquiryListDialog({ open, onClose }: InquiryListDialogProps) {
                 </Button>
               </HStack>
 
+              <Text fontSize="xs" color="fg.muted" mb={2}>
+                添付画像は、対応済みにしてから90日（未対応のままなら1年）で
+                自動的に削除されます。本文は残ります。
+              </Text>
+
               {hasPreImageEra && (
                 <Box
                   borderWidth="1px"
@@ -217,6 +222,12 @@ export function InquiryListDialog({ open, onClose }: InquiryListDialogProps) {
                     <Text fontSize="sm" whiteSpace="pre-wrap" mt={2}>
                       {item.message}
                     </Text>
+
+                    {item.imagesPurged && (
+                      <Text fontSize="xs" color="fg.muted" mt={2}>
+                        添付画像は保存期間を過ぎたため削除されました。
+                      </Text>
+                    )}
 
                     {item.imageUrls.length > 0 && (
                       <HStack gap={2} mt={2} flexWrap="wrap">

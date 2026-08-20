@@ -1,9 +1,20 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  type OnApplicationBootstrap,
+} from '@nestjs/common';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/service';
 import { StorageService } from '../storage/service';
 import { buildRawEmail, canReplyTo } from './mail';
+import {
+  KEEP_DAYS_AFTER_HANDLED,
+  KEEP_DAYS_UNHANDLED,
+  isPurged,
+  selectExpired,
+} from './retention';
 
 /** 問い合わせの宛先(カンマ区切りで複数可)。運用で変える場合は環境変数で上書きする */
 const TO_EMAILS = (
@@ -45,7 +56,7 @@ export interface InquiryImage {
 }
 
 @Injectable()
-export class InquiryService {
+export class InquiryService implements OnApplicationBootstrap {
   private readonly logger = new Logger(InquiryService.name);
   private readonly ses = new SESv2Client({
     region: process.env.AWS_REGION ?? 'ap-northeast-1',
@@ -55,6 +66,88 @@ export class InquiryService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
   ) {}
+
+  /**
+   * 起動のたびに、保存期間を過ぎた添付画像を片付ける。
+   * マニュアルのゴミ箱掃除(ManualService)と同じ考え方。
+   * 失敗しても起動は止めない(次の起動でまた試す)
+   */
+  onApplicationBootstrap() {
+    void this.purgeExpiredImages().catch((e: unknown) => {
+      this.logger.error(
+        `添付画像の片付けに失敗しました: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    });
+  }
+
+  /**
+   * 保存期間を過ぎた添付画像をS3から消し、DBの記録を空配列にする。
+   *
+   * 空配列は「画像はあったが期限切れで消した」印。nullのまま残すと
+   * 「最初から添付が無かった」場合と区別できず、画面で説明できない
+   */
+  async purgeExpiredImages(now = Date.now()) {
+    const candidates = await this.prisma.inquiry.findMany({
+      // 期限の候補を日付で絞る。実際に画像を持っているかは後で見る
+      // (JSON列のnull判定はPrismaで紛らわしいため、件数も少ないのでJS側で判定する)
+      where: {
+        OR: [
+          {
+            handledAt: {
+              lt: new Date(now - KEEP_DAYS_AFTER_HANDLED * 24 * 60 * 60 * 1000),
+            },
+          },
+          {
+            handledAt: null,
+            createdAt: {
+              lt: new Date(now - KEEP_DAYS_UNHANDLED * 24 * 60 * 60 * 1000),
+            },
+          },
+        ],
+      },
+      select: { id: true, imageKeys: true, handledAt: true, createdAt: true },
+    });
+
+    const targets = selectExpired(candidates, now);
+    if (targets.length === 0) return 0;
+
+    let purged = 0;
+    for (const row of targets) {
+      const keys = row.imageKeys as string[];
+      // S3から消せなかった分はDBの記録も残す(次の起動でもう一度試すため)
+      const failed = await this.deleteObjects(keys);
+      if (failed.length > 0) {
+        this.logger.warn(
+          `問い合わせ ${row.id} の画像${failed.length}件を消せませんでした`,
+        );
+        continue;
+      }
+      await this.prisma.inquiry.update({
+        where: { id: row.id },
+        data: { imageKeys: [] },
+      });
+      purged += keys.length;
+    }
+    if (purged > 0) {
+      this.logger.log(
+        `保存期間を過ぎた問い合わせの添付画像${purged}件を削除しました`,
+      );
+    }
+    return purged;
+  }
+
+  /** まとめて消して、消せなかったキーを返す */
+  private async deleteObjects(keys: string[]): Promise<string[]> {
+    const failed: string[] = [];
+    for (const key of keys) {
+      try {
+        await this.storage.deleteObject(key);
+      } catch {
+        failed.push(key);
+      }
+    }
+    return failed;
+  }
 
   /**
    * 問い合わせを受け付ける。
@@ -213,6 +306,7 @@ export class InquiryService {
         handledAt: r.handledAt,
         createdAt: r.createdAt,
         imageUrls: await this.imageUrls(r.imageKeys),
+        imagesPurged: isPurged(r.imageKeys),
       })),
     );
   }
@@ -254,6 +348,7 @@ export class InquiryService {
       handledAt: updated.handledAt,
       createdAt: updated.createdAt,
       imageUrls: await this.imageUrls(updated.imageKeys),
+      imagesPurged: isPurged(updated.imageKeys),
     };
   }
 }

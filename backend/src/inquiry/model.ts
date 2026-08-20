@@ -22,6 +22,11 @@ export class InquiryItem {
   @Field(() => [String])
   imageUrls!: string[];
 
+  // 添付画像が保存期間を過ぎて削除されたか。
+  // 「最初から添付が無かった」場合と区別して画面で説明するために返す
+  @Field()
+  imagesPurged!: boolean;
+
   // 対応済みにした時刻。nullなら未対応
   @Field(() => Date, { nullable: true })
   handledAt!: Date | null;
