@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client/react'
-import { Box, HStack, Text } from '@chakra-ui/react'
+import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuTriangleAlert, LuWallet } from 'react-icons/lu'
 import { Tooltip } from '../ui/Tooltip'
 import { AWS_CREDIT_QUERY } from '../../graphql/credit'
@@ -32,20 +32,23 @@ export function CreditBadge({ isAdmin }: { isAdmin: boolean }) {
       ? { fg: 'orange.fg', bg: 'orange.subtle' }
       : { fg: 'fg.muted', bg: 'transparent' }
 
-  // 改行を保つため、文字列ではなく要素で渡す(HTMLは改行を空白に潰す)
+  // 1行ずつ要素で組む。改行文字とwhiteSpaceに頼ると、空白の詰め方の違いで
+  // 行が消えたように見えることがある(実際に最後の一文が読めなかった)
   const detail = (
-    <Text whiteSpace="pre-line" fontSize="xs">
-      {[
-        `残高 $${credit.remainingUsd.toFixed(2)}`,
-        `1日あたり $${credit.perDayUsd.toFixed(2)}`,
-        `枯渇の見込み ${credit.exhaustionOn}`,
-        credit.source === 'ESTIMATE'
+    <VStack align="start" gap={0} fontSize="xs" maxW="240px">
+      <Text>残高 ${credit.remainingUsd.toFixed(2)}</Text>
+      <Text>1日あたり ${credit.perDayUsd.toFixed(2)}</Text>
+      <Text>枯渇の見込み {credit.exhaustionOn}</Text>
+      <Text opacity={0.8}>
+        {credit.source === 'ESTIMATE'
           ? '(AWSに問い合わせできないため、実測ペースからの推定)'
-          : '(AWSの実際の残高)',
-        '',
-        '尽きるとアカウントが閉鎖され、データは90日で消えます。',
-      ].join('\n')}
-    </Text>
+          : '(AWSの実際の残高)'}
+      </Text>
+      <Text mt={1}>
+        尽きるとAWSのアカウントは閉鎖され、データは90日で消えます。
+        移行の手順は docs/b-plan-migration-runbook.md にあります。
+      </Text>
+    </VStack>
   )
 
   return (
