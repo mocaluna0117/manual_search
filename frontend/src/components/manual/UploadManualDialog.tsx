@@ -104,7 +104,14 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { data: categoriesData } = useQuery(CATEGORIES_QUERY)
+  // 「AIにおまかせ」は取り込みのあとに振り分ける。そこで新しいフォルダが
+  // 作られると手元の一覧にまだ無く、名前が引けずに「フォルダ に入りました」
+  // としか出せない。決まるまで一覧も見に行く
+  const [watching, setWatching] = useState(false)
+  const { data: categoriesData } = useQuery(CATEGORIES_QUERY, {
+    fetchPolicy: 'cache-and-network',
+    pollInterval: open && watching ? 3000 : 0,
+  })
   // Selectに渡す選択肢(先頭は「未分類」= 値なし)
   const categoryCollection = useMemo(
     () =>
@@ -121,12 +128,12 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   )
   // 既存マニュアルの一覧。アップロード前は同名の予告に、
   // アップロード後は「どのフォルダに入ったか」の確認に使う
-  const [watching, setWatching] = useState(false)
   const { data: existingData } = useQuery(MANUALS_QUERY, {
     fetchPolicy: 'cache-and-network',
     // 「AIにおまかせ」は取り込みが終わってから振り分けるので、
-    // 決まるまで見に行く。決まったら止める(無駄に叩き続けない)
-    pollInterval: watching ? 3000 : 0,
+    // 決まるまで見に行く。決まったら止める(無駄に叩き続けない)。
+    // 閉じている間は見に行かない(裏で叩き続けないため)
+    pollInterval: open && watching ? 3000 : 0,
   })
   const existingFileNames = new Set(
     existingData?.manuals.map((m) => m.fileName) ?? [],
@@ -183,7 +190,16 @@ export function UploadManualDialog({ open, onClose }: UploadManualDialogProps) {
   const pending = items.some((item) => {
     if (item.status !== 'done' || !item.manualId) return false
     const manual = manualById.get(item.manualId)
-    return !manual || manual.ingestStatus === 'PENDING' || manual.ingestStatus === 'PROCESSING'
+    if (!manual) return true
+    if (
+      manual.ingestStatus === 'PENDING' ||
+      manual.ingestStatus === 'PROCESSING'
+    ) {
+      return true
+    }
+    // 取り込みが終わっていても、AIが新しく作ったフォルダは手元の一覧に
+    // まだ無いことがある。名前が引けるまで待つ
+    return !!manual.categoryId && !categoryById.has(manual.categoryId)
   })
   if (pending !== watching) setWatching(pending)
 

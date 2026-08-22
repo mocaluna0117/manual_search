@@ -99,8 +99,10 @@ export function InquiryListDialog({ open, onClose }: InquiryListDialogProps) {
     <Dialog.Root
       open={open}
       onOpenChange={(e) => !e.open && onClose()}
-      // 狭い画面では全画面にする(横がはみ出して読めなくなるため)
-      size={{ base: 'full', md: 'xl' }}
+      // 狭い画面では全画面にする(横がはみ出して読めなくなるため)。
+      // 広い画面でxlにすると画面のほとんどを覆ってしまい、
+      // 後ろのサイドバーにかぶって落ち着かないのでlgにする
+      size={{ base: 'full', md: 'lg' }}
       scrollBehavior="inside"
     >
       <Portal>

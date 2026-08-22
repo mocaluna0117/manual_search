@@ -40,6 +40,7 @@ import {
   type SortKey,
 } from '../../lib/manualListView'
 import { extensionOf } from '../../lib/fileTypes'
+import { formatSize } from '../../lib/format'
 import { updatedDateOf } from '../../lib/manualDate'
 import { useBulkDownload } from './useBulkDownload'
 import { useManualViewer } from './manualViewerContext'
@@ -235,6 +236,17 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
     )
   }
   const checkedCount = checkedIds.size + checkedFolderIds.size
+
+  // 下部の状態バーに出す数。Windowsのエクスプローラーと同じで、
+  // 「この場所に何個あるか」と「いくつ選んでいるか」がひと目で分かるようにする
+  const shownFolderList = isRoot ? categories : []
+  const totalCount = shownFolderList.length + manuals.length
+  const checkedBytes =
+    manuals.reduce((sum, m) => (checkedIds.has(m.id) ? sum + m.size : sum), 0) +
+    shownFolderList.reduce(
+      (sum, c) => (checkedFolderIds.has(c.id) ? sum + (c.totalSize ?? 0) : sum),
+      0,
+    )
   const { download, progress } = useBulkDownload()
 
   /** 表示中の場所の名前(ZIPのファイル名に使う) */
@@ -706,6 +718,28 @@ export function ManualExplorer({ folder, onNavigate }: ManualExplorerProps) {
         </Text>
       )}
     </Box>
+
+      {/* 状態バー(Windowsのエクスプローラーと同じ位置・同じ内容)。
+          スクロール領域の外に置いて、下端に貼り付けたままにする */}
+      {!loading && (
+        <HStack
+          px={{ base: 4, md: 6 }}
+          py={1}
+          gap={3}
+          flexShrink={0}
+          borderTopWidth="1px"
+          color="fg.muted"
+          fontSize="xs"
+        >
+          <Text>{totalCount} 個の項目</Text>
+          {checkedCount > 0 && (
+            <Text>
+              {checkedCount} 個の項目を選択
+              {checkedBytes > 0 && ` ${formatSize(checkedBytes)}`}
+            </Text>
+          )}
+        </HStack>
+      )}
     </Box>
   )
 }
