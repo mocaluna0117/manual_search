@@ -17,8 +17,9 @@ export function CreditBadge({ isAdmin }: { isAdmin: boolean }) {
   // 管理者以外には問い合わせない(バックエンドも@Roles(ADMIN)で弾く)
   const { data } = useQuery(AWS_CREDIT_QUERY, {
     skip: !isAdmin,
-    // 残高は日単位でしか動かないので、開き直したときに1回取れれば十分
-    fetchPolicy: 'cache-first',
+    // 表示は前回の値をすぐ出しつつ、裏で最新を取り直す。
+    // cache-firstのままだと、ページを開き直すまで古い数字が残る
+    fetchPolicy: 'cache-and-network',
   })
 
   const credit = data?.awsCredit
