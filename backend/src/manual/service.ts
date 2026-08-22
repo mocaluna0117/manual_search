@@ -11,6 +11,7 @@ import { RagService } from '../rag/service';
 import { fileTypeOf } from '../storage/file-types';
 import { StorageService } from '../storage/service';
 import { RegisterManualInput } from './input';
+import { looseMatch } from './title-match';
 import {
   EmptiedCategory,
   IngestStatus,
@@ -949,7 +950,22 @@ export class ManualService implements OnApplicationBootstrap {
       },
       orderBy: { title: 'asc' },
     });
-    if (manuals.length === 0) return { status: 'manual_not_found' as const };
+    // 見つからないときは、空白の入り方の違いを吸収して探し直す。
+    // AIは「ベルックス(全角空白区切り)FSタイプ 施工説明書」のように全角空白で
+    // 区切った題名を渡してくることがあり、そのままでは当たらない
+    if (manuals.length === 0) {
+      const all = await this.prisma.manual.findMany({
+        where: ALIVE,
+        orderBy: { title: 'asc' },
+      });
+      const { same, similar } = looseMatch(manualNeedle, all);
+      if (same.length === 0) {
+        // 近いものを候補として返す。まとめての移動はできないので、
+        // 呼び出し側で「1件ずつ選んでください」と案内する
+        return { status: 'manual_not_found' as const, manuals: similar };
+      }
+      manuals.push(...same);
+    }
     if (manuals.length > 1) {
       // 候補をボタンで選べるようにしてあるので、押されたときは題名がそのまま届く。
       // 完全に一致する1件があればそれで確定する(部分一致のままだと

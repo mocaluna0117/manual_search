@@ -520,19 +520,35 @@ export class ChatService {
           } else if (result.status === 'manual_ambiguous') {
             const candidates = result.manuals.slice(0, 10);
             lines.push(
-              `⚠️ 「${manualText}」に当てはまるマニュアルが複数あります。どれを移動しますか？\n\n` +
-                candidates.map((m) => `- ${m.title}`).join('\n'),
+              `⚠️ 「${manualText}」に当てはまるマニュアルが複数あります。` +
+                'まとめての移動はできないので、1件ずつ選んでください。\n\n' +
+                candidates.map((m) => `- ${m.title}`).join('\n') +
+                '\n\n(何件もあるときは、一覧でチェックを付けて' +
+                'フォルダへドラッグするほうが早いです)',
             );
             // 入力させずに選べるようにする。押すと題名がそのまま送られ、
-            // moveByNameが完全一致で1件に確定する
-            options = [
-              ...candidates.map((m) => m.title),
-              `すべて「${folderText}」に移動する`,
-            ];
+            // moveByNameが完全一致で1件に確定する。
+            // 以前は「すべて移動する」も出していたが、まとめて移動する
+            // 仕組みが無く押しても何も起きなかったので外した
+            options = candidates.map((m) => m.title);
           } else if (result.status === 'manual_not_found') {
-            lines.push(
-              `⚠️ 「${manualText}」に当てはまるマニュアルが見つかりませんでした。`,
-            );
+            const candidates = result.manuals.slice(0, 10);
+            if (candidates.length > 0) {
+              // 近いものが見つかったときは、そこから選んでもらう
+              lines.push(
+                `⚠️ 「${manualText}」ぴったりのマニュアルはありませんでした。` +
+                  'まとめての移動はできないので、近いものから1件ずつ選んでください。\n\n' +
+                  candidates.map((m) => `- ${m.title}`).join('\n') +
+                  '\n\n(何件もあるときは、一覧でチェックを付けて' +
+                  'フォルダへドラッグするほうが早いです)',
+              );
+              options = candidates.map((m) => m.title);
+            } else {
+              lines.push(
+                `⚠️ 「${manualText}」に当てはまるマニュアルが見つかりませんでした。` +
+                  '題名の一部でもう一度お試しください。',
+              );
+            }
           } else if (result.status === 'folder_ambiguous') {
             lines.push(
               `⚠️ 「${folderText}」に当てはまるフォルダが複数あります。どれに移動しますか？\n\n` +
