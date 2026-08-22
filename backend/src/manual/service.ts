@@ -205,7 +205,7 @@ export class ManualService implements OnApplicationBootstrap {
       const manual = await this.prisma.manual.create({ data });
       // 取り込みは裏で実行(fire-and-forget)。ユーザーを何十秒も待たせないため、
       // awaitせずに即レスポンスを返し、進行状況はingestStatusで見せる
-      void this.runIngest(manual.id, autoCategorize ?? false);
+      this.enqueueIngest(manual.id, autoCategorize ?? false);
       return { manual, outcome: RegisterOutcome.CREATED };
     }
 
@@ -268,7 +268,7 @@ export class ManualService implements OnApplicationBootstrap {
     if (oldFileKey !== data.fileKey) {
       await this.storage.deleteObject(oldFileKey).catch(() => undefined);
     }
-    void this.runIngest(manual.id, autoCategorize ?? false);
+    this.enqueueIngest(manual.id, autoCategorize ?? false);
     return { manual, outcome: RegisterOutcome.UPDATED, ...compared };
   }
 
@@ -301,11 +301,31 @@ export class ManualService implements OnApplicationBootstrap {
       where: { id },
       data: { ingestStatus: IngestStatus.PROCESSING, ingestError: null },
     });
-    void this.runIngest(id);
+    this.enqueueIngest(id);
     return true;
   }
 
   /** 取り込みの実行本体。結果(成功/失敗)は例外でなくDBのステータスに記録する */
+  /**
+   * 取り込みの順番待ち。
+   *
+   * 取り込みはPDFの解析と埋め込みで重く、RAGは0.5 vCPU/1GBの1タスクしかない。
+   * まとめてアップロードすると同時に何本も流れ込み、RAGが応答できなくなって
+   * ヘルスチェックに落ち、ECSに停止させられる(実際に11件同時で全滅した)。
+   * 1本ずつ順番に流して、詰まらせない。
+   *
+   * 単一タスク前提の簡易な仕組み。Cloud Runのように複数に増える構成へ移ったら
+   * ジョブキューに置き換える(docs/b-plan-implementation-handbook.md の 5.9)
+   */
+  private ingestQueue: Promise<unknown> = Promise.resolve();
+
+  /** 取り込みを順番待ちに入れる(呼び出し側は待たない) */
+  private enqueueIngest(id: string, autoCategorize = false) {
+    this.ingestQueue = this.ingestQueue
+      .catch(() => undefined) // 前の失敗で列を止めない
+      .then(() => this.runIngest(id, autoCategorize));
+  }
+
   private async runIngest(id: string, autoCategorize = false) {
     try {
       const manual = await this.prisma.manual.findUniqueOrThrow({

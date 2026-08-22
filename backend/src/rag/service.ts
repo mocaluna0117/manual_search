@@ -1,4 +1,8 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { RagAnswer } from './model';
 
 // Pythonサービスが返すJSONの形(snake_case)
@@ -39,6 +43,7 @@ const TIMEOUT_MS = {
 // GraphQLの世界(フロント向け)とRAGの世界(Python)の橋渡し役
 @Injectable()
 export class RagService {
+  private readonly logger = new Logger(RagService.name);
   private readonly baseUrl =
     process.env.RAG_SERVICE_URL ?? 'http://localhost:8000';
   private readonly apiToken = process.env.RAG_API_TOKEN ?? '';
@@ -94,14 +99,28 @@ export class RagService {
     downloadUrl: string,
     fileName: string,
   ): Promise<{ chunkCount: number; pdfCreatedAt: Date | null }> {
-    const res = await this.request('/ingest', TIMEOUT_MS.ingest, {
+    // RAGが再起動している最中は503が返る。取り込みは重くて再実行の負担が
+    // 大きいので、少し待って一度だけやり直す(起動には1分ほどかかる)
+    let res = await this.request('/ingest', TIMEOUT_MS.ingest, {
       manual_id: manualId,
       download_url: downloadUrl,
       file_name: fileName,
     });
+    if (res.status === 503 || res.status === 502 || res.status === 504) {
+      this.logger.warn(
+        `取り込みが HTTP ${res.status} で失敗したので、90秒後にもう一度試します manual=${manualId}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 90_000));
+      res = await this.request('/ingest', TIMEOUT_MS.ingest, {
+        manual_id: manualId,
+        download_url: downloadUrl,
+        file_name: fileName,
+      });
+    }
     if (!res.ok) {
       throw new ServiceUnavailableException(
-        `ファイルの取り込みに失敗しました (HTTP ${res.status})`,
+        `ファイルの取り込みに失敗しました (HTTP ${res.status})。` +
+          '右クリックの「再取り込み」からやり直せます',
       );
     }
     const body = (await res.json()) as {
