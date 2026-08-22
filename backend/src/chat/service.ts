@@ -13,6 +13,7 @@ import { RagService, type RagAction } from '../rag/service';
 import { RuleService } from '../rule/service';
 import { StorageService } from '../storage/service';
 import { AskResult, ChatMessage, MessageFeedback, MessageRole } from './model';
+import { pretendNotes } from './pretend';
 
 // 再分類の確認ボタンの文言。クリックするとこの文字列がそのまま質問として届くので、
 // pendingActionと合わせて確定的に照合する(確認の判定をLLMに任せない)
@@ -342,6 +343,10 @@ export class ChatService {
       answer = `エラーが発生しました: ${e instanceof Error ? e.message : '不明なエラー'}`;
     }
 
+    // このあと4.5でシステムの成功メッセージを足すので、
+    // モデル自身が書いた文をここで控えておく(4.6の判定に使う)
+    const modelText = answer;
+
     // 4.5) 管理ツールの呼び出し要求(管理者のみ)。RAGの失敗・中断処理とは分けて、
     //      検索が成功したときだけ実行する。フォルダ作成は低リスクなので即実行、
     //      再分類は全件に影響するため確認を挟む
@@ -653,68 +658,15 @@ export class ChatService {
 
     // 4.6) 安全網(管理者のみ): モデルが実行結果を装った文章だけ書いて
     //      ツールを呼ばないことがある(履歴の成功メッセージの真似)。
-    //      宣言と実行の食い違いを検知して、正しい次の一手を案内する
+    //      判定と言い回しは pretend.ts にまとめてある
     if (isAdmin) {
-      const notes: string[] = [];
-      if (
-        !ragActions.some((a) => a.name === 'reclassify_all_manuals') &&
-        /再分類(を実行)?します/.test(answer)
-      ) {
-        notes.push(
-          '(再分類はまだ実行されていません。「全マニュアルを再分類して」と送ると、確認のうえ実行します)',
-        );
-      }
-      if (
-        !ragActions.some((a) => a.name === 'add_classification_rule') &&
-        // 「追加しました」以外の言い回しでも検知する
-        /(分類ルール|ルール).{0,10}(を)?(追加|登録|保存|設定)(し|いたし)(ました|ます)/.test(
-          answer,
-        )
-      ) {
-        notes.push(
-          '⚠️ 実際にはルールは登録されていません。サイドバーの「分類ルール」から登録すると確実です。',
-        );
-      }
-      if (
-        !ragActions.some((a) => a.name === 'move_manual') &&
-        // 「移動します/移動させますね/移しました」など宣言だけのケース
-        /(移動|移し).{0,8}(させ)?(ます|ました|ますね|ておきます)/.test(answer)
-      ) {
-        notes.push(
-          '⚠️ 実際には移動していません。「〇〇のマニュアルを△△フォルダに移動して」と送るか、一覧画面でドラッグして移動してください。',
-        );
-      }
-      if (
-        !ragActions.some((a) => a.name === 'update_folder') &&
-        // 「フォルダ名を変更します」など、名前を変えると言うだけのケース
-        /(フォルダ名|フォルダの名前).{0,10}(を)?(変更|変え|改名)(し|いたし)?(ます|ました|ますね|ておきます)/.test(
-          answer,
-        )
-      ) {
-        notes.push(
-          '⚠️ 実際には名前は変わっていません。もう一度「〇〇フォルダの名前を△△に変えて」と送ってください。',
-        );
-      }
-      if (
-        !ragActions.some((a) => a.name === 'delete_folder') &&
-        /フォルダ.{0,12}(を)?(削除|消)(し|いたし)?(ます|ました|ますね|ておきます)/.test(
-          answer,
-        )
-      ) {
-        notes.push(
-          '⚠️ 実際には削除していません。もう一度「〇〇フォルダを削除して」と送ってください。',
-        );
-      }
-      if (
-        !ragActions.some((a) => a.name === 'create_folder') &&
-        /フォルダ.{0,10}(を)?(作成|作り).{0,6}(ます|ました|ますね|ておきます)/.test(
-          answer,
-        )
-      ) {
-        notes.push(
-          '⚠️ 実際にはフォルダは作成されていません。もう一度「〇〇というフォルダを作って」と送ってください。',
-        );
-      }
+      const notes = pretendNotes({
+        // システムが足した成功メッセージは見ない。見てしまうと、
+        // 成功した操作に「実際には移動していません」と付けることになる
+        modelText,
+        calledTools: ragActions.map((a) => a.name),
+        hasOptions: options.length > 0,
+      });
       if (notes.length > 0) {
         answer = [answer, ...notes].join('\n');
       }
