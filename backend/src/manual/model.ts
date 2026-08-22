@@ -104,6 +104,45 @@ export class RegisterManualResult {
   incomingFileLastModified?: Date | null;
 }
 
+// 直前の再分類(まだ元に戻していないもの)。画面に「元に戻す」を出すかの判断に使う
+@ObjectType()
+export class LastReclassify {
+  @Field(() => ID)
+  id!: string;
+
+  // ALL=全件再分類 / SELECTED=選んだ分 / UNCATEGORIZED=未分類をまとめて
+  @Field()
+  kind!: string;
+
+  @Field(() => Int)
+  movedCount!: number;
+
+  // この再分類でAIが新しく作ったフォルダ(元に戻すと空になる)
+  @Field(() => [String])
+  createdCategories!: string[];
+
+  @Field(() => Date)
+  createdAt!: Date;
+}
+
+// 元に戻した結果
+@ObjectType()
+export class UndoReclassifyResult {
+  @Field(() => Int)
+  restoredCount!: number;
+
+  // 再分類のあとに人が動かしたため、触らなかった件数
+  @Field(() => Int)
+  skippedCount!: number;
+
+  @Field(() => [String])
+  skipped!: string[];
+
+  // 元に戻したことで空になった可能性のあるフォルダ
+  @Field(() => [String])
+  createdCategories!: string[];
+}
+
 // AI自動分類の実行結果
 @ObjectType()
 export class AutoOrganizeResult {

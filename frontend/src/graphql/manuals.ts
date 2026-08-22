@@ -1,16 +1,16 @@
-import { gql, type TypedDocumentNode } from '@apollo/client'
+import { gql, type TypedDocumentNode } from "@apollo/client";
 
 // --- アップロード先URLの発行 ---
 
 interface CreateUploadUrlData {
   createManualUploadUrl: {
-    uploadUrl: string
-    fileKey: string
-  }
+    uploadUrl: string;
+    fileKey: string;
+  };
 }
 
 interface CreateUploadUrlVars {
-  fileName: string
+  fileName: string;
 }
 
 export const CREATE_UPLOAD_URL_MUTATION: TypedDocumentNode<
@@ -23,55 +23,55 @@ export const CREATE_UPLOAD_URL_MUTATION: TypedDocumentNode<
       fileKey
     }
   }
-`
+`;
 
 // --- アップロード完了後のDB登録 ---
 
-export type IngestStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+export type IngestStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
 export interface Manual {
-  id: string
-  title: string
-  fileName: string
-  size: number
-  categoryId: string | null
-  ingestStatus: IngestStatus
-  ingestError: string | null
-  chunkCount: number | null
-  updatedAt: string // DBの更新時刻(並べ替えの保険用)
+  id: string;
+  title: string;
+  fileName: string;
+  size: number;
+  categoryId: string | null;
+  ingestStatus: IngestStatus;
+  ingestError: string | null;
+  chunkCount: number | null;
+  updatedAt: string; // DBの更新時刻(並べ替えの保険用)
   // 元ファイル自体の最終更新日(「更新日」列)。この項目より前に
   // 登録されたものはnullなので、その場合は登録日で代用する
-  fileLastModified: string | null
-  createdAt: string // このアプリに登録した日時
-  pdfCreatedAt: string | null // PDF自体が持つ作成日
-  categoryPinned: boolean // ピン留め済み(AIの再分類で動かない)
-  deletedAt?: string | null // ゴミ箱に入れた日時
+  fileLastModified: string | null;
+  createdAt: string; // このアプリに登録した日時
+  pdfCreatedAt: string | null; // PDF自体が持つ作成日
+  categoryPinned: boolean; // ピン留め済み(AIの再分類で動かない)
+  deletedAt?: string | null; // ゴミ箱に入れた日時
 }
 
 /** 同名ファイルをアップロードしたときの結果 */
-export type RegisterOutcome = 'CREATED' | 'UPDATED' | 'SKIPPED_OLDER'
+export type RegisterOutcome = "CREATED" | "UPDATED" | "SKIPPED_OLDER";
 
 interface RegisterManualData {
   registerManual: {
-    manual: Manual
-    outcome: RegisterOutcome
+    manual: Manual;
+    outcome: RegisterOutcome;
     // 判定に使った更新日時(nullは「不明で比較できなかった」)
-    existingFileLastModified: string | null
-    incomingFileLastModified: string | null
-  }
+    existingFileLastModified: string | null;
+    incomingFileLastModified: string | null;
+  };
 }
 
 interface RegisterManualVars {
   input: {
-    title: string
-    fileKey: string
-    fileName: string
-    size: number
-    categoryId?: string
-    autoCategorize?: boolean
-    fileLastModified?: string // ISO8601。同名アップロード時の新旧判定に使う
-    forceReplace?: boolean // スキップされた後に「それでも差し替える」で使う
-  }
+    title: string;
+    fileKey: string;
+    fileName: string;
+    size: number;
+    categoryId?: string;
+    autoCategorize?: boolean;
+    fileLastModified?: string; // ISO8601。同名アップロード時の新旧判定に使う
+    forceReplace?: boolean; // スキップされた後に「それでも差し替える」で使う
+  };
 }
 
 export const REGISTER_MANUAL_MUTATION: TypedDocumentNode<
@@ -92,17 +92,17 @@ export const REGISTER_MANUAL_MUTATION: TypedDocumentNode<
       }
     }
   }
-`
+`;
 
 // --- 一覧(カテゴリ絞り込み対応) ---
 
 interface ManualsData {
-  manuals: Manual[]
+  manuals: Manual[];
 }
 
 interface ManualsVars {
-  categoryId?: string
-  uncategorized?: boolean
+  categoryId?: string;
+  uncategorized?: boolean;
 }
 
 export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
@@ -123,17 +123,17 @@ export const MANUALS_QUERY: TypedDocumentNode<ManualsData, ManualsVars> = gql`
       categoryPinned
     }
   }
-`
+`;
 
 // --- ピン留めの切り替え(ADMIN専用。ピン=AIの再分類で動かさない) ---
 
 interface SetManualPinnedData {
-  setManualPinned: { id: string; categoryPinned: boolean }
+  setManualPinned: { id: string; categoryPinned: boolean };
 }
 
 interface SetManualPinnedVars {
-  id: string
-  pinned: boolean
+  id: string;
+  pinned: boolean;
 }
 
 export const SET_MANUAL_PINNED_MUTATION: TypedDocumentNode<
@@ -146,16 +146,16 @@ export const SET_MANUAL_PINNED_MUTATION: TypedDocumentNode<
       categoryPinned
     }
   }
-`
+`;
 
 // --- 取り込みの再試行(FAILEDになったとき用) ---
 
 interface IngestManualData {
-  ingestManual: boolean // 開始できたらtrue(完了は待たない)
+  ingestManual: boolean; // 開始できたらtrue(完了は待たない)
 }
 
 interface IngestManualVars {
-  id: string
+  id: string;
 }
 
 export const INGEST_MANUAL_MUTATION: TypedDocumentNode<
@@ -165,21 +165,21 @@ export const INGEST_MANUAL_MUTATION: TypedDocumentNode<
   mutation IngestManual($id: ID!) {
     ingestManual(id: $id)
   }
-`
+`;
 
 // --- キーワード検索 ---
 
 export interface ManualSearchResult {
-  manual: Manual
-  snippet: string | null
+  manual: Manual;
+  snippet: string | null;
 }
 
 interface SearchManualsData {
-  searchManuals: ManualSearchResult[]
+  searchManuals: ManualSearchResult[];
 }
 
 interface SearchManualsVars {
-  keyword: string
+  keyword: string;
 }
 
 export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
@@ -199,23 +199,23 @@ export const SEARCH_MANUALS_QUERY: TypedDocumentNode<
         chunkCount
         updatedAt
         fileLastModified
-      createdAt
-      pdfCreatedAt
+        createdAt
+        pdfCreatedAt
         categoryPinned
       }
       snippet
     }
   }
-`
+`;
 
 // --- まとめて削除(ADMIN専用) ---
 
 interface DeleteManualsData {
-  deleteManuals: number
+  deleteManuals: number;
 }
 
 interface DeleteManualsVars {
-  ids: string[]
+  ids: string[];
 }
 
 export const DELETE_MANUALS_MUTATION: TypedDocumentNode<
@@ -225,12 +225,12 @@ export const DELETE_MANUALS_MUTATION: TypedDocumentNode<
   mutation DeleteManuals($ids: [ID!]!) {
     deleteManuals(ids: $ids)
   }
-`
+`;
 
 // --- ゴミ箱(ADMIN専用) ---
 
 interface TrashedManualsData {
-  trashedManuals: Manual[]
+  trashedManuals: Manual[];
 }
 
 export const TRASHED_MANUALS_QUERY: TypedDocumentNode<TrashedManualsData> = gql`
@@ -252,16 +252,16 @@ export const TRASHED_MANUALS_QUERY: TypedDocumentNode<TrashedManualsData> = gql`
       deletedAt
     }
   }
-`
+`;
 
 interface TrashedCategoriesData {
   trashedCategories: {
-    id: string
-    name: string
-    deletedAt?: string | null
-    manualCount?: number
-    totalSize?: number
-  }[]
+    id: string;
+    name: string;
+    deletedAt?: string | null;
+    manualCount?: number;
+    totalSize?: number;
+  }[];
 }
 
 export const TRASHED_CATEGORIES_QUERY: TypedDocumentNode<TrashedCategoriesData> = gql`
@@ -274,18 +274,18 @@ export const TRASHED_CATEGORIES_QUERY: TypedDocumentNode<TrashedCategoriesData> 
       totalSize
     }
   }
-`
+`;
 
 interface TrashActionData {
-  restoreManuals?: number
-  purgeManuals?: number
-  emptyTrash?: number
-  restoreCategories?: number
-  purgeCategories?: number
+  restoreManuals?: number;
+  purgeManuals?: number;
+  emptyTrash?: number;
+  restoreCategories?: number;
+  purgeCategories?: number;
 }
 
 interface IdsVars {
-  ids: string[]
+  ids: string[];
 }
 
 export const RESTORE_MANUALS_MUTATION: TypedDocumentNode<
@@ -295,7 +295,7 @@ export const RESTORE_MANUALS_MUTATION: TypedDocumentNode<
   mutation RestoreManuals($ids: [ID!]!) {
     restoreManuals(ids: $ids)
   }
-`
+`;
 
 export const PURGE_MANUALS_MUTATION: TypedDocumentNode<
   TrashActionData,
@@ -304,16 +304,16 @@ export const PURGE_MANUALS_MUTATION: TypedDocumentNode<
   mutation PurgeManuals($ids: [ID!]!) {
     purgeManuals(ids: $ids)
   }
-`
+`;
 
 interface RestoreCategoriesData {
   restoreCategories: {
-    restoredCount: number
+    restoredCount: number;
     // 同名のフォルダが既にあったため、中身だけをそちらへ戻した分
-    mergedInto: string[]
+    mergedInto: string[];
     /** 鍵の有無が違ったため、まとめずに別の名前で戻した分 */
-    restoredSeparately: string[]
-  }
+    restoredSeparately: string[];
+  };
 }
 
 export const RESTORE_CATEGORIES_MUTATION: TypedDocumentNode<
@@ -327,7 +327,7 @@ export const RESTORE_CATEGORIES_MUTATION: TypedDocumentNode<
       restoredSeparately
     }
   }
-`
+`;
 
 export const PURGE_CATEGORIES_MUTATION: TypedDocumentNode<
   TrashActionData,
@@ -336,29 +336,29 @@ export const PURGE_CATEGORIES_MUTATION: TypedDocumentNode<
   mutation PurgeCategories($ids: [ID!]!) {
     purgeCategories(ids: $ids)
   }
-`
+`;
 
 export const EMPTY_TRASH_MUTATION: TypedDocumentNode<TrashActionData> = gql`
   mutation EmptyTrash {
     emptyTrash
   }
-`
+`;
 
 // --- 一括ダウンロード用のURL発行 ---
 
 export interface ManualDownloadTarget {
-  id: string
-  title: string
-  fileName: string
-  url: string
+  id: string;
+  title: string;
+  fileName: string;
+  url: string;
 }
 
 interface DownloadUrlsData {
-  manualDownloadUrls: ManualDownloadTarget[]
+  manualDownloadUrls: ManualDownloadTarget[];
 }
 
 interface DownloadUrlsVars {
-  ids: string[]
+  ids: string[];
 }
 
 export const MANUAL_DOWNLOAD_URLS_QUERY: TypedDocumentNode<
@@ -373,21 +373,21 @@ export const MANUAL_DOWNLOAD_URLS_QUERY: TypedDocumentNode<
       url
     }
   }
-`
+`;
 
 // --- 閲覧用URLの発行 ---
 
 interface DownloadUrlData {
   manualDownloadUrl: {
-    url: string
-    fileName: string
+    url: string;
+    fileName: string;
     /** trueならタブで開ける(PDF)。falseならダウンロードして開いてもらう */
-    viewableInBrowser: boolean
-  }
+    viewableInBrowser: boolean;
+  };
 }
 
 interface DownloadUrlVars {
-  id: string
+  id: string;
 }
 
 export const MANUAL_DOWNLOAD_URL_QUERY: TypedDocumentNode<
@@ -401,12 +401,12 @@ export const MANUAL_DOWNLOAD_URL_QUERY: TypedDocumentNode<
       viewableInBrowser
     }
   }
-`
+`;
 
 // --- 表示名の変更(ADMIN専用。元のファイル名は変わらない) ---
 
 interface RenameManualData {
-  renameManual: Pick<Manual, 'id' | 'title'>
+  renameManual: Pick<Manual, "id" | "title">;
 }
 
 export const RENAME_MANUAL_MUTATION: TypedDocumentNode<
@@ -419,17 +419,17 @@ export const RENAME_MANUAL_MUTATION: TypedDocumentNode<
       title
     }
   }
-`
+`;
 
 // --- カテゴリ間の移動(ADMIN専用) ---
 
 interface MoveManualData {
-  moveManual: Pick<Manual, 'id' | 'categoryId'>
+  moveManual: Pick<Manual, "id" | "categoryId">;
 }
 
 interface MoveManualVars {
-  id: string
-  categoryId: string | null
+  id: string;
+  categoryId: string | null;
 }
 
 export const MOVE_MANUAL_MUTATION: TypedDocumentNode<
@@ -442,23 +442,23 @@ export const MOVE_MANUAL_MUTATION: TypedDocumentNode<
       categoryId
     }
   }
-`
+`;
 
 // --- 選んだマニュアルだけを分類し直す(ADMIN専用) ---
 
 interface ReclassifySelectedData {
   reclassifySelectedManuals: {
-    movedCount: number
-    moved: { title: string; categoryName: string; adminOnly: boolean }[]
+    movedCount: number;
+    moved: { title: string; categoryName: string; adminOnly: boolean }[];
     /** ピン留めされていて動かさなかった分 */
-    skippedPinned: string[]
+    skippedPinned: string[];
     /** 取り込みが終わっておらず中身を読めなかった分 */
-    skippedNotReady: string[]
+    skippedNotReady: string[];
     /** 鍵付きフォルダの中にあって動かさなかった分 */
-    skippedLocked: string[]
+    skippedLocked: string[];
     /** 合うフォルダが無くて新しく作った分 */
-    createdCategories: string[]
-  }
+    createdCategories: string[];
+  };
 }
 
 export const RECLASSIFY_SELECTED_MUTATION: TypedDocumentNode<
@@ -479,17 +479,17 @@ export const RECLASSIFY_SELECTED_MUTATION: TypedDocumentNode<
       createdCategories
     }
   }
-`
+`;
 
 // --- AIによる自動分類(ADMIN専用) ---
 
 interface AutoOrganizeData {
   autoOrganizeManuals: {
-    movedCount: number
-    createdCategories: string[]
+    movedCount: number;
+    createdCategories: string[];
     /** 鍵付きフォルダへ入れた分(一般利用者からは見えなくなる) */
-    movedToLocked: string[]
-  }
+    movedToLocked: string[];
+  };
 }
 
 export const AUTO_ORGANIZE_MUTATION: TypedDocumentNode<AutoOrganizeData> = gql`
@@ -500,48 +500,48 @@ export const AUTO_ORGANIZE_MUTATION: TypedDocumentNode<AutoOrganizeData> = gql`
       movedToLocked
     }
   }
-`
+`;
 
 // --- 全件再分類(ADMIN専用)。数分かかるので開始と進捗確認を分ける ---
 
 interface StartReclassifyData {
-  startReclassifyAll: boolean // falseなら既に実行中
+  startReclassifyAll: boolean; // falseなら既に実行中
 }
 
 export const START_RECLASSIFY_MUTATION: TypedDocumentNode<StartReclassifyData> = gql`
   mutation StartReclassifyAll {
     startReclassifyAll
   }
-`
+`;
 
 /** 再分類で中身が他へ移り、空になったフォルダ */
 export interface EmptiedCategory {
-  id: string
-  name: string
+  id: string;
+  name: string;
   /** AIの自動分類が作ったフォルダか。falseなら利用者が自分で作った箱 */
-  createdByAi: boolean
+  createdByAi: boolean;
 }
 
 export interface ReclassifyStatus {
-  running: boolean
-  movedCount: number
-  createdCategories: string[]
-  emptiedCategories: EmptiedCategory[]
+  running: boolean;
+  movedCount: number;
+  createdCategories: string[];
+  emptiedCategories: EmptiedCategory[];
   /** 鍵付きフォルダへ入れた分(一般利用者からは見えなくなる) */
-  movedToLocked: string[]
+  movedToLocked: string[];
   /** 鍵付きフォルダの中にあって動かさなかった分 */
-  skippedLocked: string[]
-  error: string | null
-  finishedAt: string | null
+  skippedLocked: string[];
+  error: string | null;
+  finishedAt: string | null;
 }
 
 interface DeleteEmptyCategoriesData {
   deleteEmptyCategories: {
     /** 実際に消したフォルダのID */
-    deletedIds: string[]
+    deletedIds: string[];
     /** 中身が入っていて消さなかったフォルダ名 */
-    skipped: string[]
-  }
+    skipped: string[];
+  };
 }
 
 export const DELETE_EMPTY_CATEGORIES_MUTATION: TypedDocumentNode<
@@ -554,10 +554,10 @@ export const DELETE_EMPTY_CATEGORIES_MUTATION: TypedDocumentNode<
       skipped
     }
   }
-`
+`;
 
 interface ReclassifyStatusData {
-  reclassifyStatus: ReclassifyStatus
+  reclassifyStatus: ReclassifyStatus;
 }
 
 export const RECLASSIFY_STATUS_QUERY: TypedDocumentNode<ReclassifyStatusData> = gql`
@@ -577,10 +577,59 @@ export const RECLASSIFY_STATUS_QUERY: TypedDocumentNode<ReclassifyStatusData> = 
       finishedAt
     }
   }
-`
+`;
+
+// --- 直前の再分類を元に戻す(ADMIN専用) ---
+
+export interface LastReclassify {
+  id: string;
+  /** ALL=全件再分類 / SELECTED=選んだ分 / UNCATEGORIZED=未分類をまとめて */
+  kind: string;
+  movedCount: number;
+  /** この再分類でAIが新しく作ったフォルダ(元に戻すと空になる) */
+  createdCategories: string[];
+  createdAt: string;
+}
+
+interface LastReclassifyData {
+  lastReclassify: LastReclassify | null;
+}
+
+export const LAST_RECLASSIFY_QUERY: TypedDocumentNode<LastReclassifyData> = gql`
+  query LastReclassify {
+    lastReclassify {
+      id
+      kind
+      movedCount
+      createdCategories
+      createdAt
+    }
+  }
+`;
+
+interface UndoReclassifyData {
+  undoLastReclassify: {
+    restoredCount: number;
+    /** 再分類のあとに人が動かしたため、触らなかった件数 */
+    skippedCount: number;
+    skipped: string[];
+    createdCategories: string[];
+  };
+}
+
+export const UNDO_RECLASSIFY_MUTATION: TypedDocumentNode<UndoReclassifyData> = gql`
+  mutation UndoLastReclassify {
+    undoLastReclassify {
+      restoredCount
+      skippedCount
+      skipped
+      createdCategories
+    }
+  }
+`;
 
 interface ReclassifyCountsData {
-  reclassifyCounts: { target: number; pinned: number; locked: number }
+  reclassifyCounts: { target: number; pinned: number; locked: number };
 }
 
 export const RECLASSIFY_COUNTS_QUERY: TypedDocumentNode<ReclassifyCountsData> = gql`
@@ -591,17 +640,17 @@ export const RECLASSIFY_COUNTS_QUERY: TypedDocumentNode<ReclassifyCountsData> = 
       locked
     }
   }
-`
+`;
 
 // --- まとめて移動(ADMIN専用) ---
 
 interface MoveManualsData {
-  moveManuals: number
+  moveManuals: number;
 }
 
 interface MoveManualsVars {
-  ids: string[]
-  categoryId: string | null
+  ids: string[];
+  categoryId: string | null;
 }
 
 export const MOVE_MANUALS_MUTATION: TypedDocumentNode<
@@ -611,16 +660,16 @@ export const MOVE_MANUALS_MUTATION: TypedDocumentNode<
   mutation MoveManuals($ids: [ID!]!, $categoryId: ID) {
     moveManuals(ids: $ids, categoryId: $categoryId)
   }
-`
+`;
 
 // --- 削除 ---
 
 interface DeleteManualData {
-  deleteManual: Pick<Manual, 'id' | 'title'>
+  deleteManual: Pick<Manual, "id" | "title">;
 }
 
 interface DeleteManualVars {
-  id: string
+  id: string;
 }
 
 export const DELETE_MANUAL_MUTATION: TypedDocumentNode<
@@ -633,4 +682,4 @@ export const DELETE_MANUAL_MUTATION: TypedDocumentNode<
       title
     }
   }
-`
+`;

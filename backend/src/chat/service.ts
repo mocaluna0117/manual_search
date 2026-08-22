@@ -19,6 +19,8 @@ import { pretendNotes } from './pretend';
 // pendingActionと合わせて確定的に照合する(確認の判定をLLMに任せない)
 const CONFIRM_RECLASSIFY = '✅ はい、再分類を実行する';
 const CANCEL_RECLASSIFY = 'キャンセル';
+/** 完了メッセージに出すボタンの文言。押すとこの文字列がそのまま送られてくる */
+const UNDO_RECLASSIFY = '↩️ 直前の再分類を元に戻す';
 
 /** 1つの質問に添えられる画像の枚数(RAG側の上限と合わせる) */
 export const MAX_CHAT_IMAGES = 4;
@@ -190,6 +192,32 @@ export class ChatService {
             '再分類を中止しました。今の分類のまま変更していません。',
           );
         }
+      }
+    } else if (isAdmin && question === UNDO_RECLASSIFY) {
+      // 1.55) 再分類の取り消し。LLMを介さず確定的に処理する
+      //       (取り消しは間違えると痛いので、モデルの解釈を挟まない)
+      try {
+        const r = await this.manualService.undoLastReclassify();
+        const notes = [
+          r.skippedCount > 0
+            ? `再分類のあとに手で移動した${r.skippedCount}件は、そのままにしました: ${r.skipped.join('、')}`
+            : '',
+          r.createdCategories.length > 0
+            ? `この再分類で作られたフォルダは空になっているかもしれません: ${r.createdCategories.join('、')}`
+            : '',
+        ].filter(Boolean);
+        return this.respond(
+          conversation.id,
+          question,
+          `↩️ ${r.restoredCount}件を元の場所に戻しました。` +
+            (notes.length > 0 ? `\n\n${notes.join('\n')}` : ''),
+        );
+      } catch (e) {
+        return this.respond(
+          conversation.id,
+          question,
+          `⚠️ 元に戻せませんでした: ${e instanceof Error ? e.message : '不明なエラー'}`,
+        );
       }
     } else if (isAdmin && /^分類ルールを?追加\s*[:：]\s*.+$/s.test(question)) {
       // 1.6) 明示形式のルール操作はLLMを介さず確定的に処理する
@@ -778,11 +806,15 @@ export class ChatService {
                 '\n画面に確認が出るので、そこでまとめて削除できます。' +
                 '\n確認を閉じてしまった場合も、サイドバーの🗑から1つずつ削除できます。'
               : '') +
-            '\nサイドバーのフォルダを開いて結果を確認してください。'
+            '\nサイドバーのフォルダを開いて結果を確認してください。' +
+            '\n思っていたのと違う場合は、下のボタンで元に戻せます。'
           : `再分類に失敗しました: ${result.error ?? '不明なエラー'}`;
-        void this.appendAssistantMessage(conversationId, content).catch(
-          () => undefined,
-        );
+        // 取り消せるのは成功したときだけ(失敗時は何も動いていない)
+        void this.appendAssistantMessage(
+          conversationId,
+          content,
+          result.ok && result.movedCount > 0 ? [UNDO_RECLASSIFY] : [],
+        ).catch(() => undefined);
       },
     );
     if (!started) {

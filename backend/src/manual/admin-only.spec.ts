@@ -305,6 +305,12 @@ function fakePrisma(manuals: Manual[], categories: Category[]) {
       }),
     },
     classificationRule: { findMany: jest.fn(() => Promise.resolve([])) },
+    // 再分類の控え(元に戻す用)。ここでは保存されることだけ確認できればよい
+    reclassifySnapshot: {
+      create: jest.fn((args: unknown) => Promise.resolve(args)),
+      findFirst: jest.fn(() => Promise.resolve(null)),
+      update: jest.fn(() => Promise.resolve({})),
+    },
     $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
   };
 }

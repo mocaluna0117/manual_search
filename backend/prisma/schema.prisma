@@ -195,6 +195,23 @@ model ManualChunk {
 }
 
 // アプリからの問い合わせ。メール送信に失敗しても内容が残るようDBにも保存する
+// 再分類を元に戻すための控え。動かす前と後の分類を、動いたマニュアルだけ記録する
+model ReclassifySnapshot {
+  id                String    @id @default(uuid())
+  /// ALL=全件再分類 / SELECTED=選んだ分 / UNCATEGORIZED=未分類をまとめて
+  kind              String
+  /// [{ manualId, before, after }]。beforeがnullなら元は未分類
+  entries           Json
+  /// この再分類でAIが新しく作ったフォルダの名前(戻すと空になる)
+  createdCategories Json?     @map("created_categories")
+  movedCount        Int       @map("moved_count")
+  /// 元に戻した時刻。nullならまだ戻していない
+  undoneAt          DateTime? @map("undone_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+}
+
 model Inquiry {
   id        String    @id @default(uuid())
   userEmail String?   @map("user_email") // 送信者(ログイン中のユーザー)

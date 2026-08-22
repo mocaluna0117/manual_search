@@ -10,6 +10,7 @@ import { RegisterManualInput } from './input';
 import {
   AutoOrganizeResult,
   DeleteEmptyCategoriesResult,
+  LastReclassify,
   Manual,
   ManualDownloadTarget,
   ManualSearchResult,
@@ -20,6 +21,7 @@ import {
   ReclassifyStatus,
   RegisterManualResult,
   RestoreCategoriesResult,
+  UndoReclassifyResult,
 } from './model';
 import { ManualCategory } from '../category/model';
 import { ManualService } from './service';
@@ -132,6 +134,18 @@ export class ManualResolver {
 
   // 再分類の進行状況(フロントがポーリングして完了を知る)。
   // 空になったフォルダの一覧は、今も生きていて今も空のものだけに絞って返す
+  @Roles(UserRole.ADMIN)
+  @Query(() => LastReclassify, { nullable: true })
+  lastReclassify() {
+    return this.manualService.lastReclassify();
+  }
+
+  @Roles(UserRole.ADMIN)
+  @Mutation(() => UndoReclassifyResult)
+  undoLastReclassify() {
+    return this.manualService.undoLastReclassify();
+  }
+
   @Roles(UserRole.ADMIN)
   @Query(() => ReclassifyStatus)
   reclassifyStatus() {

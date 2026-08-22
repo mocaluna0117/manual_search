@@ -390,7 +390,12 @@ export class ManualService implements OnApplicationBootstrap {
   /** 未分類(かつ取り込み済み)のマニュアルをAIでまとめて自動分類する */
   /** 未分類のマニュアルをAIで分類する(必要なら新カテゴリも作る) */
   async autoOrganize() {
-    return this.organizeManuals({ categoryId: null }, true);
+    return this.organizeManuals(
+      { categoryId: null },
+      true,
+      undefined,
+      'UNCATEGORIZED',
+    );
   }
 
   /**
@@ -399,7 +404,7 @@ export class ManualService implements OnApplicationBootstrap {
    * 呼び出し側で必ず確認を挟むこと。instructionは管理者が指定した分類方針
    */
   async reclassifyAll(instruction?: string) {
-    return this.organizeManuals({}, true, instruction);
+    return this.organizeManuals({}, true, instruction, 'ALL');
   }
 
   // 再分類の進行状況。数分かかる処理をリクエストで待たせないため、
@@ -550,6 +555,8 @@ export class ManualService implements OnApplicationBootstrap {
     where: Prisma.ManualWhereInput,
     allowNew: boolean,
     instruction?: string,
+    // 元に戻せるようにするため、どの操作かを記録する
+    kind: 'ALL' | 'SELECTED' | 'UNCATEGORIZED' = 'ALL',
   ) {
     const manuals = await this.prisma.manual.findMany({
       // ピン留め(手動分類)されたものはAIの分類で動かさない。
@@ -653,6 +660,35 @@ export class ManualService implements OnApplicationBootstrap {
       ...m,
       title: titleById.get(m.manualId) ?? '',
     }));
+    // 動かす前の分類を控える。AIの再分類は一度に何十件も動かすので、
+    // 思っていたのと違ったときに手で戻すのは現実的でない。
+    // 「その後に人が手で動かしたもの」を巻き込まないよう、動いた先(after)も持つ
+    if (movedCount > 0) {
+      const categoryBefore = new Map(manuals.map((m) => [m.id, m.categoryId]));
+      const categoryIdByName = new Map(
+        (
+          await this.prisma.manualCategory.findMany({
+            where: { name: { in: moved.map((m) => m.categoryName) }, ...ALIVE },
+            select: { id: true, name: true },
+          })
+        ).map((c) => [c.name, c.id]),
+      );
+      await this.prisma.reclassifySnapshot.create({
+        data: {
+          kind,
+          movedCount,
+          createdCategories: createdCategories.length
+            ? createdCategories
+            : undefined,
+          entries: moved.map((m) => ({
+            manualId: m.manualId,
+            before: categoryBefore.get(m.manualId) ?? null,
+            after: categoryIdByName.get(m.categoryName) ?? null,
+          })),
+        },
+      });
+    }
+
     return {
       movedCount,
       createdCategories,
@@ -757,7 +793,12 @@ export class ManualService implements OnApplicationBootstrap {
       )
       .map((m) => m.title);
 
-    const result = await this.organizeManuals({ id: { in: ids } }, true);
+    const result = await this.organizeManuals(
+      { id: { in: ids } },
+      true,
+      undefined,
+      'SELECTED',
+    );
 
     return {
       movedCount: result.movedCount,
@@ -770,6 +811,83 @@ export class ManualService implements OnApplicationBootstrap {
         adminOnly: m.adminOnly,
       })),
       createdCategories: result.createdCategories,
+    };
+  }
+
+  /**
+   * 直前の再分類の控え(まだ戻していないもの)。画面に「元に戻す」を出すかの判断に使う
+   */
+  async lastReclassify() {
+    const snap = await this.prisma.reclassifySnapshot.findFirst({
+      where: { undoneAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!snap) return null;
+    return {
+      id: snap.id,
+      kind: snap.kind,
+      movedCount: snap.movedCount,
+      createdCategories: (snap.createdCategories as string[] | null) ?? [],
+      createdAt: snap.createdAt,
+    };
+  }
+
+  /**
+   * 直前の再分類を元に戻す。
+   *
+   * 戻すのは「AIが動かしたあと、人が触っていないマニュアル」だけ。
+   * 再分類のあとに手でフォルダを移したものまで戻すと、その作業を
+   * 黙って取り消すことになるので、今の分類が動かした先と違うものは飛ばす。
+   */
+  async undoLastReclassify() {
+    const snap = await this.prisma.reclassifySnapshot.findFirst({
+      where: { undoneAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!snap) {
+      throw new BadRequestException('元に戻せる再分類がありません');
+    }
+    const entries = snap.entries as {
+      manualId: string;
+      before: string | null;
+      after: string | null;
+    }[];
+
+    const current = await this.prisma.manual.findMany({
+      where: { id: { in: entries.map((e) => e.manualId) }, ...ALIVE },
+      select: { id: true, title: true, categoryId: true },
+    });
+    const byId = new Map(current.map((m) => [m.id, m]));
+
+    const restored: string[] = [];
+    const skipped: string[] = [];
+    for (const entry of entries) {
+      const manual = byId.get(entry.manualId);
+      if (!manual) continue; // 消された分は何もしない
+      if (manual.categoryId !== entry.after) {
+        // 再分類のあとに人が動かしている。その判断を尊重して触らない
+        skipped.push(manual.title);
+        continue;
+      }
+      if (manual.categoryId === entry.before) continue; // すでに元の場所
+      await this.prisma.manual.update({
+        where: { id: manual.id },
+        data: { categoryId: entry.before },
+      });
+      restored.push(manual.title);
+    }
+
+    await this.prisma.reclassifySnapshot.update({
+      where: { id: snap.id },
+      data: { undoneAt: new Date() },
+    });
+
+    return {
+      restoredCount: restored.length,
+      skippedCount: skipped.length,
+      skipped: skipped.slice(0, 10),
+      // 戻すと空になるフォルダ。消すかどうかは利用者に決めてもらう
+      createdCategories: (snap.createdCategories as string[] | null) ?? [],
     };
   }
 
