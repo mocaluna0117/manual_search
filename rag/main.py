@@ -330,6 +330,27 @@ def hybrid_search(cur, query_vec: str, terms: list[str]):
     return fuse_by_rrf([vector_rows, keyword_rows, title_rows])
 
 
+# 前後に空白のあるスラッシュ。語中の「A/B工法」を割らないよう、空白を必須にする
+MERGED_OPTION = re.compile(r"\s+[/／]\s+")
+
+
+def split_merged_options(options: list[str]) -> list[str]:
+    """1行に複数の案が書かれた選択肢を、案ごとに分ける。
+
+    プロンプトでは「1行につき1つ」と決めているが、モデルが
+    「[選択肢] A / B」と1行にまとめてしまうことがある。そのままだと
+    どちらも選べない1個のボタンになり、利用者が先へ進めなくなる
+    (実際にそう報告された)。受け取り側で割って救済する。
+    """
+    result: list[str] = []
+    for option in options:
+        parts = [p.strip() for p in MERGED_OPTION.split(option)]
+        # 2文字未満の欠片しか作れないときは、割らずに元のまま残す
+        parts = [p for p in parts if len(p) >= 2]
+        result.extend(parts if len(parts) >= 2 else [option])
+    return result
+
+
 def extract_options(answer: str) -> tuple[str, list[str]]:
     """回答文から[選択肢]行を抜き出し、(本文, 選択肢リスト)に分ける"""
     options = [m.strip() for m in OPTION_PATTERN.findall(answer)]
@@ -337,7 +358,7 @@ def extract_options(answer: str) -> tuple[str, list[str]]:
     if not options:
         # 保険: モデルが形式を守らず「選択肢: 1. A / 2. B」のように書いた場合も救済する
         cleaned, options = _fallback_extract_options(cleaned)
-    return cleaned, options
+    return cleaned, split_merged_options(options)
 
 
 def _fallback_extract_options(answer: str) -> tuple[str, list[str]]:

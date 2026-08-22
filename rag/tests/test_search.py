@@ -23,6 +23,7 @@ from main import (  # noqa: E402
     SearchRequest,
     decide_outcome,
     decode_images,
+    extract_options,
     fuse_by_rrf,
 )
 
@@ -370,3 +371,52 @@ class TestDraftManual:
         prompt = self.prompt_of("q", [])
         for section in ["目的", "対象となる場面", "手順", "注意点", "関連資料"]:
             assert section in prompt
+
+
+class TestExtractOptions:
+    """選択肢のボタン化。
+
+    1つのボタンに2案が入ってしまうと、利用者はどちらも選べず先へ進めない。
+    実際に「工事種別ごとに…したい / 施工説明書を…まとめたい」が1個の
+    ボタンになり選べなかった、という報告があったので、その形を固定する。
+    """
+
+    def test_1行に1つならそのまま(self):
+        body, options = extract_options(
+            "どちらにしますか?\n[選択肢] まとめる\n[選択肢] 分ける"
+        )
+        assert options == ["まとめる", "分ける"]
+        assert "[選択肢]" not in body
+
+    def test_1行に2案が入っていたら分ける(self):
+        _, options = extract_options(
+            "どちらのご希望ですか?\n"
+            "[選択肢] 工事種別ごとにフォルダ名で区別したい / "
+            "施工説明書を1つのフォルダにまとめたい"
+        )
+        assert options == [
+            "工事種別ごとにフォルダ名で区別したい",
+            "施工説明書を1つのフォルダにまとめたい",
+        ]
+
+    def test_全角スラッシュでも分ける(self):
+        _, options = extract_options("[選択肢] Aにする ／ Bにする")
+        assert options == ["Aにする", "Bにする"]
+
+    def test_3案でも分ける(self):
+        _, options = extract_options("[選択肢] A案 / B案 / C案")
+        assert options == ["A案", "B案", "C案"]
+
+    def test_語の中のスラッシュは割らない(self):
+        # 「A/B工法」のように空白の無いスラッシュは1つの選択肢のまま
+        _, options = extract_options("[選択肢] A/B工法の違いを知りたい")
+        assert options == ["A/B工法の違いを知りたい"]
+
+    def test_割ると欠片になる場合は元のまま(self):
+        _, options = extract_options("[選択肢] は / を")
+        assert options == ["は / を"]
+
+    def test_選択肢が無ければ空(self):
+        body, options = extract_options("ここに手順があります。")
+        assert options == []
+        assert body == "ここに手順があります。"
