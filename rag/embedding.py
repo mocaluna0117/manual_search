@@ -11,9 +11,15 @@ import json
 import math
 import os
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 DIMENSIONS = 1024  # ManualChunk.embedding の vector(1024) と一致させること
+
+# 埋め込みを何本まで並べて投げるか。1件0.12秒のうちほとんどが応答待ちなので、
+# 並べるとそのぶん短くなる(32件で実測3.2秒→0.4秒)。
+# 呼び出し側は1文書ずつ順番に処理しているので、この数だけ増えても詰まらない
+EMBED_WORKERS = 8
 
 
 class Embedder(Protocol):
@@ -58,7 +64,13 @@ class BedrockEmbedder:
         self.model_id = model_id
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [self._embed(t) for t in texts]
+        # 1件ずつ順番に呼ぶと、チャンク数に比例して待ち時間が積み上がる。
+        # 中身はBedrockの応答待ちなので、まとめて投げる。
+        # 並び順は入力と揃える(DBのchunk_indexと対応させるため)
+        if len(texts) <= 1:
+            return [self._embed(t) for t in texts]
+        with ThreadPoolExecutor(max_workers=EMBED_WORKERS) as pool:
+            return list(pool.map(self._embed, texts))
 
     def _embed(self, text: str) -> list[float]:
         body = json.dumps(

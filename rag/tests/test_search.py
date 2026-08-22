@@ -420,3 +420,46 @@ class TestExtractOptions:
         body, options = extract_options("ここに手順があります。")
         assert options == []
         assert body == "ここに手順があります。"
+
+
+class TestEmbedParallel:
+    """埋め込みを並べて投げても、並び順が入れ替わらないこと。
+
+    順番が狂うと、チャンクの本文と別のベクトルが結びつく。
+    検索は静かにおかしくなるだけで例外も出ないので、ここで止める。
+    """
+
+    class FakeBedrock:
+        """呼ばれた順ではなく、渡された文字列に対応する値を返す偽物"""
+
+        def invoke_model(self, modelId, body):  # noqa: N803
+            import json as _json
+            import time as _time
+            from io import BytesIO
+
+            text = _json.loads(body)["inputText"]
+            # 後の要素ほど速く返すようにして、順序が崩れやすい状況を作る
+            _time.sleep(0.02 / (int(text) + 1))
+            vec = [float(int(text))] * 4
+            return {"body": BytesIO(_json.dumps({"embedding": vec}).encode())}
+
+    def _embedder(self):
+        from embedding import BedrockEmbedder
+
+        e = BedrockEmbedder.__new__(BedrockEmbedder)
+        e.client = self.FakeBedrock()
+        e.model_id = "dummy"
+        return e
+
+    def test_並べて投げても入力の順番どおりに返る(self):
+        e = self._embedder()
+        texts = [str(i) for i in range(20)]
+        got = e.embed_texts(texts)
+        assert [v[0] for v in got] == [float(i) for i in range(20)]
+
+    def test_1件のときも同じ結果になる(self):
+        e = self._embedder()
+        assert e.embed_texts(["7"]) == [[7.0] * 4]
+
+    def test_空のときは空を返す(self):
+        assert self._embedder().embed_texts([]) == []

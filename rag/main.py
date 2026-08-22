@@ -5,6 +5,7 @@ import os
 import re
 import unicodedata
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 import psycopg
@@ -62,6 +63,11 @@ transcriber = create_transcriber()
 
 # これ未満の文字数しか取れないページは「実質画像のページ」とみなし書き起こしに回す
 MIN_TEXT_CHARS_PER_PAGE = 20
+
+# ページの書き起こしを何本まで並べて投げるか。
+# 待ちの大半はBedrockの応答なので並べると速くなるが、ページ画像の生成は
+# CPUとメモリを使う。0.5 vCPU/1GBで詰まらない範囲に抑える
+TRANSCRIBE_WORKERS = 4
 
 
 ALLOWED_IMAGE_FORMATS = {"png", "jpeg", "webp", "gif"}
@@ -471,20 +477,34 @@ def ingest(req: IngestRequest) -> IngestResponse:
             pass
 
         # テキストがほぼ取れないページ(スキャン・画像ページ)は
-        # Claudeの画像認識で書き起こす(上限ページ数まで)
+        # Claudeの画像認識で書き起こす(上限ページ数まで)。
+        #
+        # 1ページあたり数秒かかり、待ち時間のほとんどはBedrockの応答待ち。
+        # 全ページが画像のPDFだと1件で2分近くかかっていたので、
+        # 数ページずつ並べて投げる。同時数は絞る(このコンテナは0.5 vCPU/1GBで、
+        # ページ画像の生成が重い。増やしすぎると詰まってヘルスチェックに落ちる)
         if transcriber.enabled:
-            for i, text in enumerate(pages):
-                if len(text) >= MIN_TEXT_CHARS_PER_PAGE:
-                    continue
-                if transcribed_count >= MAX_TRANSCRIBE_PAGES:
-                    break  # コストの安全弁。超過分は素通し(空ページ扱い)
+            targets = [
+                i
+                for i, text in enumerate(pages)
+                if len(text) < MIN_TEXT_CHARS_PER_PAGE
+            ][:MAX_TRANSCRIBE_PAGES]  # コストの安全弁。超過分は素通し(空ページ扱い)
+
+            def transcribe_page(index: int) -> tuple[int, str | None]:
                 try:
-                    image = render_page_jpeg(file_bytes, i)
-                    pages[i] = transcriber.transcribe(image)
-                    transcribed_count += 1
+                    return index, transcriber.transcribe(
+                        render_page_jpeg(file_bytes, index)
+                    )
                 except Exception:
                     # 1ページの失敗で取り込み全体を止めない(そのページだけ諦める)
-                    continue
+                    return index, None
+
+            if targets:
+                with ThreadPoolExecutor(max_workers=TRANSCRIBE_WORKERS) as pool:
+                    for index, text in pool.map(transcribe_page, targets):
+                        if text is not None:
+                            pages[index] = text
+                            transcribed_count += 1
 
         # 表記をNFCに正規化する。PDFの内部表現によってはNFDで抽出されることが
         # あり、そのまま保存すると検索キーワード(NFC)のILIKEに当たらなくなる
